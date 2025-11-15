@@ -241,6 +241,166 @@
     background: #f9fafb;
 }
 
+/* ========== 移动端卡片布局样式 ========== */
+.mobile-cart-items {
+    display: none;
+}
+
+.mobile-cart-item {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.mobile-item-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f3f4f6;
+}
+
+.mobile-item-header .model-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 6px;
+}
+
+.mobile-item-header .model-details {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+.mobile-item-header .cart-category {
+    display: inline-block;
+    background: #f3f4f6;
+    color: #374151;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid #e5e7eb;
+}
+
+.mobile-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.mobile-item-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.mobile-item-label {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.mobile-item-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mobile-purchase-section {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+}
+
+.mobile-purchase-type {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mobile-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.mobile-price-info {
+    font-weight: 600;
+    color: #059669;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mobile-subtotal-info {
+    font-size: 11px;
+    color: #6b7280;
+    text-align: right;
+    margin-top: 4px;
+}
+
+.mobile-item-total {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 2px solid #10b981;
+}
+
+.mobile-total-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #059669;
+}
+
+.mobile-total-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #059669;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mobile-remove-btn {
+    width: 100%;
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: all 0.2s ease;
+}
+
+.mobile-remove-btn:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.mobile-remove-btn:active {
+    transform: translateY(0);
+}
+
 .price-info {
     font-weight: 600;
     color: #059669;
@@ -411,40 +571,77 @@
 }
 
 @media (max-width: 768px) {
+    .cart-table-container {
+        display: none !important;
+    }
+    
+    .mobile-cart-items {
+        display: block !important;
+    }
+    
     .cart-header {
         flex-direction: column;
-        gap: 16px;
         align-items: flex-start;
+        gap: 12px;
+        padding-bottom: 16px;
+        margin-bottom: 24px;
     }
     
     .cart-title {
         font-size: 1.5rem;
     }
     
-    .cart-table-container {
-        overflow-x: auto;
+    .cart-title svg {
+        width: 28px;
+        height: 28px;
     }
     
-    .cart-table {
-        min-width: 800px;
+    .cart-summary {
+        width: 100%;
+        justify-content: space-between;
     }
     
-    .cart-total-section {
-        justify-content: center;
+    .cart-count {
+        font-size: 0.95rem;
+    }
+    
+    .clear-cart-btn {
+        padding: 8px 14px;
+        font-size: 0.8rem;
+    }
+    
+    .mobile-cart-item .quantity-controls {
+        gap: 6px;
+    }
+    
+    .mobile-cart-item .quantity-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+    
+    .mobile-cart-item .quantity-input {
+        width: 60px;
+        height: 32px;
+        font-size: 14px;
+    }
+    
+    .checkout-section {
+        padding: 16px 0;
     }
     
     .cart-total-card {
         width: 100%;
-        max-width: 400px;
+        max-width: 100%;
     }
     
     .empty-cart-actions {
         flex-direction: column;
-        align-items: center;
+        align-items: stretch;
     }
     
     .browse-btn, .benchmark-btn {
-        width: 200px;
+        width: 100%;
         justify-content: center;
     }
 }
@@ -454,30 +651,77 @@
         padding: 12px;
     }
     
-    .empty-cart {
-        padding: 60px 16px;
+    .cart-title {
+        font-size: 1.3rem;
     }
     
-    .cart-table th,
-    .cart-table td {
-        padding: 12px 8px;
+    .mobile-cart-item {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .mobile-item-header .model-name {
+        font-size: 15px;
+    }
+    
+    .mobile-item-row {
+        padding: 8px 0;
+    }
+    
+    .mobile-item-label {
         font-size: 12px;
     }
     
-    .quantity-controls {
-        gap: 4px;
+    .mobile-item-value {
+        font-size: 13px;
     }
     
-    .quantity-btn {
+    .mobile-purchase-section {
+        padding: 10px;
+    }
+    
+    .mobile-cart-item .quantity-btn {
         width: 28px;
         height: 28px;
         font-size: 14px;
     }
     
-    .quantity-input {
+    .mobile-cart-item .quantity-input {
         width: 50px;
         height: 28px;
         font-size: 12px;
+    }
+    
+    .mobile-total-value {
+        font-size: 16px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-width: none;
+    }
+    
+    .modal-header {
+        padding: 16px;
+    }
+    
+    .modal-header h2 {
+        font-size: 1.25rem;
+    }
+    
+    .modal-body {
+        padding: 16px;
+    }
+    
+    .order-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .place-order-btn {
+        padding: 14px 20px;
+        font-size: 15px;
     }
 }
 

@@ -1,462 +1,778 @@
-// onchain-checkin.js — Unified EVM + Solana (hardened)
-// 兼容字段：config.chainId 或 config.chainIdHex；config.checkInAbi 或 window.CHECKIN_ABI
-// EVM：事件解析 + Firebase 同步；Solana：保留原统一版流程
-// nextReward 显示：优先来自合约；缺省回退到 30
+// onchain-checkin.js - 统一的链上签到入口（EVM + Solana）完整版
 
-/* ------------------------ 通用通知 ------------------------ */
+/* ======================== 通用工具函数 ======================== */
+
+/**
+ * 安全的通知函数（兼容全站通知系统）
+ */
 function safeNotify(msg, type = 'info', opts = {}) {
-  try {
-    if (typeof window.showNotification === 'function') {
-      return window.showNotification(msg, type, opts);
+    try {
+        if (typeof window.showNotification === 'function') {
+            return window.showNotification(msg, type, opts);
+        }
+        // Fallback toast
+        let host = document.getElementById('i3-toast-host');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'i3-toast-host';
+            host.style.cssText = `position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:12px;pointer-events:none;`;
+            document.body.appendChild(host);
+        }
+        const palette = {
+            success: ['#10b981', '#ecfdf5'],
+            error: ['#ef4444', '#fef2f2'],
+            warning: ['#f59e0b', '#fffbeb'],
+            info: ['#3b82f6', '#eff6ff']
+        };
+        const [fg, bg] = palette[type] || palette.info;
+        const el = document.createElement('div');
+        el.style.cssText = `min-width:280px;max-width:640px;background:${bg};color:#111827;border-left:6px solid ${fg};` +
+            'box-shadow:0 10px 25px rgba(0,0,0,.15);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;pointer-events:auto;';
+        el.textContent = msg;
+        host.appendChild(el);
+        setTimeout(() => {
+            el.style.transition = 'opacity .25s, transform .25s';
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-6px)';
+            setTimeout(() => el.remove(), 260);
+        }, opts.duration || 2600);
+    } catch (e) {
+        console.log('[notify-fallback]', msg);
     }
-    let host = document.getElementById('i3-toast-host');
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'i3-toast-host';
-      host.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:12px;pointer-events:none;';
-      document.body.appendChild(host);
-    }
-    const palette = { success: ['#10b981', '#ecfdf5'], error: ['#ef4444', '#fef2f2'], warning: ['#f59e0b', '#fffbeb'], info: ['#3b82f6', '#eff6ff'] };
-    const [fg, bg] = palette[type] || palette.info;
-    const el = document.createElement('div');
-    el.style.cssText =
-      `min-width:280px;max-width:640px;background:${bg};color:#111827;border-left:6px solid ${fg};` +
-      'box-shadow:0 10px 25px rgba(0,0,0,.15);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;pointer-events:auto;';
-    el.textContent = msg;
-    host.appendChild(el);
-    setTimeout(()=>{ el.style.transition='opacity .25s, transform .25s'; el.style.opacity='0'; el.style.transform='translateY(-6px)'; setTimeout(()=>el.remove(),260); }, opts.duration || 2600);
-  } catch (e) { (type==='error'?console.error:console.log)('[notify-fallback]', msg); }
 }
 
-/* ------------------------ Loading ------------------------ */
-function setLoadingState(isLoading, message = 'Processing...') {
-  const loading = document.getElementById('checkInLoading');
-  const btn = document.getElementById('executeCheckInBtn');
-  const loadingText = document.getElementById('loadingText');
-  if (loading) loading.style.display = isLoading ? 'block' : 'none';
-  if (btn) btn.style.display = isLoading ? 'none' : 'block';
-  if (loadingText) loadingText.textContent = message;
-}
-
-/* ------------------------ UI 更新 ------------------------ */
-function updateStatusUI(streak, totalCheckIns, nextReward, canCheckInToday) {
-  const streakEl = document.getElementById('currentStreak');
-  const totalEl  = document.getElementById('totalCheckIns');
-  const rewardEl = document.getElementById('nextReward');
-  const btn      = document.getElementById('executeCheckInBtn');
-
-  if (streakEl) streakEl.textContent = String(streak ?? 0);
-  if (totalEl)  totalEl.textContent  = String(totalCheckIns ?? 0);
-
-  // 优先显示合约返回的 nextReward；没有则回退 30
-  const rewardToShow = (nextReward == null || Number.isNaN(Number(nextReward))) ? 30 : Number(nextReward);
-  if (rewardEl) rewardEl.textContent = String(rewardToShow);
-
-  if (btn) {
-    const can = !!canCheckInToday;
-    btn.disabled    = !can;
-    btn.textContent = can ? 'Daily Check-in' : 'Already Checked Today';
-    btn.style.opacity = can ? '1' : '0.6';
-    btn.style.cursor  = can ? 'pointer' : 'not-allowed';
-  }
-}
-
+/**
+ * 检查是否选择了Solana链
+ */
 function isSolanaSelectedInUI() {
-  const sel = document.getElementById('chainSelector');
-  if (!sel) return false;
-  const v = (sel.value || '').toString().trim().toUpperCase();
-  return v === 'SOLANA' || v === 'SOLANA DEVNET' || v === 'SOL';
+    const sel = document.getElementById('chainSelector');
+    if (!sel) return false;
+    const v = (sel.value || '').toString().trim().toUpperCase();
+    return v === 'SOLANA' || v === 'SOLANA DEVNET' || v === 'SOL';
 }
 
-/* ------------------------ Solana 成功后（本地刷新） ------------------------ */
-function applySolanaPostSuccessUI({ reward = 30 } = {}) {
-  const btn = document.getElementById('executeCheckInBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Already Checked Today';
-    btn.classList?.add?.('opacity-60', 'pointer-events-none');
-  }
-  const toInt = (el) => parseInt((el?.textContent || '0').replace(/\D+/g, ''), 10) || 0;
-  const streakEl = document.getElementById('currentStreak');
-  const totalEl  = document.getElementById('totalCheckIns');
-  if (streakEl) streakEl.textContent = String(toInt(streakEl) + 1);
-  if (totalEl)  totalEl.textContent  = String(toInt(totalEl) + 1);
+/**
+ * 更新UI状态显示
+ */
+function updateStatusUI(streak, totalCheckIns, nextReward, canCheckIn) {
+    const streakEl = document.getElementById('currentStreak');
+    const totalEl = document.getElementById('totalCheckIns');
+    const rewardEl = document.getElementById('nextReward');
+    const btn = document.getElementById('executeCheckInBtn');
 
-  try {
+    if (streakEl) streakEl.textContent = `${streak ?? 0} days`;
+    if (totalEl) totalEl.textContent = String(totalCheckIns ?? 0);
+    if (rewardEl) rewardEl.textContent = `${nextReward ?? 30} credits`;
+
+    if (btn) {
+        btn.disabled = !canCheckIn;
+        btn.textContent = canCheckIn ? 'Check In Now' : 'Already Checked In Today';
+        btn.style.opacity = canCheckIn ? '1' : '0.6';
+        btn.style.cursor = canCheckIn ? 'pointer' : 'not-allowed';
+    }
+}
+
+/**
+ * 防重入锁
+ */
+if (typeof window.__i3_checkin_busy === 'undefined') {
+    window.__i3_checkin_busy = false;
+}
+
+function setBusy(busy) {
+    window.__i3_checkin_busy = !!busy;
+    const btn = document.getElementById('executeCheckInBtn');
+    if (btn) {
+        btn.disabled = busy;
+    }
+}
+
+/**
+ * Loading状态
+ */
+function setLoadingState(isLoading, message = 'Processing...') {
+    const loading = document.getElementById('checkInLoading');
+    const btn = document.getElementById('executeCheckInBtn');
+    const loadingText = document.getElementById('loadingText');
+
+    if (loading) loading.style.display = isLoading ? 'block' : 'none';
+    if (btn) btn.style.display = isLoading ? 'none' : 'block';
+    if (loadingText) loadingText.textContent = message;
+}
+
+/* ======================== EVM 专属函数 ======================== */
+
+/**
+ * 加载用户链上签到状态（EVM）
+ */
+async function loadUserCheckInStatus() {
+    try {
+        // Solana早退
+        if (isSolanaSelectedInUI()) {
+            console.log('[checkin] Solana selected - skip EVM status load');
+            return;
+        }
+
+        if (!window.walletManager || !window.walletManager.isConnected) {
+            console.warn('Wallet not connected, skipping status load');
+            return;
+        }
+
+        const address = window.walletManager.walletAddress;
+        const chainSelector = document.getElementById('chainSelector');
+        const selectedChain = chainSelector ? chainSelector.value : 'BSC';
+        const config = window.getContractConfig(selectedChain);
+
+        if (!config) {
+            console.error('Invalid chain config');
+            updateStatusUI(0, 0, 30, false);
+            return;
+        }
+
+        // 检查ethers是否加载
+        if (typeof ethers === 'undefined') {
+            console.error('Ethers.js not loaded');
+            updateStatusUI(0, 0, 30, false);
+            return;
+        }
+
+        // 创建只读provider
+        const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
+        const contract = new ethers.Contract(
+            config.checkInAddress,
+            window.CHECKIN_ABI,
+            provider
+        );
+
+        // 查询用户状态
+        const status = await contract.getUserStatus(address);
+        
+        // status是数组: [lastDay, streak, totalCredits, availableCredits, nextReward, canCheckInToday]
+        const streak = status[1].toString();
+        const totalCheckIns = status[2].toString();
+        const nextReward = status[4].toString();
+        const canCheckIn = status[5];
+
+        updateStatusUI(streak, totalCheckIns, nextReward, canCheckIn);
+
+    } catch (error) {
+        console.error('Failed to load check-in status:', error);
+        updateStatusUI(0, 0, 30, true);
+    }
+}
+
+/**
+ * 切换到指定链
+ */
+async function switchToChain(targetChainId) {
+    try {
+        const provider = window.ethereum;
+        if (!provider) {
+            throw new Error('No wallet provider found');
+        }
+
+        // 获取当前链
+        const currentChainId = await provider.request({ method: 'eth_chainId' });
+        
+        if (currentChainId === targetChainId) {
+            return true; // 已经在目标链
+        }
+
+        // 尝试切换
+        try {
+            await provider.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: targetChainId }],
+            });
+            return true;
+        } catch (switchError) {
+            // 如果链未添加（错误码4902），则添加链
+            if (switchError.code === 4902) {
+                const config = window.getContractConfig(targetChainId);
+                if (!config) {
+                    throw new Error('Chain configuration not found');
+                }
+
+                await provider.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: targetChainId,
+                        chainName: config.chainName,
+                        rpcUrls: [config.rpcUrl],
+                        nativeCurrency: config.nativeCurrency,
+                        blockExplorerUrls: [config.explorer]
+                    }],
+                });
+                return true;
+            }
+            throw switchError;
+        }
+    } catch (error) {
+        console.error('Failed to switch chain:', error);
+        throw error;
+    }
+}
+
+/**
+ * 检查BNB余额是否足够
+ */
+async function checkBNBBalance(provider, address, minBalance = '0.00004') {
+    try {
+        const balance = await provider.getBalance(address);
+        const minBalanceWei = ethers.utils.parseEther(minBalance);
+
+        return {
+            sufficient: balance.gte(minBalanceWei),
+            balance: ethers.utils.formatEther(balance),
+            minRequired: minBalance
+        };
+    } catch (error) {
+        console.error('Failed to check balance:', error);
+        throw error;
+    }
+}
+
+/**
+ * 显示余额不足Modal
+ */
+function showInsufficientBalanceModal(currentBalance, requiredBalance) {
+    let modal = document.getElementById('insufficientBalanceModal');
+    
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'insufficientBalanceModal';
+        modal.className = 'wallet-modal';
+        modal.innerHTML = `
+            <div class="wallet-modal-content" style="max-width: 520px;">
+                <button class="wallet-close-btn" onclick="closeInsufficientBalanceModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <div class="wallet-modal-header">
+                    <h2 class="wallet-modal-title">⚠️ Insufficient Balance</h2>
+                    <p class="wallet-modal-subtitle">Your wallet needs more BNB to complete this transaction</p>
+                </div>
+                <div style="margin: 24px 0; padding: 16px; background: #fef3c7; border-radius: 12px; border: 1px solid #fcd34d;">
+                    <p style="font-size: 14px; color: #92400e; margin: 0 0 8px 0;">
+                        <strong>Current Balance:</strong> ${currentBalance} BNB
+                    </p>
+                    <p style="font-size: 14px; color: #92400e; margin: 0;">
+                        <strong>Required:</strong> At least ${requiredBalance} BNB
+                    </p>
+                </div>
+                <p style="font-size: 14px; color: #6b7280; margin-bottom: 20px;">
+                    Please top up your balance using one of the following methods:
+                </p>
+                <div class="wallet-options">
+                    <div class="wallet-option available" onclick="redirectToSwap()">
+                        <span class="wallet-icon-wrap">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                                <path d="M7 16V4M7 4L3 8M7 4l4 4"/>
+                                <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </span>
+                        <div class="wallet-info">
+                            <div class="wallet-name">Swap tokens to BNB</div>
+                            <div class="wallet-description">Use PancakeSwap to exchange tokens</div>
+                        </div>
+                    </div>
+                    <div class="wallet-option available" onclick="redirectToBridge()">
+                        <span class="wallet-icon-wrap">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+                                <path d="M12 2v20M2 12h20"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </span>
+                        <div class="wallet-info">
+                            <div class="wallet-name">Bridge from other chains</div>
+                            <div class="wallet-description">Transfer assets from Ethereum, etc.</div>
+                        </div>
+                    </div>
+                    <div class="wallet-option available" onclick="redirectToBinanceDeposit()">
+                        <span class="wallet-icon-wrap">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <path d="M12 8v8m-4-4h8"/>
+                            </svg>
+                        </span>
+                        <div class="wallet-info">
+                            <div class="wallet-name">Deposit from Binance</div>
+                            <div class="wallet-description">Withdraw BNB from your exchange account</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="wallet-footer" style="margin-top: 20px;">
+                    By Intelligence Cubed
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+}
+
+/**
+ * 关闭余额不足Modal
+ */
+function closeInsufficientBalanceModal() {
+    const modal = document.getElementById('insufficientBalanceModal');
+    if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
+}
+
+/**
+ * 跳转函数
+ */
+function redirectToSwap() {
+    window.open('https://pancakeswap.finance/swap?chain=bsc', '_blank');
+}
+
+function redirectToBridge() {
+    window.open('https://www.bnbchain.org/en/bnb-chain-bridge', '_blank');
+}
+
+function redirectToBinanceDeposit() {
+    window.open('https://www.binance.com/en/support/faq/list/2', '_blank');
+}
+
+/**
+ * 更新Firebase（链上签到后）
+ */
+async function updateFirebaseAfterOnChainCheckIn(credits, txHash, streak) {
+    try {
+        if (!window.firebaseDb || !window.walletManager) {
+            console.warn('Firebase or wallet manager not available');
+            return;
+        }
+
+        const address = window.walletManager.walletAddress.toLowerCase();
+        const { doc, updateDoc, setDoc, getDoc, serverTimestamp, increment } = 
+            await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+        const walletRef = doc(window.firebaseDb, 'wallets', address);
+
+        // 检查文档是否存在
+        const walletSnap = await getDoc(walletRef);
+
+        if (!walletSnap.exists()) {
+            // 创建新文档
+            await setDoc(walletRef, {
+                address: address,
+                credits: credits,
+                lastCheckinAt: serverTimestamp(),
+                totalCheckins: 1,
+                currentStreak: streak,
+                lastCheckinTx: txHash,
+                lastCheckinType: 'on-chain',
+                createdAt: serverTimestamp(),
+                lastUpdated: serverTimestamp()
+            });
+        } else {
+            // 更新现有文档
+            await updateDoc(walletRef, {
+                credits: increment(credits),
+                lastCheckinAt: serverTimestamp(),
+                totalCheckins: increment(1),
+                currentStreak: streak,
+                lastCheckinTx: txHash,
+                lastCheckinType: 'on-chain',
+                lastUpdated: serverTimestamp()
+            });
+        }
+
+        // 同步到本地
+        if (window.walletManager) {
+            window.walletManager.credits = (window.walletManager.credits || 0) + credits;
+            window.walletManager.saveToStorage();
+        }
+
+        console.log('Firebase updated after on-chain check-in');
+    } catch (error) {
+        console.warn('Failed to update Firebase (non-critical):', error);
+    }
+}
+
+/**
+ * 执行EVM链上签到
+ */
+async function executeEVMCheckIn() {
+    try {
+        const address = window.walletManager.walletAddress;
+        const chainSelector = document.getElementById('chainSelector');
+        const selectedChain = chainSelector.value;
+        const config = window.getContractConfig(selectedChain);
+
+        if (!config) {
+            safeNotify('Invalid chain selected', 'error');
+            return;
+        }
+
+        console.log('Starting on-chain check-in on', config.chainName);
+
+        // 检查当前链并显示切换提示
+        try {
+            const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+
+            if (currentChainId.toLowerCase() !== config.chainId.toLowerCase()) {
+                const currentNetworkName = 'Unknown'; // 可以添加映射函数
+                
+                const alertBox = document.createElement('div');
+                alertBox.style.cssText = `
+                    position: fixed; top: 20px; right: 20px; background: #10b981; color: white;
+                    padding: 20px 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+                    z-index: 10001; font-size: 16px; font-weight: bold; max-width: 400px;
+                    animation: slideIn 0.3s ease;
+                `;
+                alertBox.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 24px;">🔄</span>
+                        <div>
+                            <div style="margin-bottom: 5px;">Switching Network</div>
+                            <div style="font-size: 13px; font-weight: normal; opacity: 0.9;">
+                                From <strong>${currentNetworkName}</strong> to <strong>${config.chainName}</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                if (!document.getElementById('slideInAnimation')) {
+                    const style = document.createElement('style');
+                    style.id = 'slideInAnimation';
+                    style.textContent = `
+                        @keyframes slideIn {
+                            from { transform: translateX(100%); opacity: 0; }
+                            to { transform: translateX(0); opacity: 1; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+
+                document.body.appendChild(alertBox);
+                setTimeout(() => {
+                    alertBox.style.animation = 'slideIn 0.3s ease reverse';
+                    setTimeout(() => alertBox.remove(), 300);
+                }, 2000);
+
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        } catch (e) {
+            console.warn('Failed to check current chain:', e);
+        }
+
+        // 切换到正确的链
+        setLoadingState(true, 'Switching network...');
+        await switchToChain(config.chainId);
+
+        // 创建provider和signer
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const userAddress = await signer.getAddress();
+
+        // 检查余额
+        setLoadingState(true, 'Checking balance...');
+        const balanceCheck = await checkBNBBalance(provider, userAddress, '0.00004');
+
+        if (!balanceCheck.sufficient) {
+            setLoadingState(false);
+            if (typeof closeOnChainCheckInModal === 'function') {
+                closeOnChainCheckInModal();
+            }
+            showInsufficientBalanceModal(balanceCheck.balance, balanceCheck.minRequired);
+            return;
+        }
+
+        // 创建合约实例
+        const contract = new ethers.Contract(
+            config.checkInAddress,
+            window.CHECKIN_ABI,
+            signer
+        );
+
+        // 估算Gas
+        try {
+            const gasEstimate = await contract.estimateGas.checkIn({ value: 0 });
+            console.log('Estimated gas:', gasEstimate.toString());
+        } catch (e) {
+            console.warn('Gas estimation failed (non-critical):', e.message);
+        }
+
+        // 发送交易
+        setLoadingState(true, 'Please confirm in your wallet...');
+        const tx = await contract.checkIn({
+            value: ethers.utils.parseEther('0')
+        });
+
+        // 等待确认
+        setLoadingState(true, 'Waiting for confirmation...');
+        const receipt = await tx.wait();
+        console.log('Transaction confirmed:', receipt.transactionHash);
+
+        // 解析事件获取奖励
+        let credits = 30; // 默认值
+        let streak = 1;
+        for (const log of receipt.logs) {
+            try {
+                const parsed = contract.interface.parseLog(log);
+                if (parsed && parsed.name === 'CheckedIn') {
+                    credits = Number(parsed.args.credits);
+                    streak = Number(parsed.args.streak);
+                    console.log('CheckedIn event:', {
+                        user: parsed.args.user,
+                        dayIndex: parsed.args.dayIndex.toString(),
+                        streak: streak,
+                        credits: credits
+                    });
+                    break;
+                }
+            } catch (e) {
+                // Skip logs that don't match
+            }
+        }
+
+        // 更新Firebase
+        await updateFirebaseAfterOnChainCheckIn(credits, receipt.transactionHash, streak);
+
+        // 成功提示
+        setLoadingState(false);
+        if (typeof closeOnChainCheckInModal === 'function') {
+            closeOnChainCheckInModal();
+        }
+        safeNotify(`Check-in successful! +${credits} credits earned (Streak: ${streak} days)`, 'success');
+
+        // 刷新UI
+        if (window.walletManager && window.walletManager.updateUI) {
+            window.walletManager.updateUI();
+        }
+
+        // 重新加载签到状态
+        setTimeout(() => {
+            loadUserCheckInStatus();
+        }, 2000);
+
+    } catch (error) {
+        setLoadingState(false);
+        console.error('EVM check-in failed:', error);
+
+        let errorMessage = 'Check-in failed';
+        if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+            errorMessage = 'Transaction cancelled by user';
+        } else if (error.message && error.message.includes('insufficient funds')) {
+            errorMessage = 'Insufficient BNB for gas fee';
+        } else if (error.message) {
+            errorMessage = error.message.length > 100 
+                ? error.message.substring(0, 100) + '...' 
+                : error.message;
+        }
+
+        safeNotify(errorMessage, 'error');
+    }
+}
+
+/* ======================== Solana 专属函数 ======================== */
+
+/**
+ * Solana成功后的UI更新
+ */
+function applySolanaPostSuccessUI({ reward = 30 } = {}) {
+    // 1) 更新按钮
+    const btn = document.getElementById('executeCheckInBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Already Checked Today';
+        btn.classList?.add?.('opacity-60', 'pointer-events-none');
+    }
+
+    // 2) 面板数字自增
+    const num = (el) => parseInt((el?.textContent || '0').replace(/\D+/g, '')) || 0;
+    const streakEl = document.getElementById('currentStreak');
+    const totalEl = document.getElementById('totalCheckIns');
+
+    if (streakEl) streakEl.textContent = `${num(streakEl) + 1} days`;
+    if (totalEl) totalEl.textContent = String(num(totalEl) + 1);
+
+    // 3) 本地credits统计
     const getNum = (k) => Number(localStorage.getItem(k) || '0');
     const setNum = (k, v) => localStorage.setItem(k, String(v));
+
     const newCredits = getNum('user_credits') + reward;
     setNum('user_credits', newCredits);
     setNum('total_earned', getNum('total_earned') + reward);
     setNum('total_checkins', getNum('total_checkins') + 1);
 
-    const arr = JSON.parse(localStorage.getItem('credit_transactions') || '[]');
-    arr.unshift({ type:'checkin', chain:'solana-devnet', amount:reward, ts:Date.now() });
-    localStorage.setItem('credit_transactions', JSON.stringify(arr.slice(0, 200)));
+    // 4) 交易明细
+    try {
+        const arr = JSON.parse(localStorage.getItem('credit_transactions') || '[]');
+        arr.unshift({ 
+            type: 'checkin', 
+            chain: 'solana-devnet', 
+            amount: reward, 
+            ts: Date.now() 
+        });
+        localStorage.setItem('credit_transactions', JSON.stringify(arr.slice(0, 200)));
+    } catch {}
 
+    // 5) 刷新总积分显示
     const totalCreditsEl = document.getElementById('totalCredits');
     if (totalCreditsEl) totalCreditsEl.textContent = String(newCredits);
 
-    const today = new Date().toISOString().slice(0,10);
-    localStorage.setItem('checkin_status_SOLANA', JSON.stringify({ date: today }));
-  } catch {}
+    // 6) 标记今日已签
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        localStorage.setItem('checkin_status_SOLANA', JSON.stringify({ date: today }));
+    } catch {}
 }
 
-/* ------------------------ EVM 工具 ------------------------ */
-function normalizeChainIdHex(config) {
-  // 兼容 config.chainId 或 config.chainIdHex，保证返回 0x.. 字符串
-  let hex = config?.chainIdHex || config?.chainId;
-  if (!hex) return null;
-  if (typeof hex === 'number') hex = '0x' + hex.toString(16);
-  if (typeof hex === 'string' && !hex.startsWith('0x')) {
-    // 尝试把十进制字符串转 hex
-    const n = Number(hex);
-    if (!Number.isNaN(n)) hex = '0x' + n.toString(16);
-  }
-  return hex;
-}
+/* ======================== 统一执行入口 ======================== */
 
-function getEvmAbi(config) {
-  return config?.checkInAbi || window.CHECKIN_ABI;
-}
-
-async function switchToChain(targetHex) {
-  if (!window.ethereum) {
-    safeNotify('No EVM wallet detected', 'error');
-    return false;
-  }
-  try {
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: targetHex }],
-    });
-    return true;
-  } catch (e) {
-    if (e.code === 4902 && typeof window.getEvmAddChainParams === 'function') {
-      try {
-        const params = window.getEvmAddChainParams(targetHex);
-        await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [params] });
-        return true;
-      } catch (e2) {
-        console.error('Add chain failed', e2);
-      }
-    }
-    console.error('Switch chain failed', e);
-    return false;
-  }
-}
-
-async function checkBNBBalanceViaProvider(provider, address, minBalance = '0.00004') {
-  const bal = await provider.getBalance(address);
-  const minWei = ethers.utils.parseEther(minBalance);
-  return { ok: bal.gte(minWei), balance: ethers.utils.formatEther(bal), min: minBalance };
-}
-
-/* ------------------------ 状态读取（Solana 早退；EVM 读取合约） ------------------------ */
-async function loadUserCheckInStatus() {
-  try {
-    const inSol =
-      (typeof isSolanaSelectedInUI === 'function' && isSolanaSelectedInUI()) ||
-      (typeof window.isSolanaSelected === 'function' && window.isSolanaSelected());
-    if (inSol) {
-      console.log('[checkin] Solana selected - skip EVM status load');
-      return;
-    }
-
-    if (!window.walletManager || !window.walletManager.isConnected) {
-      console.warn('Wallet not connected, skip status load');
-      return;
-    }
-
-    const addr = window.walletManager.walletAddress;
-    const sel = document.getElementById('chainSelector');
-    const selectedChain = sel ? sel.value : 'BSC';
-    const config = window.getContractConfig?.(selectedChain);
-    if (!config) {
-      console.error('No EVM config for chain:', selectedChain);
-      updateStatusUI(0, 0, 30, false);
-      return;
-    }
-    const abi = getEvmAbi(config);
-    const rpc = config.rpcUrl;
-    if (!abi || !rpc || !config.checkInAddress) {
-      console.warn('EVM config incomplete', config);
-      updateStatusUI(0, 0, 30, false);
-      return;
-    }
-    if (typeof ethers === 'undefined') {
-      console.error('Ethers not loaded');
-      updateStatusUI(0, 0, 30, false);
-      return;
-    }
-
-    const provider = new ethers.providers.JsonRpcProvider(rpc);
-    const contract = new ethers.Contract(config.checkInAddress, abi, provider);
-    const status = await contract.getUserStatus(addr);
-
-    // 结构：[lastDay, streak, totalCredits, availableCredits, nextReward, canCheckInToday]
-    const streak        = Number(status[1]?.toString?.() ?? 0);
-    const totalCredits  = Number(status[2]?.toString?.() ?? 0);
-    const nextReward    = Number(status[4]?.toString?.() ?? 30);
-    const canCheckToday = Boolean(status[5]);
-
-    updateStatusUI(streak, totalCredits, nextReward, canCheckToday);
-  } catch (err) {
-    console.error('Failed to load status:', err);
-    updateStatusUI(0, 0, 30, false);
-  }
-}
-
-/* ------------------------ 防重入锁 ------------------------ */
-if (typeof window.__i3_checkin_busy === 'undefined') {
-  window.__i3_checkin_busy = false;
-}
-function setBusy(busy) {
-  window.__i3_checkin_busy = !!busy;
-  const btn = document.getElementById('executeCheckInBtn');
-  if (btn) {
-    btn.disabled = busy;
-    if (busy) btn.classList?.add?.('opacity-60','pointer-events-none');
-    else btn.classList?.remove?.('opacity-60','pointer-events-none');
-  }
-}
-
-/* ------------------------ 主执行入口 ------------------------ */
+/**
+ * 统一的链上签到执行函数
+ */
 async function executeOnChainCheckIn() {
-  if (window.__i3_checkin_busy) {
-    console.warn('[checkin] duplicate click ignored');
-    return;
-  }
-  setBusy(true);
-
-  try {
-    if (!window.walletManager || !window.walletManager.isConnected) {
-      (window.showNotification || safeNotify)('Please connect your wallet first', 'error');
-      return;
-    }
-
-    // 钱包类型 vs 目标链类型守卫
-    {
-      const wt = String(window.walletManager?.walletType || '').toLowerCase();
-      const walletKind = wt.includes('solana') ? 'solana' : 'evm';
-      const sel = document.getElementById('chainSelector');
-      const v = String(sel?.value || '').toLowerCase();
-      const targetKind = /(solana|^sol\b)/.test(v) ? 'solana' : 'evm';
-      if (walletKind !== targetKind) {
-        const notify = (window.showNotification || safeNotify);
-        if (walletKind === 'evm' && targetKind === 'solana') {
-          notify('You are using an EVM wallet. Please switch to a Solana wallet (e.g., Phantom).', 'error');
-          try { typeof showWalletSelectionModal === 'function' && showWalletSelectionModal(); } catch {}
-        } else if (walletKind === 'solana' && targetKind === 'evm') {
-          notify('You are using a Solana wallet. Please connect an EVM wallet (MetaMask / WalletConnect / Coinbase).', 'error');
-          try { typeof showWalletSelectionModal === 'function' && showWalletSelectionModal(); } catch {}
-        }
+    if (window.__i3_checkin_busy) {
+        console.warn('[checkin] duplicate click ignored');
         return;
-      }
     }
 
-    // 分流：Solana
-    const inSol =
-      (typeof isSolanaSelectedInUI === 'function' && isSolanaSelectedInUI()) ||
-      (typeof window.isSolanaSelected === 'function' && window.isSolanaSelected());
-    if (inSol) {
-      try { window.openSolanaCheckinModal?.(); } catch {}
-      const ui = {
-        onStatus:  (m)   => console.log('[solana] status:', m),
-        onError:   (err) => (window.showNotification || safeNotify)(`Solana check-in failed: ${err?.message || err}`, 'error'),
-        onSuccess: async ({ txSig, url }) => {
-          (window.showNotification || safeNotify)('Solana check-in successful!', 'success');
-          const a = document.getElementById('txExplorerLink');
-          if (a && url) { a.href = url; a.textContent = 'View on Solana Explorer'; }
-          applySolanaPostSuccessUI({ reward: 30 });
-          window.walletManager?.updateUI?.();
-        }
-      };
-      if (typeof window.executeSolanaCheckin === 'function') {
-        await window.executeSolanaCheckin(ui);
-      } else {
-        (window.showNotification || safeNotify)('Solana module not loaded', 'error');
-      }
-      return;
-    }
+    setBusy(true);
 
-    // EVM 流程
-    if (typeof ethers === 'undefined') {
-      (window.showNotification || safeNotify)('Ethers not loaded', 'error');
-      return;
-    }
-
-    const sel = document.getElementById('chainSelector');
-    const selectedChain = sel ? sel.value : 'BSC';
-    const config = window.getContractConfig?.(selectedChain);
-    const abi    = getEvmAbi(config);
-    const rpc    = config?.rpcUrl;
-    const addr   = config?.checkInAddress;
-    const chainHex = normalizeChainIdHex(config);
-
-    if (!config || !abi || !rpc || !addr || !chainHex) {
-      (window.showNotification || safeNotify)('Invalid EVM chain config', 'error');
-      console.warn('[EVM config]', { hasAbi: !!abi, rpc, addr, chainHex, config });
-      return;
-    }
-
-    // 提示切链
     try {
-      const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-      if (currentChainId?.toLowerCase() !== chainHex.toLowerCase()) {
-        const alertBox = document.createElement('div');
-        alertBox.style.cssText = `
-          position: fixed; top: 20px; right: 20px; background: #10b981; color: white;
-          padding: 20px 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-          z-index: 10001; font-size: 16px; font-weight: bold; max-width: 400px; animation: slideIn .3s ease;`;
-        alertBox.innerHTML = `<div style="display:flex;align-items:center;gap:12px;">
-          <span style="font-size:24px;">🔄</span>
-          <div><div style="margin-bottom:5px;">Switching Network</div>
-          <div style="font-size:13px;opacity:.9;">To <strong>${config.chainName || chainHex}</strong></div></div></div>`;
-        if (!document.getElementById('slideInAnimation')) {
-          const style = document.createElement('style');
-          style.id = 'slideInAnimation';
-          style.textContent = `@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`;
-          document.head.appendChild(style);
+        // 1) 钱包连接检查
+        if (!window.walletManager || !window.walletManager.isConnected) {
+            safeNotify('Please connect your wallet first', 'error');
+            return;
         }
-        document.body.appendChild(alertBox);
-        setTimeout(()=>{ alertBox.style.animation='slideIn .3s ease reverse'; setTimeout(()=>alertBox.remove(),300); }, 1600);
-        await new Promise(r=>setTimeout(r, 600));
-      }
-    } catch {}
 
-    setLoadingState(true, 'Switching network...');
-    const ok = await switchToChain(chainHex);
-    if (!ok) { setLoadingState(false); (window.showNotification || safeNotify)('Failed to switch network', 'error'); return; }
+        // 2) 钱包类型守卫
+        const wt = String(window.walletManager?.walletType || '').toLowerCase();
+        const walletKind = wt.includes('solana') ? 'solana' : 'evm';
+        
+        const sel = document.getElementById('chainSelector');
+        const v = String(sel?.value || '').toLowerCase();
+        const targetKind = /(solana|^sol\b)/.test(v) ? 'solana' : 'evm';
 
-    // 余额检查（保守阈值）
-    setLoadingState(true, 'Checking balance...');
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const signer   = provider.getSigner();
-    const userAddr = await signer.getAddress();
-    const bal = await checkBNBBalanceViaProvider(provider, userAddr, '0.00004');
-    if (!bal.ok) {
-      setLoadingState(false);
-      (window.showNotification || safeNotify)(`Insufficient BNB: ${bal.balance} (need ≥ ${bal.min})`, 'warning');
-      try { typeof closeOnChainCheckInModal === 'function' && closeOnChainCheckInModal(); } catch {}
-      try { typeof showInsufficientBalanceModal === 'function' && showInsufficientBalanceModal(bal.balance, bal.min); } catch {}
-      return;
-    }
-
-    // Gas 估算（非强制）
-    try {
-      const contractRO = new ethers.Contract(addr, abi, signer);
-      const gasEstimate = await contractRO.estimateGas.checkIn({ value: 0 });
-      console.log('[gas estimate] checkIn =', gasEstimate.toString());
-    } catch (e) { console.warn('Gas estimation failed (non-critical):', e?.message || e); }
-
-    // 发送交易
-    const contract = new ethers.Contract(addr, abi, signer);
-    (window.showNotification || safeNotify)('Please confirm in your wallet...', 'info');
-    const tx = await contract.checkIn({ value: ethers.utils.parseEther('0') });
-
-    const link = document.getElementById('txExplorerLink');
-    if (link && config.explorerBase) {
-      link.href = `${config.explorerBase}/tx/${tx.hash}`;
-      link.textContent = 'View on Explorer';
-    }
-
-    setLoadingState(true, 'Waiting for confirmation...');
-    const receipt = await tx.wait();
-
-    // 解析事件（CheckedIn） → credits & streak
-    let earnedCredits = 0;
-    let streakDays = 0;
-    try {
-      for (const log of receipt.logs) {
-        try {
-          const parsed = contract.interface.parseLog(log);
-          if (parsed?.name === 'CheckedIn') {
-            earnedCredits = Number(parsed.args?.credits ?? 0);
-            streakDays    = Number(parsed.args?.streak ?? 0);
-            break;
-          }
-        } catch {}
-      }
-    } catch {}
-
-    // Firebase 同步（保留你原逻辑）
-    try {
-      await (async function updateFirebaseAfterOnChainCheckIn(credits, txHash, streak) {
-        if (!window.firebaseDb || !window.walletManager) { console.warn('Firebase or wallet manager not available'); return; }
-        const address = window.walletManager.walletAddress.toLowerCase();
-        const { doc, updateDoc, setDoc, getDoc, serverTimestamp, increment } =
-          await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-        const walletRef = doc(window.firebaseDb, 'wallets', address);
-        const snap = await getDoc(walletRef);
-        if (!snap.exists()) {
-          await setDoc(walletRef, {
-            address, credits: credits, lastCheckinAt: serverTimestamp(), totalCheckins: 1,
-            currentStreak: streak, lastCheckinTx: txHash, lastCheckinType: 'on-chain',
-            createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
-          });
-        } else {
-          await updateDoc(walletRef, {
-            credits: increment(credits), lastCheckinAt: serverTimestamp(), totalCheckins: increment(1),
-            currentStreak: streak, lastCheckinTx: txHash, lastCheckinType: 'on-chain',
-            lastUpdated: serverTimestamp()
-          });
+        if (walletKind !== targetKind) {
+            if (walletKind === 'evm' && targetKind === 'solana') {
+                safeNotify('You are using an EVM wallet. Please switch to a Solana wallet (e.g., Phantom) to check in on Solana.', 'error');
+                try {
+                    typeof showWalletSelectionModal === 'function' && showWalletSelectionModal();
+                } catch {}
+            } else if (walletKind === 'solana' && targetKind === 'evm') {
+                safeNotify('You are using a Solana wallet. Please connect an EVM wallet (MetaMask / WalletConnect / Coinbase) for EVM check-in.', 'error');
+                try {
+                    typeof showWalletSelectionModal === 'function' && showWalletSelectionModal();
+                } catch {}
+            }
+            return;
         }
-        if (window.walletManager) {
-          window.walletManager.credits = (window.walletManager.credits || 0) + credits;
-          window.walletManager.saveToStorage?.();
-        }
-      })(earnedCredits, receipt.transactionHash, streakDays);
-    } catch (e) {
-      console.warn('Firebase update failed (non-critical):', e);
-    }
 
-    setLoadingState(false);
-    (window.showNotification || safeNotify)(`Check-in successful! +${earnedCredits || 30} credits`, 'success');
-    window.walletManager?.updateUI?.();
-    setTimeout(()=>loadUserCheckInStatus(), 800);
-  } catch (err) {
-    setLoadingState(false);
-    console.error('executeOnChainCheckIn failed:', err);
-    (window.showNotification || safeNotify)(err?.message || String(err), 'error');
-  } finally {
-    setTimeout(() => setBusy(false), 800);
-  }
+        // 3) Solana分流
+        if (targetKind === 'solana') {
+            try {
+                window.openSolanaCheckinModal?.();
+            } catch {}
+
+            const ui = {
+                onStatus: (m) => console.log('[solana] status:', m),
+                onError: (err) => safeNotify(`Solana check-in failed: ${err?.message || err}`, 'error'),
+                onSuccess: async ({ txSig, url }) => {
+                    safeNotify('Solana check-in successful!', 'success');
+                    
+                    const a = document.getElementById('txExplorerLink');
+                    if (a && url) {
+                        a.href = url;
+                        a.textContent = 'View on Solana Explorer';
+                    }
+
+                    applySolanaPostSuccessUI({ reward: 30 });
+                    window.walletManager?.updateUI?.();
+                }
+            };
+
+            if (typeof window.executeSolanaCheckin === 'function') {
+                await window.executeSolanaCheckin(ui);
+            } else {
+                safeNotify('Solana module not loaded', 'error');
+            }
+            return;
+        }
+
+        // 4) EVM流程
+        if (typeof ethers === 'undefined') {
+            safeNotify('Ethers not loaded', 'error');
+            return;
+        }
+
+        await executeEVMCheckIn();
+
+    } catch (err) {
+        console.error('executeOnChainCheckIn failed:', err);
+        if (!String(err?.message || err).includes('Wallet kind does not match')) {
+            safeNotify(err?.message || String(err), 'error');
+        }
+    } finally {
+        setTimeout(() => setBusy(false), 800);
+    }
 }
 
-/* ------------------------ 事件绑定 ------------------------ */
+/* ======================== 事件绑定 ======================== */
+
 (function bindOnce() {
-  if (window.__i3_checkin_listener_bound) return;
-  window.__i3_checkin_listener_bound = true;
+    if (window.__i3_checkin_listener_bound) return;
+    window.__i3_checkin_listener_bound = true;
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('executeCheckInBtn');
-    btn && btn.addEventListener('click', executeOnChainCheckIn, { passive: true });
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('executeCheckInBtn');
+        if (btn) {
+            // 移除可能存在的内联onclick
+            btn.removeAttribute('onclick');
+            btn.addEventListener('click', executeOnChainCheckIn);
+        }
 
-    const refreshBtn = document.getElementById('refreshStatusBtn');
-    refreshBtn && refreshBtn.addEventListener('click', loadUserCheckInStatus);
+        const refreshBtn = document.getElementById('refreshStatusBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', loadUserCheckInStatus);
+        }
 
-    const sel = document.getElementById('chainSelector');
-    if (sel) {
-      sel.addEventListener('change', (e) => {
-        const v = (e.target.value || '').toUpperCase();
-        if      (v === 'SOLANA') window.setCurrentChain?.('solana');
-        else if (v === 'OPBNB')  window.setCurrentChain?.('opbnb');
-        else                     window.setCurrentChain?.('bsc');
+        const sel = document.getElementById('chainSelector');
+        if (sel) {
+            sel.addEventListener('change', (e) => {
+                const v = (e.target.value || '').toUpperCase();
+                if (v === 'SOLANA') window.setCurrentChain?.('solana');
+                else if (v === 'OPBNB') window.setCurrentChain?.('opbnb');
+                else window.setCurrentChain?.('bsc');
+                
+                loadUserCheckInStatus();
+            });
+
+            // 初始同步
+            const v0 = (sel.value || '').toUpperCase();
+            if (v0 === 'SOLANA') window.setCurrentChain?.('solana');
+            else if (v0 === 'OPBNB') window.setCurrentChain?.('opbnb');
+            else window.setCurrentChain?.('bsc');
+        }
+
+        // 初始加载状态
         loadUserCheckInStatus();
-      });
-      const v0 = (sel.value || '').toUpperCase();
-      if      (v0 === 'SOLANA') window.setCurrentChain?.('solana');
-      else if (v0 === 'OPBNB')  window.setCurrentChain?.('opbnb');
-      else                      window.setCurrentChain?.('bsc');
-    }
-  });
+    });
 })();
 
-/* ------------------------ 导出 ------------------------ */
-window.executeOnChainCheckIn   = executeOnChainCheckIn;
-window.loadUserCheckInStatus   = loadUserCheckInStatus;
-window.updateStatusUI          = updateStatusUI;
+/* ======================== 导出到全局 ======================== */
+
+window.executeOnChainCheckIn = executeOnChainCheckIn;
+window.loadUserCheckInStatus = loadUserCheckInStatus;
+window.updateStatusUI = updateStatusUI;
+window.closeInsufficientBalanceModal = closeInsufficientBalanceModal;
+window.redirectToSwap = redirectToSwap;
+window.redirectToBridge = redirectToBridge;
+window.redirectToBinanceDeposit = redirectToBinanceDeposit;
 window.applySolanaPostSuccessUI = applySolanaPostSuccessUI;
 
-console.log('✅ Unified On-chain check-in module loaded (EVM + Solana)');
+console.log('✅ On-chain check-in module loaded (EVM + Solana unified)');

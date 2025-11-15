@@ -111,8 +111,21 @@ function addToCartStorage(modelName, tokenQuantity = 1, shareQuantity = 0) {
     return true;
 }
 
-// 填充购物车表格
+// 填充购物车表格（根据设备类型）
 function populateCartTable() {
+    const isMobile = window.innerWidth <= 768;
+    
+    if (isMobile) {
+        renderMobileCart();
+    } else {
+        renderDesktopCart();
+    }
+    
+    updateCartSummary();
+}
+
+// 渲染桌面端购物车表格
+function renderDesktopCart() {
     const tableBody = document.getElementById('cartTableBody');
     const cartItems = getCartItems();
 
@@ -184,8 +197,110 @@ function populateCartTable() {
 
         tableBody.appendChild(row);
     });
+}
 
-    updateCartSummary();
+// 渲染移动端购物车卡片
+function renderMobileCart() {
+    const cartItems = getCartItems();
+    let mobileContainer = document.querySelector('.mobile-cart-items');
+    
+    if (!mobileContainer) {
+        mobileContainer = document.createElement('div');
+        mobileContainer.className = 'mobile-cart-items';
+        const cartItemsSection = document.getElementById('cartItems');
+        if (cartItemsSection) {
+            const tableContainer = cartItemsSection.querySelector('.cart-table-container');
+            if (tableContainer) {
+                tableContainer.parentNode.insertBefore(mobileContainer, tableContainer.nextSibling);
+            } else {
+                cartItemsSection.appendChild(mobileContainer);
+            }
+        }
+    }
+    
+    mobileContainer.innerHTML = '';
+    
+    cartItems.forEach((item, index) => {
+        const modelData = getModelData(item.modelName);
+        if (!modelData) {
+            console.warn('⚠️ 模型数据未找到:', item.modelName);
+            return;
+        }
+        
+        const tokenQuantity = item.tokenQuantity || 0;
+        const shareQuantity = item.shareQuantity || 0;
+        const tokenSubtotal = (modelData.tokenPrice * tokenQuantity).toFixed(2);
+        const shareSubtotal = (modelData.sharePrice * shareQuantity).toFixed(2);
+        const totalSubtotal = (parseFloat(tokenSubtotal) + parseFloat(shareSubtotal) * 1000).toFixed(2);
+        
+        const card = document.createElement('div');
+        card.className = 'mobile-cart-item';
+        card.innerHTML = `
+            <div class="mobile-item-header">
+                <div class="model-name">${item.modelName}</div>
+                <div class="model-details">Total Score: ${modelData.totalScore}% | Compatibility: ${modelData.compatibility}</div>
+                <div class="cart-category">${modelData.category}</div>
+            </div>
+            
+            ${tokenQuantity > 0 ? `
+            <div class="mobile-purchase-section">
+                <div class="mobile-purchase-type">Token Purchase</div>
+                <div class="mobile-price-row">
+                    <div class="mobile-price-info">
+                        ${modelData.tokenPrice}/K
+                        <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3">
+                    </div>
+                    <div class="quantity-controls">
+                        <button class="quantity-btn" onclick="updateTokenQuantity(${index}, ${tokenQuantity - 1})" ${tokenQuantity <= 0 ? 'disabled' : ''}>−</button>
+                        <input type="number" class="quantity-input" value="${tokenQuantity}" min="0" max="999" 
+                               onchange="updateTokenQuantity(${index}, parseInt(this.value))">
+                        <button class="quantity-btn" onclick="updateTokenQuantity(${index}, ${tokenQuantity + 1})" ${tokenQuantity >= 999 ? 'disabled' : ''}>+</button>
+                    </div>
+                </div>
+                <div class="mobile-subtotal-info">
+                    Subtotal: ${tokenSubtotal}
+                    <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3" style="width: 12px; height: 12px;">
+                </div>
+            </div>
+            ` : ''}
+            
+            ${shareQuantity > 0 ? `
+            <div class="mobile-purchase-section">
+                <div class="mobile-purchase-type">Share Purchase</div>
+                <div class="mobile-price-row">
+                    <div class="mobile-price-info">
+                        ${modelData.sharePrice}K
+                        <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3">
+                    </div>
+                    <div class="quantity-controls">
+                        <button class="quantity-btn" onclick="updateShareQuantity(${index}, ${shareQuantity - 1})" ${shareQuantity <= 0 ? 'disabled' : ''}>−</button>
+                        <input type="number" class="quantity-input" value="${shareQuantity}" min="0" max="999" 
+                               onchange="updateShareQuantity(${index}, parseInt(this.value))">
+                        <button class="quantity-btn" onclick="updateShareQuantity(${index}, ${shareQuantity + 1})" ${shareQuantity >= 999 ? 'disabled' : ''}>+</button>
+                    </div>
+                </div>
+                <div class="mobile-subtotal-info">
+                    Subtotal: ${shareSubtotal}K
+                    <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3" style="width: 12px; height: 12px;">
+                </div>
+            </div>
+            ` : ''}
+            
+            <div class="mobile-item-total">
+                <span class="mobile-total-label">Item Total:</span>
+                <span class="mobile-total-value">
+                    ${totalSubtotal}
+                    <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3">
+                </span>
+            </div>
+            
+            <button class="mobile-remove-btn" onclick="removeFromCart(${index})">
+                Remove from Cart
+            </button>
+        `;
+        
+        mobileContainer.appendChild(card);
+    });
 }
 
 // 更新Token数量
@@ -530,6 +645,18 @@ function handleURLParams() {
 // 页面加载时处理URL参数
 document.addEventListener('DOMContentLoaded', function() {
     handleURLParams();
+});
+
+// 监听窗口大小变化，切换布局
+let resizeTimer;
+window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+        const cartItems = getCartItems();
+        if (cartItems.length > 0) {
+            populateCartTable();
+        }
+    }, 250);
 });
 
 // 导出函数供其他页面使用

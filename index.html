@@ -1262,6 +1262,40 @@
                         MyCart
                     </button>
                 </nav>
+                <!-- 移动端菜单按钮 -->
+                <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                <!-- 移动端导航菜单 -->
+                <div class="mobile-nav-overlay" onclick="closeMobileMenu()"></div>
+                <div class="mobile-nav-menu">
+                    <button class="nav-item active" onclick="window.location.href='index.html'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Chats
+                    </button>
+                    <button class="nav-item" onclick="window.location.href='modelverse.html'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 6v6l4 2"></path>
+                        </svg>
+                        Modelverse
+                    </button>
+                    <button class="nav-item" onclick="window.location.href='benchmark.html'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        Benchmark
+                    </button>
+                    <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
+                    <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
+                    <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
+                </div>
             </div>
 
             <!-- Right Section -->
@@ -1402,47 +1436,6 @@
 
 
 
-        <!-- Quick Actions -->
-        <div class="quick-actions">
-            <a href="modelverse.html" class="action-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
-                </svg>
-                Explore Models
-            </a>
-            <a href="benchmark.html" class="action-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 12l2 2 4-4"/>
-                    <circle cx="12" cy="12" r="10"/>
-                </svg>
-                View Benchmark
-            </a>
-        </div>
-
-        <!-- Features Section -->
-        <div class="features-section">
-            <div class="features-title">Powered by Intelligence Cubed</div>
-            <div class="features-list">
-                <div class="feature-item">
-                    <div class="feature-icon">✓</div>
-                    <span>200+ AI Models</span>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon">⚡</div>
-                    <span>Smart Routing</span>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon">🎯</div>
-                    <span>Best-Suited Results</span>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon">🔒</div>
-                    <span>Secure & Private</span>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- ===== Light Chat UI (hidden until first prompt) ===== -->
@@ -4903,6 +4896,21 @@
     <script type="module" src="solana-wallet.js"></script>
     <script type="module" src="solana-checkin.js"></script>
     <script src="onchain-checkin.js"></script>
+    <script>
+    function toggleMobileMenu() {
+        const menu = document.querySelector('.mobile-nav-menu');
+        const overlay = document.querySelector('.mobile-nav-overlay');
+        menu.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    function closeMobileMenu() {
+        const menu = document.querySelector('.mobile-nav-menu');
+        const overlay = document.querySelector('.mobile-nav-overlay');
+        menu.classList.remove('active');
+        overlay.classList.remove('active');
+    }
+    </script>
         <!-- Follow X Modal -->
     <div id="followXModal" class="follow-x-modal">
         <div class="follow-x-modal-content">
@@ -5906,6 +5914,17 @@
                     </span>
                     <div class="wallet-info">
                         <div class="wallet-name">Coinbase Wallet</div>
+                    </div>
+                </div>
+
+                <!-- Binance Wallet 选项 -->
+                <div class="wallet-option available" onclick="connectBinanceWallet()">
+                    <span class="wallet-icon-wrap">
+                        <!-- 你自己的官方 SVG/PNG -->
+                        <img src="svg/binance.svg" alt="Binance Wallet">
+                    </span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">Binance Wallet</div>
                     </div>
                 </div>
 

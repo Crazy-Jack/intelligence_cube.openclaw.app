@@ -476,6 +476,7 @@ function getModelData(name) {
 
       const td = document.createElement('td');
       td.className = 'action-cell';
+      td.setAttribute('data-label', 'Action');
       td.innerHTML = `
         <div class="invest">
           <button class="try-btn">Try</button>

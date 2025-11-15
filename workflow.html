@@ -687,6 +687,30 @@
                         My Cart
                     </button>
                 </nav>
+                <!-- 移动端菜单按钮 -->
+                <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+
+                <!-- 移动端导航菜单 -->
+                <div class="mobile-nav-overlay" onclick="closeMobileMenu()"></div>
+                <div class="mobile-nav-menu">
+                    <button class="nav-item" onclick="window.location.href='index.html'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Chats
+                    </button>
+                    <button class="nav-item" onclick="window.location.href='modelverse.html'">Modelverse</button>
+                    <button class="nav-item" onclick="window.location.href='benchmark.html'">Benchmark</button>
+                    <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
+                    <button class="nav-item active" onclick="window.location.href='workflow.html'">Workflows</button>
+                    <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
+                </div>
             </div>
 
             <!-- Right Section -->
@@ -880,6 +904,21 @@
     <script src="workflow.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="social-tasks.js"></script>
+    <script>
+    function toggleMobileMenu() {
+        const menu = document.querySelector('.mobile-nav-menu');
+        const overlay = document.querySelector('.mobile-nav-overlay');
+        menu.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    function closeMobileMenu() {
+        const menu = document.querySelector('.mobile-nav-menu');
+        const overlay = document.querySelector('.mobile-nav-overlay');
+        menu.classList.remove('active');
+        overlay.classList.remove('active');
+    }
+    </script>
     <script src="wallet-manager.js"></script>
 	<script src="wallet-integration.js"></script>
     <script src="onchain-checkin.js"></script>
@@ -1854,15 +1893,26 @@
                     </div>
                 </div>
 
+                <!-- Binance Wallet 选项 -->
+                <div class="wallet-option available" onclick="connectBinanceWallet()">
+                    <span class="wallet-icon-wrap">
+                        <!-- 你自己的官方 SVG/PNG -->
+                        <img src="svg/binance.svg" alt="Binance Wallet">
+                    </span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">Binance Wallet</div>
+                    </div>
+                </div>
+
                 <!-- Phantom (Solana) -->
 				<div class="wallet-option available" onclick="connectSolanaPhantom()">
 				    <span class="wallet-icon-wrap">
                     <!-- 你自己的官方 SVG/PNG -->
                         <img src="svg/phantom.svg" alt="Phantom">
                     </span>
-				  <div class="wallet-info">
-				    <div class="wallet-name">Phantom (Solana)</div>
-				  </div>
+				    <div class="wallet-info">
+				        <div class="wallet-name">Phantom (Solana)</div>
+				    </div>
 				</div>
 
                 <div class="wallet-footer">

@@ -1,3 +1,22 @@
+.mobile-guide {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobile-guide {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: white;
+        padding: 16px;
+        justify-content: center;
+        gap: 8px;
+        border-top: 1px solid #e2e8f0;
+        z-index: 100;
+    }
+}
 /* Canvas Page Styles */
 * {
     box-sizing: border-box;
@@ -9,6 +28,15 @@
     height: calc(100vh - 80px);
     margin-top: 80px;
     background: #f8fafc;
+    min-height: 500px;
+}
+
+@media (max-width: 768px) {
+    .canvas-layout {
+        height: calc(100vh - 60px);
+        margin-top: 60px;
+        min-height: 400px;
+    }
 }
 
 /* Sidebar Styles */
@@ -83,6 +111,30 @@
     border-color: #8b7cf6;
     background: white;
     box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.1);
+}
+
+/* 搜索框响应式 */
+@media (max-width: 768px) {
+    .search-section {
+        margin-bottom: 16px;
+    }
+    
+    .search-input {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .search-section {
+        margin-bottom: 12px;
+    }
+    
+    .search-input {
+        padding: 9px 12px;
+        font-size: 12px;
+        border-radius: 6px;
+    }
 }
 
 /* Models Section */
@@ -314,7 +366,10 @@
 .canvas-workspace {
     flex: 1;
     position: relative;
-    overflow: hidden;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    min-width: 100%;
+    min-height: 100%;
     background: 
         radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 1px);
     background-size: 20px 20px;
@@ -755,10 +810,26 @@
     font-size: 16px;
 }
 
-/* Responsive Design */
+/* 响应式设计 - 平板 */
 @media (max-width: 1024px) {
     .sidebar {
         width: 280px;
+    }
+    
+    .sidebar-header {
+        padding: 16px;
+    }
+    
+    .sidebar-header h3 {
+        font-size: 16px;
+    }
+    
+    .sidebar-content {
+        padding: 16px;
+    }
+    
+    .model-item {
+        padding: 14px;
     }
     
     .workflow-node {
@@ -767,49 +838,433 @@
     }
 }
 
+/* 平板和手机端优化 - 侧边栏抽屉式 */
 @media (max-width: 768px) {
     .canvas-layout {
-        flex-direction: column;
+        position: relative;
     }
     
     .sidebar {
+        position: fixed;
+        left: -100%;
+        top: 60px;
+        width: 85%;
+        max-width: 320px;
+        height: calc(100vh - 60px);
+        z-index: 200;
+        transition: left 0.3s ease;
+        box-shadow: 2px 0 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .sidebar.open,
+    .sidebar.mobile-open {
+        left: 0;
+    }
+    
+    .canvas-area {
         width: 100%;
-        height: 200px;
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .canvas-header {
+        padding: 12px 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .canvas-title h2 {
+        font-size: 18px;
+    }
+    
+    .canvas-subtitle {
+        font-size: 12px;
+    }
+    
+    .canvas-controls {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .control-btn {
+        flex: 1 1 calc(50% - 4px);
+        padding: 10px 8px;
+        font-size: 12px;
+        justify-content: center;
+    }
+    
+    .control-btn.save-run-btn,
+    .control-btn.run-btn {
+        flex: 1 1 100%;
+        padding: 12px;
+        font-size: 14px;
     }
     
     .sidebar-content {
         padding: 16px;
     }
     
+    .models-section {
+        margin-bottom: 16px;
+    }
+    
+    .section-header {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .section-title {
+        font-size: 14px;
+    }
+    
+    .models-count {
+        font-size: 11px;
+    }
+    
     .models-list {
-        flex-direction: row;
-        overflow-x: auto;
+        max-height: 350px;
+        overflow-y: auto;
+    }
+    
+    .model-item {
+        padding: 12px;
+    }
+    
+    .model-name {
+        font-size: 13px;
+        max-width: 160px;
+    }
+    
+    /* 节点尺寸优化 - 让节点更易操作 */
+    .workflow-node {
+        min-width: 180px;
+        max-width: 200px;
+        padding: 14px;
+        font-size: 13px;
+    }
+    
+    .node-title {
+        font-size: 13px;
+    }
+    
+    .node-type {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+    
+    .node-description {
+        font-size: 11px;
+    }
+    
+    .node-tokens {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+    
+    .input-port,
+    .output-port {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .node-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+        min-height: 36px;
+    }
+    
+    .drop-zone {
+        padding: 24px 16px;
+        min-width: 200px;
+        max-width: 280px;
+    }
+    
+    .drop-zone-content svg {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .drop-zone-content h3 {
+        font-size: 16px;
+        margin-bottom: 6px;
+    }
+    
+    .drop-zone-content p {
+        font-size: 12px;
+        line-height: 1.4;
+    }
+}
+
+/* 手机端 */
+@media (max-width: 480px) {
+    .canvas-layout {
+        margin-top: 56px;
+        height: calc(100vh - 56px);
+    }
+    
+    .sidebar {
+        max-height: 220px;
+    }
+    
+    .sidebar-header {
+        padding: 10px 12px;
+    }
+    
+    .sidebar-header h3 {
+        font-size: 14px;
+    }
+    
+    .sidebar-content {
+        padding: 10px 12px;
+    }
+    
+    .section-header {
+        padding: 10px;
+        border-radius: 8px;
+    }
+    
+    .section-title {
+        font-size: 13px;
+        gap: 6px;
+    }
+    
+    .models-count {
+        font-size: 10px;
+    }
+    
+    .models-list {
         gap: 8px;
     }
     
     .model-item {
-        min-width: 200px;
-        flex-shrink: 0;
+        min-width: 180px;
+        max-width: 180px;
+        padding: 10px;
+        border-radius: 10px;
     }
     
-    .workflow-node {
-        width: 180px;
-        padding: 12px;
+    .model-name {
+        font-size: 12px;
+        max-width: 140px;
+    }
+    
+    .model-type {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+    
+    .model-category {
+        font-size: 10px;
+        margin-bottom: 6px;
+    }
+    
+    .model-tokens {
+        padding: 5px 7px;
+        font-size: 10px;
+    }
+    
+    .model-tokens svg {
+        width: 10px;
+        height: 10px;
     }
     
     .canvas-header {
-        padding: 16px;
+        padding: 12px;
+    }
+    
+    .canvas-title h2 {
+        font-size: 18px;
+        margin-bottom: 2px;
+    }
+    
+    .canvas-subtitle {
+        font-size: 12px;
+    }
+    
+    .canvas-controls {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    
+    .control-btn {
+        padding: 7px 10px;
+        font-size: 12px;
+        flex: 1;
+        min-width: 0;
+        justify-content: center;
+    }
+    
+    .control-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .control-btn span {
+        display: none;
+    }
+    
+    .control-btn.save-run-btn span,
+    .control-btn.run-btn span {
+        display: inline;
+    }
+    
+    .control-btn.save-run-btn,
+    .control-btn.run-btn {
+        flex: 1 1 100%;
+        font-size: 13px;
+    }
+    
+    .canvas-workspace {
+        background-size: 15px 15px;
+    }
+    
+    .workflow-node {
+        min-width: 160px;
+        max-width: 180px;
+        padding: 12px;
+        font-size: 12px;
+    }
+    
+    .node-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    
+    .node-title {
+        font-size: 12px;
+    }
+    
+    .node-type {
+        font-size: 8px;
+        padding: 2px 5px;
+    }
+    
+    .node-description {
+        font-size: 10px;
+        line-height: 1.3;
+    }
+    
+    .mobile-sidebar-toggle {
+        left: 12px;
+        top: 90px;
+        padding: 10px;
+    }
+    
+    .sidebar {
+        width: 85%;
+    }
+    
+    .node-footer {
+        gap: 6px;
+    }
+    
+    .node-btn {
+        padding: 5px 8px;
+        font-size: 10px;
+    }
+    
+    .input-port,
+    .output-port {
+        width: 12px;
+        height: 12px;
+    }
+    
+    .input-port::after,
+    .output-port::after {
+        font-size: 8px;
+    }
+    
+    .drop-zone {
+        padding: 24px 20px;
+        min-width: 250px;
+        max-width: 90%;
+        border-width: 2px;
+    }
+    
+    .drop-zone-content svg {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 12px;
+    }
+    
+    .drop-zone-content h3 {
+        font-size: 16px;
+        margin-bottom: 6px;
+    }
+    
+    .drop-zone-content p {
+        font-size: 12px;
     }
     
     .workflow-guide {
-        position: relative;
-        bottom: auto;
-        left: auto;
-        transform: none;
-        margin: 16px;
+        display: none;
+    }
+    
+    .connection-mode-indicator {
+        top: 8px;
+        right: 8px;
+        padding: 8px 12px;
         font-size: 12px;
+    }
+    
+    .indicator-icon {
+        font-size: 14px;
+    }
+}
+
+/* 超小屏幕 */
+@media (max-width: 360px) {
+    body {
+        font-size: 13px;
+    }
+    
+    .sidebar {
+        max-height: 200px;
+    }
+    
+    .canvas-workspace {
+        background-size: 15px 15px;
+    }
+    
+    .model-item {
+        min-width: 160px;
+        max-width: 160px;
+    }
+    
+    .model-name {
+        font-size: 12px;
+    }
+    
+    .model-tokens {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+    
+    .canvas-title h2 {
+        font-size: 16px;
+    }
+    
+    .workflow-node {
+        width: 140px;
+        padding: 8px;
+    }
+    
+    .node-title {
+        font-size: 11px;
+    }
+    
+    .drop-zone {
+        padding: 16px;
+        min-width: 180px;
+    }
+    
+    .drop-zone-content h3 {
+        font-size: 14px;
+    }
+    
+    .drop-zone-content p {
+        font-size: 11px;
     }
 }
 
@@ -1009,8 +1464,190 @@
     box-shadow: 0 4px 12px rgba(139, 124, 246, 0.3);
 }
 
+/* Modal 响应式 */
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        max-height: 85vh;
+    }
+    
+    .modal-header {
+        padding: 20px 20px 14px 20px;
+    }
+    
+    .modal-header h2 {
+        font-size: 18px;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .form-group {
+        margin-bottom: 16px;
+    }
+    
+    .form-group label {
+        font-size: 13px;
+    }
+    
+    .form-group input[type="text"],
+    .form-group textarea {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+    
+    .modal-footer {
+        padding: 14px 20px 20px 20px;
+        gap: 10px;
+    }
+    
+    .action-btn {
+        padding: 9px 16px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+        border-radius: 10px;
+    }
+    
+    .modal-header {
+        padding: 16px;
+    }
+    
+    .modal-header h2 {
+        font-size: 16px;
+    }
+    
+    .close-btn {
+        font-size: 20px;
+    }
+    
+    .modal-body {
+        padding: 16px;
+    }
+    
+    .form-group {
+        margin-bottom: 14px;
+    }
+    
+    .form-group label {
+        font-size: 12px;
+        margin-bottom: 6px;
+    }
+    
+    .form-group input[type="text"],
+    .form-group textarea {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    
+    .form-group textarea {
+        min-height: 60px;
+    }
+    
+    .radio-group {
+        gap: 16px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .modal-footer {
+        padding: 12px 16px 16px 16px;
+        gap: 8px;
+        flex-direction: column;
+    }
+    
+    .action-btn {
+        width: 100%;
+        padding: 10px;
+        font-size: 13px;
+    }
+}
+
 .header-right {
   display: flex;
   align-items: center;
   gap: 12px;   /* 控制两个按钮之间的间距 */
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+    .model-item {
+        padding: 18px;
+    }
+    
+    .control-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .node-btn {
+        min-height: 36px;
+        min-width: 36px;
+    }
+    
+    .model-item:hover,
+    .control-btn:hover,
+    .workflow-node:hover {
+        transform: none;
+    }
+}
+
+/* 移动端侧边栏切换按钮 */
+.mobile-sidebar-toggle {
+    position: fixed;
+    right: 16px;
+    bottom: 100px;
+    left: auto;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    z-index: 180;
+    background: linear-gradient(135deg, #8b7cf6 0%, #10b981 100%);
+    color: white;
+    border: none;
+    padding: 0;
+    box-shadow: 0 4px 12px rgba(139, 124, 246, 0.4);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.mobile-sidebar-toggle:active {
+    transform: scale(0.95);
+}
+
+.mobile-sidebar-toggle svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* 侧边栏遮罩层 */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 190;
+}
+
+.sidebar-overlay.show {
+    display: block;
+}
+
+/* 移动端显示切换按钮 */
+@media (max-width: 768px) {
+    .mobile-sidebar-toggle {
+        display: flex;
+    }
 }

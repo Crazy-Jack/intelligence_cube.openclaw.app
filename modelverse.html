@@ -488,6 +488,30 @@
                         MyCart
                     </button>
                 </nav>
+                <!-- 移动端菜单按钮 -->
+                <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+
+                <!-- 移动端导航菜单 -->
+                <div class="mobile-nav-overlay" onclick="closeMobileMenu()"></div>
+                <div class="mobile-nav-menu">
+                    <button class="nav-item" onclick="window.location.href='index.html'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Chats
+                    </button>
+                    <button class="nav-item active" onclick="window.location.href='modelverse.html'">Modelverse</button>
+                    <button class="nav-item" onclick="window.location.href='benchmark.html'">Benchmark</button>
+                    <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
+                    <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
+                    <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
+                </div>
             </div>
 
             <!-- Right Section -->
@@ -581,6 +605,21 @@
       document.addEventListener('DOMContentLoaded', function(){
         try { injectAccountDropdown('#accountDropdownMount'); } catch (e) { console.warn('injectAccountDropdown failed:', e); }
       });
+    </script>
+    <script>
+    function toggleMobileMenu() {
+        const menu = document.querySelector('.mobile-nav-menu');
+        const overlay = document.querySelector('.mobile-nav-overlay');
+        menu.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    function closeMobileMenu() {
+        const menu = document.querySelector('.mobile-nav-menu');
+        const overlay = document.querySelector('.mobile-nav-overlay');
+        menu.classList.remove('active');
+        overlay.classList.remove('active');
+    }
     </script>
     <script type="module">
         import googleAuthManager from './src/google-auth.js';
@@ -726,14 +765,13 @@
                     <h1 class="modelverse-title">Modelverse Market Trends</h1>
                     
                     <!-- Model Search -->
-                    <div style="
-                        position: relative;
-                        z-index: 9999;
-                        padding: 20px;
-                        margin: 20px auto;
-                        max-width: 800px;
-                        text-align: center;
-                    ">
+        <div style="
+            position: relative;
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: center;
+        ">
                         <div style="display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <input 
                                 type="text" 
@@ -1101,17 +1139,17 @@
 		    // —— 行渲染 —— 
 		    row.innerHTML = `
 		      <td class="model-name">${modelName}</td>
-		      <td class="paper-link">${paperLinkHtml}</td>
-		      <td class="model-details">
+		      <td class="paper-link" data-label="Paper">${paperLinkHtml}</td>
+		      <td class="model-details" data-label="Details">
 		        <button class="model-card-btn" onclick="showModelCard('${modelName}')">Model Card</button>
 		      </td>
-		      <td class="api-price">${pToken} <img src="svg/i3-token-logo.svg" alt="i3" class="token-logo"></td>
-		      <td class="value">${pShare}K <img src="svg/i3-token-logo.svg" alt="i3" class="token-logo"></td>
-		      <td class="daily-delta ${changeClass}">
+		      <td class="api-price" data-label="Price per 1K Tokens"><div class="price-value">${pToken} <img src="svg/i3-token-logo.svg" alt="i3" class="token-logo"></div></td>
+		      <td class="value" data-label="Price per Share"><div class="price-value">${pShare}K <img src="svg/i3-token-logo.svg" alt="i3" class="token-logo"></div></td>
+		      <td class="daily-delta ${changeClass}" data-label="Market Change">
 		        ${changeIcon}
 		        <span style="color:${color};">${signText}${changeAbs}%</span>
 		      </td>
-		      <td class="trend-chart">
+		      <td class="trend-chart" data-label="Trend Chart">
 		        <svg width="60" height="20" viewBox="0 0 60 20">
 		          <polyline
 		            points="${style.points}"
@@ -1122,7 +1160,7 @@
 		          />
 		        </svg>
 		      </td>
-		      <td class="action-cell">
+		      <td class="action-cell" data-label="Actions">
 		        <div class="invest">
 		          <button class="try-btn" onclick="tryModelFromModelverse(this)">Try</button>
 		          <button class="add-cart-btn" onclick="addToCartFromModelverse(this)">Add to Cart</button>
@@ -2566,15 +2604,26 @@
                     </div>
                 </div>
 
+                <!-- Binance Wallet 选项 -->
+                <div class="wallet-option available" onclick="connectBinanceWallet()">
+                    <span class="wallet-icon-wrap">
+                        <!-- 你自己的官方 SVG/PNG -->
+                        <img src="svg/binance.svg" alt="Binance Wallet">
+                    </span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">Binance Wallet</div>
+                    </div>
+                </div>
+
                 <!-- Phantom (Solana) -->
 				<div class="wallet-option available" onclick="connectSolanaPhantom()">
 				    <span class="wallet-icon-wrap">
                     <!-- 你自己的官方 SVG/PNG -->
                         <img src="svg/phantom.svg" alt="Phantom">
                     </span>
-				  <div class="wallet-info">
-				    <div class="wallet-name">Phantom (Solana)</div>
-				  </div>
+				    <div class="wallet-info">
+				        <div class="wallet-name">Phantom (Solana)</div>
+				    </div>
 				</div>
 
                 <div class="wallet-footer">
@@ -2648,6 +2697,398 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #executeCheckInBtn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
     #executeCheckInBtn:disabled { background: #d1d5db; cursor: not-allowed; }
+
+    /* ========================================
+       Modelverse 页面响应式样式（修正版）
+       ======================================== */
+
+    /* 表格容器 */
+    .models-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 auto;
+        max-width: 100%;
+    }
+
+    .models-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    /* 桌面端 */
+    @media (min-width: 769px) {
+        .models-table {
+            width: 100%;
+        }
+    }
+
+    /* 平板 (481px - 768px) */
+    @media (max-width: 768px) and (min-width: 481px) {
+        .models-table-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .models-table {
+            min-width: 800px;
+            font-size: 12px;
+        }
+        
+        .models-table th,
+        .models-table td {
+            padding: 8px 6px;
+            font-size: 12px;
+        }
+        
+        .models-table thead {
+            display: table-header-group;
+        }
+        
+        .models-table tbody {
+            display: table-row-group;
+        }
+        
+        .models-table tr {
+            display: table-row;
+        }
+        
+        .models-table th,
+        .models-table td {
+            display: table-cell;
+        }
+    }
+
+    /* 手机端 (< 480px) - 强制优先级版本 */
+    @media (max-width: 480px) {
+        .models-table-container {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+        }
+        
+        .models-table thead {
+            display: none !important;
+        }
+        
+        .models-table,
+        .models-table tbody {
+            display: block !important;
+            width: 100% !important;
+        }
+        
+        .models-table tbody tr {
+            display: block !important;
+            margin-bottom: 20px !important;
+            border: 1px solid #e5e7eb !important;
+            border-radius: 16px !important;
+            padding: 20px 16px !important;
+            background: white !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+        }
+        
+        .models-table tbody tr:hover {
+            background: white !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        .models-table td {
+            display: block !important;
+            width: 100% !important;
+            padding: 0 !important;
+            border: none !important;
+            text-align: left !important;
+            vertical-align: top !important;
+        }
+        
+        .models-table td.model-name {
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            color: #111827 !important;
+            margin-bottom: 16px !important;
+            padding-bottom: 12px !important;
+            border-bottom: 2px solid #f3f4f6 !important;
+            text-align: left !important;
+        }
+        
+        .models-table td.paper-link,
+        .models-table td.model-details,
+        .models-table td.api-price,
+        .models-table td.value,
+        .models-table td.daily-delta,
+        .models-table td.trend-chart {
+            display: grid !important;
+            grid-template-columns: 140px 1fr !important;
+            gap: 12px !important;
+            padding: 10px 0 !important;
+            align-items: center !important;
+            border-bottom: 1px solid #f9fafb !important;
+            text-align: left !important;
+        }
+        
+        /* 确保价格和图标同列显示 */
+        .models-table td.api-price,
+        .models-table td.value {
+            align-items: center !important;
+        }
+        
+        .models-table td.api-price .token-logo,
+        .models-table td.value .token-logo {
+            display: inline-block !important;
+            vertical-align: middle !important;
+            margin-left: 6px !important;
+        }
+        
+        .models-table td.paper-link:before,
+        .models-table td.model-details:before,
+        .models-table td.api-price:before,
+        .models-table td.value:before,
+        .models-table td.daily-delta:before,
+        .models-table td.trend-chart:before {
+            font-weight: 600 !important;
+            color: #6b7280 !important;
+            font-size: 12px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+        }
+        
+        .models-table td.paper-link:before {
+            content: "PAPER" !important;
+        }
+        
+        .models-table td.model-details:before {
+            content: "DETAILS" !important;
+        }
+        
+        .models-table td.api-price:before {
+            content: "PRICE PER 1K" !important;
+        }
+        
+        .models-table td.value:before {
+            content: "PRICE PER SHARE" !important;
+        }
+        
+        .models-table td.daily-delta:before {
+            content: "MARKET CHANGE" !important;
+        }
+        
+        .models-table td.trend-chart:before {
+            content: "TREND CHART" !important;
+        }
+        
+        .models-table td.action-cell {
+            display: block !important;
+            margin-top: 16px !important;
+            padding-top: 16px !important;
+            border-top: 2px solid #f3f4f6 !important;
+            border-bottom: none !important;
+        }
+        
+        .models-table td.action-cell:before {
+            display: none !important;
+        }
+        
+        .models-table td.action-cell .invest {
+            display: flex !important;
+            gap: 10px !important;
+            width: 100% !important;
+        }
+        
+        .models-table td.action-cell .try-btn,
+        .models-table td.action-cell .add-cart-btn {
+            flex: 1 !important;
+            padding: 12px 16px !important;
+            font-size: 13px !important;
+            min-width: auto !important;
+        }
+        
+        .model-card-btn {
+            width: 100% !important;
+            text-align: center !important;
+            padding: 8px 12px !important;
+            background: #8b7cf6 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 6px !important;
+            font-size: 12px !important;
+            cursor: pointer !important;
+        }
+        
+        .paper-link a {
+            color: #60a5fa !important;
+            text-decoration: none !important;
+            font-weight: 500 !important;
+        }
+        
+        .token-logo {
+            display: inline-block !important;
+            vertical-align: middle !important;
+            margin-left: 4px !important;
+            width: 16px !important;
+            height: 16px !important;
+        }
+        
+        .trend-chart svg {
+            width: 100% !important;
+            max-width: 200px !important;
+            height: auto !important;
+        }
+    }
+
+    /* 钱包模态框响应式 */
+    @media (max-width: 768px) {
+        .wallet-modal-content {
+            width: 95%;
+            max-width: 95%;
+            padding: 28px 20px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .wallet-modal-content {
+            width: 95%;
+            max-width: 95%;
+            padding: 24px 18px;
+            border-radius: 20px;
+        }
+        
+        .wallet-modal-title {
+            font-size: 20px;
+        }
+        
+        .wallet-modal-subtitle {
+            font-size: 13px;
+        }
+        
+        .wallet-option {
+            padding: 14px 12px;
+        }
+        
+        .wallet-icon-wrap img {
+            width: 36px;
+            height: 36px;
+        }
+        
+        .wallet-name {
+            font-size: 14px;
+        }
+    }
+
+    /* Check-in 模态框响应式 */
+    @media (max-width: 480px) {
+        #onChainCheckInModal .wallet-modal-content {
+            max-width: 95% !important;
+            padding: 24px 18px;
+        }
+        
+        #userStatusSection {
+            padding: 14px !important;
+            margin: 16px 0 !important;
+        }
+        
+        #currentStreak,
+        #totalCheckIns {
+            font-size: 22px !important;
+        }
+        
+        #nextReward {
+            font-size: 18px !important;
+        }
+        
+        #executeCheckInBtn {
+            padding: 14px !important;
+            font-size: 15px !important;
+        }
+        
+        #chainSelector {
+            padding: 12px !important;
+            font-size: 14px !important;
+        }
+    }
+
+    /* 搜索面板响应式 */
+    @media (max-width: 480px) {
+        .search-panel,
+        .floating-search-panel {
+            width: 95% !important;
+            max-width: 95% !important;
+            left: 2.5% !important;
+            right: 2.5% !important;
+            padding: 16px !important;
+        }
+        
+        .search-panel input {
+            font-size: 14px;
+            padding: 10px 12px;
+        }
+        
+        .search-panel button {
+            font-size: 13px;
+            padding: 10px 16px;
+        }
+    }
+
+    /* 超小屏幕优化 */
+    @media (max-width: 360px) {
+        .models-table tbody tr {
+            padding: 16px 12px !important;
+        }
+        
+        .models-table td.model-name {
+            font-size: 16px !important;
+        }
+        
+        .models-table td.paper-link,
+        .models-table td.model-details,
+        .models-table td.api-price,
+        .models-table td.value,
+        .models-table td.daily-delta,
+        .models-table td.trend-chart {
+            grid-template-columns: 120px 1fr !important;
+            gap: 8px !important;
+            font-size: 12px !important;
+        }
+        
+        .models-table td.paper-link:before,
+        .models-table td.model-details:before,
+        .models-table td.api-price:before,
+        .models-table td.value:before,
+        .models-table td.daily-delta:before,
+        .models-table td.trend-chart:before {
+            font-size: 11px !important;
+        }
+        
+        .models-table td.action-cell .try-btn,
+        .models-table td.action-cell .add-cart-btn {
+            padding: 10px 12px !important;
+            font-size: 12px !important;
+        }
+    }
+
+    /* Header 响应式 */
+    @media (max-width: 768px) {
+        .header {
+            padding: 0 12px;
+        }
+        
+        .logo {
+            font-size: 16px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .header {
+            padding: 0 10px;
+        }
+        
+        .header-container {
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 10px 0;
+        }
+    }
     </style>
 </body>
 </html> 
+

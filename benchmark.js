@@ -278,16 +278,16 @@ function populatePeerBenchmarkTable(models) {
     tableBody.innerHTML = models.map(model => `
         <tr>
             <td class="model-name model-name-clickable" onclick="showModelCard('${model.name}')" style="cursor: pointer; color: #8b5cf6;">${model.name}</td>
-            <td class="category">${model.category}</td>
-            <td class="industry">${model.industry}</td>
-            <td class="rating">${model.rating}</td>
-            <td class="usage">${model.usage.toLocaleString()}</td>
-            <td class="vertical-index">${model.verticalIndex}</td>
-            <td class="pwc-score">${model.pwcScore}</td>
-            <td class="economic-value">${model.economicValue}</td>
-            <td class="lateral-comp">${model.lateralComp}</td>
-            <td class="total-score">${model.totalScore}</td>
-            <td class="actions">
+            <td class="category" data-label="Category">${model.category}</td>
+            <td class="industry" data-label="Industry">${model.industry}</td>
+            <td class="rating" data-label="Rating">${model.rating}</td>
+            <td class="usage" data-label="Usage">${model.usage.toLocaleString()}</td>
+            <td class="vertical-index" data-label="Vertical Index">${model.verticalIndex}</td>
+            <td class="pwc-score" data-label="PWC Score">${model.pwcScore}</td>
+            <td class="economic-value" data-label="Economic Value">${model.economicValue}</td>
+            <td class="lateral-comp" data-label="Lateral Comp.">${model.lateralComp}</td>
+            <td class="total-score" data-label="Total Score">${model.totalScore}</td>
+            <td class="actions" data-label="Actions">
                 <button class="action-btn try" onclick="tryModel('${model.name}')">
                     Try
                 </button>
@@ -601,16 +601,16 @@ function populateBenchmarkTable(models) {
             
             // MODEL, CATEGORY, INDUSTRY, PRICE PER 1K TOKENS, PRICE PER SHARE, MARKET CHANGE, USAGE, COMPATIBILITY, TOTAL SCORE, ACTION十列
             const cells = [
-                `<td class="model-name model-name-clickable" onclick="showModelCard('${model.name}')" style="cursor: pointer; color: #8b5cf6;">${model.name}</td>`,        // 1. MODEL// 1. MODEL
-                `<td class="category">${model.category}</td>`,      // 2. CATEGORY
-                `<td class="industry">${model.industry}</td>`,      // 3. INDUSTRY
-                `<td class="api-price">${model.tokenPrice}<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3"></td>`,   // 4. PRICE PER 1K TOKENS
-                `<td class="api-price">${model.sharePrice}K<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3"></td>`,  // 5. PRICE PER SHARE
-                `<td class="daily-delta ${model.change >= 0 ? 'positive' : 'negative'}">${model.change >= 0 ? '+' : ''}${model.change.toFixed(2)}%</td>`, // 6. MARKET CHANGE
-                `<td class="usage-score">${model.usage.toLocaleString()}</td>`,  // 7. USAGE
-                `<td class="compatibility-score">${model.compatibility}</td>`,   // 8. COMPATIBILITY
-                `<td class="total-score">${model.totalScore}%</td>`,   // 9. TOTAL SCORE
-                `<td class="action-cell">
+                `<td class="model-name model-name-clickable" onclick="showModelCard('${model.name}')" style="cursor: pointer; color: #8b5cf6;">${model.name}</td>`,
+                `<td class="category" data-label="Category">${model.category}</td>`,
+                `<td class="industry" data-label="Industry">${model.industry}</td>`,
+                `<td class="api-price" data-label="API Price">${model.tokenPrice}<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3"></td>`,
+                `<td class="api-price" data-label="Price per Share">${model.sharePrice}K<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3"></td>`,
+                `<td class="daily-delta ${model.change >= 0 ? 'positive' : 'negative'}" data-label="Market Change">${model.change >= 0 ? '+' : ''}${model.change.toFixed(2)}%</td>`,
+                `<td class="usage-score" data-label="Usage Score">${model.usage.toLocaleString()}</td>`,
+                `<td class="compatibility-score" data-label="Compatibility">${model.compatibility}</td>`,
+                `<td class="total-score" data-label="Total Score">${model.totalScore}%</td>`,
+                `<td class="action-cell" data-label="Actions">
                     <button class="try-btn" onclick="tryModel('${model.name}')">Try</button>
                     <button class="add-cart-btn" onclick="addToCart('${model.name}')">Add to Cart</button>
                 </td>`   // 10. ACTION

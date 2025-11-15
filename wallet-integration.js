@@ -24,7 +24,7 @@ function showWalletSelectionModal() {
 
       items.forEach(el => {
         const onClick = (el.getAttribute('onclick') || '').toLowerCase();
-        const isEvmWallet = /connectmetamaskwallet|connectwalletconnect|connectcoinbasewallet/.test(onClick);
+        const isEvmWallet = /connectmetamaskwallet|connectwalletconnect|connectcoinbasewallet|connectbinancewallet/.test(onClick);
         const isSolWallet = /connectsolanaphantom/.test(onClick);
 
         if ((isEvm && isEvmWallet) || (!isEvm && isSolWallet)) {
@@ -78,6 +78,25 @@ async function waitForAccounts(provider, { totalMs = 15000, stepMs = 300 } = {})
   throw new Error('Timed out waiting for wallet accounts');
 }
 
+function getBinanceProvider() {
+  // 官方推荐的注入对象
+  if (window.binancew3w && window.binancew3w.ethereum) {
+    return window.binancew3w.ethereum;
+  }
+
+  // 有些环境里直接把 Binance 注到 window.ethereum 上
+  if (window.ethereum && window.ethereum.isBinance) {
+    return window.ethereum;
+  }
+
+  // 兼容旧的 BinanceChain 注入方式
+  if (window.BinanceChain && typeof window.BinanceChain.request === 'function') {
+    return window.BinanceChain;
+  }
+
+  return null;
+}
+
 /**
  * 连接 MetaMask 钱包 - 从模态框调用
  */
@@ -129,6 +148,71 @@ async function connectMetaMaskWallet() {
   } catch (e) {
     console.error('[Connect][MetaMask] error:', e);
     showNotification(e?.message || 'Failed to connect MetaMask', 'error');
+  }
+}
+
+// 1.5) Binance Wallet —— 逻辑跟 MetaMask 基本相同
+async function connectBinanceWallet() {
+  const preferred = getPreferredNetwork();
+  if (!preferred || preferred.kind !== 'evm') {
+    showNotification('Invalid network: Please choose an EVM network first.', 'error');
+    try { openNetworkPickerModal?.(); } catch (_) {}
+    return;
+  }
+
+  console.log('[Connect][Binance] start');
+
+  try {
+    // ① 拿到 Binance Provider（优先官方注入对象）
+    const provider = getBinanceProvider();
+    if (!provider || typeof provider.request !== 'function') {
+      throw new Error('Binance Web3 Wallet not found. Please install Binance Wallet.');
+    }
+
+    // 把 provider 存到 walletManager，后续统一用 this.ethereum
+    if (window.walletManager) {
+      window.walletManager.ethereum = provider;
+    }
+
+    // ② 按当前选择的 EVM 网络切链（BNB / opBNB / Base 等）
+    await enforcePreferredEvmChain(provider);
+
+    // ③ 请求账户授权 + 等到账户（一次完成授权，避免点两次）
+    await provider.request({ method: 'eth_requestAccounts' });
+    const address = await waitForAccounts(provider);
+    if (!address) throw new Error('No account returned from Binance Wallet');
+
+    // ④ 写入状态 & 刷 UI & 广播事件
+    if (window.walletManager) {
+      window.walletManager.walletType    = 'binance';
+      window.walletManager.walletAddress = address;
+      window.walletManager.isConnected   = true;
+
+      window.walletManager.saveToStorage?.();
+      window.walletManager.setupEventListeners?.();
+      window.walletManager.updateUI?.();
+
+      window.dispatchEvent(new CustomEvent('walletConnected', {
+        detail: {
+          address,
+          credits: window.walletManager.credits || 0,
+          isNewUser: !window.walletManager.getWalletData?.(address)
+        }
+      }));
+    }
+
+    // ⑤ 关掉你的登录弹窗
+    const modal = document.getElementById('walletModal');
+    if (modal) {
+      modal.classList.remove('show');
+      modal.style.display = 'none';
+    }
+
+    showNotification('Binance Wallet connected.', 'success');
+    console.log('[Connect][Binance] success ->', address);
+  } catch (e) {
+    console.error('[Connect][Binance] error:', e);
+    showNotification(e?.message || 'Failed to connect Binance Wallet', 'error');
   }
 }
 
@@ -608,6 +692,7 @@ function setWalletTypeIcon(walletType) {
         metamask:        'svg/metamask.svg',
         walletconnect:   'svg/walletconnect.svg',
         coinbase:        'svg/coinbase.svg',
+        binance:         'svg/binance.svg',
         'solana-phantom':'svg/phantom.svg'
     };
 
@@ -868,11 +953,12 @@ window.handleWalletDisconnect = handleWalletDisconnect;
 window.showNotification = showNotification;
 window.initializeWalletUI = initializeWalletUI;
 window.showWalletSelectionModal = showWalletSelectionModal;
-window.closeWalletModal = closeWalletModal;
-window.connectMetaMaskWallet = connectMetaMaskWallet;
-window.connectCoinbaseWallet = connectCoinbaseWallet; 
-window.connectWalletConnect = connectWalletConnect;
-window.connectSolanaPhantom = connectSolanaPhantom;
+window.closeWalletModal         = closeWalletModal;
+window.connectMetaMaskWallet    = connectMetaMaskWallet;
+window.connectBinanceWallet     = connectBinanceWallet;
+window.connectCoinbaseWallet    = connectCoinbaseWallet; 
+window.connectWalletConnect     = connectWalletConnect;
+window.connectSolanaPhantom     = connectSolanaPhantom;
 
 
 console.log('✅ Wallet integration functions loaded successfully');

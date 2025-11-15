@@ -45,6 +45,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     console.log('Canvas工作流初始化完成');
+
+    if ('ontouchstart' in window) {
+        addTouchSupport();
+    }
 });
 
 // 新增函数：恢复工作流
@@ -88,6 +92,12 @@ function restoreWorkflow() {
                     }
                 }, 200);
             }
+
+            if (window.innerWidth <= 768) {
+                setTimeout(() => {
+                    adjustCanvasViewport();
+                }, 300);
+            }
         } catch (e) {
             console.error('恢复工作流失败:', e);
         }
@@ -95,9 +105,19 @@ function restoreWorkflow() {
 }
 
 // 新增函数：创建节点DOM元素
-function createNodeElement(nodeData) {
+function createNodeElement(nodeData, options = {}) {
+    const { animate = false } = options;
+    
+    if (window.innerWidth <= 768 && typeof nodeData.x === 'number' && typeof nodeData.y === 'number') {
+        const scale = 0.7;
+        const minX = 20;
+        const minY = 20;
+        nodeData.x = Math.max(minX, nodeData.x * scale);
+        nodeData.y = Math.max(minY, nodeData.y * scale);
+    }
+    
     const nodeElement = document.createElement('div');
-    nodeElement.className = 'workflow-node';
+    nodeElement.className = animate ? 'workflow-node appear' : 'workflow-node';
     nodeElement.id = nodeData.id;
     nodeElement.style.left = `${nodeData.x}px`;
     nodeElement.style.top = `${nodeData.y}px`;
@@ -189,50 +209,7 @@ function restoreWorkflowFromData(workflowData) {
         };
         
         workflowNodes.push(restoredNode);
-        
-        // 创建DOM元素
-        const nodeElement = document.createElement('div');
-        nodeElement.className = 'workflow-node';
-        nodeElement.id = restoredNode.id;
-        nodeElement.style.left = `${restoredNode.x}px`;
-        nodeElement.style.top = `${restoredNode.y}px`;
-        
-        const displayName = restoredNode.modelName.length > 20 ? 
-            restoredNode.modelName.substring(0, 20) + '...' : restoredNode.modelName;
-        
-        nodeElement.innerHTML = `
-            <div class="node-header">
-                <div class="node-title" title="${restoredNode.modelName}">${displayName}</div>
-            </div>
-            <div class="node-category">${restoredNode.category}</div>
-            <div class="node-tokens">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M12 1v6m0 6v6"/>
-                    <path d="m21 12-6-3-6 3-6-3"/>
-                </svg>
-                ${restoredNode.quantity}K tokens
-            </div>
-        `;
-        
-        // 添加连接点
-        const leftPoint = document.createElement('div');
-        leftPoint.className = 'connection-point left';
-        leftPoint.dataset.node = restoredNode.id;
-        leftPoint.dataset.type = 'left';
-        
-        const rightPoint = document.createElement('div');
-        rightPoint.className = 'connection-point right';
-        rightPoint.dataset.node = restoredNode.id;
-        rightPoint.dataset.type = 'right';
-        
-        nodeElement.appendChild(leftPoint);
-        nodeElement.appendChild(rightPoint);
-        
-        setupNodeDragging(nodeElement, restoredNode);
-        setupConnectionPoints(nodeElement, restoredNode);
-        
-        document.getElementById('workflowNodes').appendChild(nodeElement);
+        createNodeElement(restoredNode);
         
         // 更新计数器
         const nodeNumber = parseInt(restoredNode.id.split('-')[1]);
@@ -257,6 +234,12 @@ function restoreWorkflowFromData(workflowData) {
     }
     
     console.log('Workflow restored successfully');
+
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            adjustCanvasViewport();
+        }, 300);
+    }
 }
 
 // Setup canvas selection functionality
@@ -729,6 +712,13 @@ function handleDrop(e) {
     const y = Math.max(10, e.clientY - canvasRect.top - 100);
     
         createWorkflowNode(draggedModel, x, y);
+    
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            adjustCanvasViewport();
+        }, 150);
+    }
+
     draggedModel = null;
 }
 
@@ -764,52 +754,7 @@ function createWorkflowNode(model, x, y) {
     };
     
     workflowNodes.push(nodeData);
-    
-    const nodeElement = document.createElement('div');
-    nodeElement.className = 'workflow-node appear';
-    nodeElement.id = nodeId;
-    nodeElement.style.left = `${x}px`;
-    nodeElement.style.top = `${y}px`;
-    
-    const displayName = model.name.length > 20 ? 
-        model.name.substring(0, 20) + '...' : model.name;
-    
-    nodeElement.innerHTML = `
-        <div class="node-header">
-            <div class="node-title" title="${model.name}">${displayName}</div>
-        </div>
-        <div class="node-category">${model.category}</div>
-        <div class="node-tokens">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 1v6m0 6v6"/>
-                <path d="m21 12-6-3-6 3-6-3"/>
-            </svg>
-            ${model.quantity}K tokens
-        </div>
-    `;
-    
-    // Add connection points after creating the main content
-    const leftPoint = document.createElement('div');
-    leftPoint.className = 'connection-point left';
-    leftPoint.dataset.node = nodeId;
-    leftPoint.dataset.type = 'left';
-    leftPoint.title = 'Click to start connection (ESC to cancel)';
-    
-    const rightPoint = document.createElement('div');
-    rightPoint.className = 'connection-point right';
-    rightPoint.dataset.node = nodeId;
-    rightPoint.dataset.type = 'right';
-    rightPoint.title = 'Click to start connection (ESC to cancel)';
-    
-    nodeElement.appendChild(leftPoint);
-    nodeElement.appendChild(rightPoint);
-    
-    setupNodeDragging(nodeElement, nodeData);
-    setupConnectionPoints(nodeElement, nodeData);
-    
-    const workflowNodesContainer = document.getElementById('workflowNodes');
-    workflowNodesContainer.appendChild(nodeElement);
+    addNodeAndAdjustView(nodeData, { animate: true });
     
     console.log('✅ Created workflow node:', nodeData);
 }
@@ -1673,6 +1618,142 @@ function saveWorkflowToMyAssets(workflow) {
     }
 }
 
+// 触摸事件支持（添加到 canvas.js 末尾）
+function addTouchSupport() {
+    document.addEventListener('touchstart', function(e) {
+        if (e.target.closest('.model-item') || e.target.closest('.workflow-node')) {
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            e.target.dispatchEvent(mouseEvent);
+        }
+    }, { passive: false });
+    
+    document.addEventListener('touchmove', function(e) {
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousemove', {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            bubbles: true
+        });
+        document.dispatchEvent(mouseEvent);
+        e.preventDefault();
+    }, { passive: false });
+    
+    document.addEventListener('touchend', function() {
+        const mouseEvent = new MouseEvent('mouseup', {
+            bubbles: true
+        });
+        document.dispatchEvent(mouseEvent);
+    });
+}
+
+// 调整 Canvas 视口以适配手机屏幕
+function adjustCanvasViewport() {
+    const workspace = document.querySelector('.canvas-workspace');
+    if (!workspace || window.innerWidth > 768) return;
+    
+    const nodes = workspace.querySelectorAll('.workflow-node');
+    if (nodes.length === 0) return;
+    
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    
+    const workspaceRect = workspace.getBoundingClientRect();
+    
+    nodes.forEach(node => {
+        const rect = node.getBoundingClientRect();
+        const x = rect.left - workspaceRect.left + workspace.scrollLeft;
+        const y = rect.top - workspaceRect.top + workspace.scrollTop;
+        
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + rect.width);
+        maxY = Math.max(maxY, y + rect.height);
+    });
+    
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+        return;
+    }
+    
+    const centerX = (minX + maxX) / 2 - workspace.clientWidth / 2;
+    const centerY = (minY + maxY) / 2 - workspace.clientHeight / 2;
+    
+    workspace.scrollTo({
+        left: Math.max(0, centerX),
+        top: Math.max(0, centerY),
+        behavior: 'smooth'
+    });
+}
+
+function addNodeAndAdjustView(nodeData, options = {}) {
+    createNodeElement(nodeData, options);
+    
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            adjustCanvasViewport();
+        }, 100);
+    }
+}
+
+// 移动端 Sidebar 切换功能
+function toggleMobileSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    const toggleBtn = document.querySelector('.mobile-sidebar-toggle');
+    
+    if (!(sidebar && overlay && toggleBtn)) {
+        return;
+    }
+    
+    const isOpen = !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', isOpen);
+    overlay.classList.toggle('show', isOpen);
+    toggleBtn.innerHTML = isOpen
+        ? `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        `
+        : `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        `;
+}
+
+// 检查屏幕大小，确保状态同步
+function checkMobileView() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    const toggleBtn = document.querySelector('.mobile-sidebar-toggle');
+    
+    if (!(sidebar && overlay && toggleBtn)) {
+        return;
+    }
+    
+    sidebar.classList.remove('open');
+    overlay.classList.remove('show');
+    toggleBtn.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    `;
+}
+
+window.addEventListener('load', checkMobileView);
+window.addEventListener('resize', checkMobileView);
+
 // Export functions
 window.toggleSidebar = toggleSidebar;
 window.filterModels = filterModels;
@@ -1689,5 +1770,6 @@ function getCurrentCanvasModels() {
     return workflowNodes.map(node => node.modelName);
 }
 window.getCurrentCanvasModels = getCurrentCanvasModels;
+window.toggleMobileSidebar = toggleMobileSidebar;
 
 console.log('✅ Canvas Workflow JavaScript loaded');
