@@ -8,13 +8,102 @@
 
 @media (max-width: 768px) {
     .benchmark-container {
-        padding: 24px 16px;
+        padding: 0;
+    }
+    
+    .benchmark-title {
+        font-size: 24px;
+        margin-bottom: 20px;
+        padding: 0 16px;
+    }
+    
+    .desktop-search-controls {
+        display: none;
+    }
+    
+    .mobile-search-filters {
+        display: block;
+        padding: 0 16px 20px;
+    }
+    
+    .mobile-filter-controls {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e5e7eb;
+    }
+    
+    .mobile-filter-controls .filter-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .mobile-filter-controls .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    
+    .mobile-filter-controls .filter-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+    }
+    
+    .mobile-filter-controls .sort-select,
+    .mobile-filter-controls .filter-select {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    
+    .mobile-filter-controls .clear-filters-btn {
+        width: 100%;
+        justify-content: center;
+        margin-top: 4px;
+    }
+    
+    .desktop-table {
+        display: none;
+    }
+    
+    .mobile-models-list {
+        display: block;
+        padding: 0 16px;
+    }
+}
+
+@media (min-width: 769px) {
+    .mobile-search-filters {
+        display: none;
+    }
+    
+    .mobile-models-list {
+        display: none;
+    }
+    
+    .mobile-model-detail {
+        display: none !important;
     }
 }
 
 @media (max-width: 480px) {
     .benchmark-container {
-        padding: 16px 12px;
+        padding: 0;
+    }
+    
+    .benchmark-title {
+        font-size: 20px;
+        padding: 0 12px;
+    }
+    
+    .mobile-search-filters {
+        padding: 0 12px 16px;
+    }
+    
+    .mobile-models-list {
+        padding: 0 12px;
     }
 }
 
@@ -42,6 +131,19 @@
     margin-bottom: 30px;
     flex-wrap: wrap;
     gap: 20px;
+}
+
+.benchmark-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #8b7cf6;
+    margin-bottom: 20px;
+    text-align: center;
+    width: 100%;
+}
+
+.desktop-search-controls {
+    width: 100%;
 }
 
 .header-tabs {
@@ -970,6 +1072,8 @@
 @media (max-width: 768px) {
     .pagination-container {
         padding: 20px 16px;
+        margin-top: 20px;
+        order: 999; /* 确保在手机端列表后面 */
     }
     
     .pagination-controls {
@@ -984,6 +1088,11 @@
     
     .page-info {
         font-size: 13px;
+    }
+    
+    /* 手机端分页控件放在最下面 */
+    .mobile-models-list + .pagination-container {
+        margin-top: 0;
     }
 }
 

@@ -75,6 +75,17 @@ function loadModelBenchmark() {
     
     displayModelBenchmarkPage(1);
     setupTooltips();
+    
+    // 手机端：确保分页控件在列表后面
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            const pagination = document.querySelector('#modelBenchmarkPagination');
+            const mobileList = document.getElementById('mobileBenchmarkModelsList');
+            if (pagination && mobileList && pagination.parentNode !== mobileList.parentNode) {
+                mobileList.parentNode.insertBefore(pagination, mobileList.nextSibling);
+            }
+        }, 100);
+    }
 }
 
 // 显示模型基准测试指定页面
@@ -105,6 +116,17 @@ function loadPeerBenchmark() {
     
     displayPeerBenchmarkPage(1);
     setupPeerTooltips();
+    
+    // 手机端：确保分页控件在列表后面
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            const pagination = document.querySelector('#peerBenchmarkPagination');
+            const mobileList = document.getElementById('mobileBenchmarkModelsList');
+            if (pagination && mobileList && pagination.parentNode !== mobileList.parentNode) {
+                mobileList.parentNode.insertBefore(pagination, mobileList.nextSibling);
+            }
+        }, 100);
+    }
 }
 
 // 显示同行基准测试指定页面
@@ -182,22 +204,33 @@ function addPagination(type) {
     
     paginationHTML += '</div>';
     
-    // 页面信息
-    paginationHTML += `<div class="page-info">Page ${config.currentPage} of ${config.totalPages} (${config.totalItems} items)</div>`;
+    // 页面信息（手机端不显示 items）
+    const isMobile = window.innerWidth <= 768;
+    const pageInfoText = isMobile 
+        ? `Page ${config.currentPage} of ${config.totalPages}`
+        : `Page ${config.currentPage} of ${config.totalPages} (${config.totalItems} items)`;
+    paginationHTML += `<div class="page-info">${pageInfoText}</div>`;
     
     paginationContainer.innerHTML = paginationHTML;
     
     // 根据类型找到对应的表格元素
     let tableElement;
+    let mobileListElement;
+    
     if (type === 'modelBenchmark') {
         tableElement = document.getElementById('modelBenchmarkTable');
+        mobileListElement = document.getElementById('mobileBenchmarkModelsList');
     } else if (type === 'peerBenchmark') {
         tableElement = document.getElementById('peerBenchmarkTable');
+        mobileListElement = document.getElementById('mobileBenchmarkModelsList');
     }
     
-    // 对于所有类型，都放在表格后面（页面底部）
-    if (tableElement) {
-        // 在表格后面插入分页控件
+    // 手机端：放在手机端模型列表后面
+    if (isMobile && mobileListElement) {
+        mobileListElement.parentNode.insertBefore(paginationContainer, mobileListElement.nextSibling);
+    } 
+    // 桌面端：放在表格后面
+    else if (tableElement) {
         tableElement.parentNode.insertBefore(paginationContainer, tableElement.nextSibling);
     }
 }
@@ -208,6 +241,26 @@ function goToPage(type, page) {
         displayModelBenchmarkPage(page);
     } else if (type === 'peerBenchmark') {
         displayPeerBenchmarkPage(page);
+    }
+    
+    // 手机端：确保分页控件在列表后面并更新页面信息（不显示 items）
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            const pagination = document.querySelector(`#${type}Pagination`);
+            const mobileList = document.getElementById('mobileBenchmarkModelsList');
+            if (pagination) {
+                // 确保在正确位置
+                if (mobileList && pagination.parentNode !== mobileList.parentNode) {
+                    mobileList.parentNode.insertBefore(pagination, mobileList.nextSibling);
+                }
+                // 更新页面信息（不显示 items）
+                const pageInfo = pagination.querySelector('.page-info');
+                if (pageInfo) {
+                    const config = PAGINATION_CONFIG[type];
+                    pageInfo.textContent = `Page ${config.currentPage} of ${config.totalPages}`;
+                }
+            }
+        }, 100);
     }
 }
 
@@ -638,11 +691,168 @@ function populateBenchmarkTable(models) {
             requestAnimationFrame(renderBatch);
         } else {
             console.log(`✅ 成功填充 ${models.length} 个模型到基准表格`);
+            // 同时生成手机端列表
+            generateMobileBenchmarkList(models);
         }
     }
     
     // 开始渲染
     renderBatch();
+}
+
+// 生成手机端模型列表
+function generateMobileBenchmarkList(models) {
+    const container = document.getElementById('mobileBenchmarkModelsList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    models.forEach(model => {
+        const item = document.createElement('div');
+        item.className = 'mobile-model-item';
+        item.onclick = () => showMobileBenchmarkDetail(model);
+        
+        // 获取模型图标（使用首字母）
+        const icon = model.name.charAt(0).toUpperCase();
+        
+        // 获取数据
+        const category = model.category || 'N/A';
+        const industry = model.industry || 'N/A';
+        
+        item.innerHTML = `
+          <div class="mobile-model-item-header">
+            <div class="mobile-model-icon">${icon}</div>
+            <div style="flex: 1;">
+              <div class="mobile-model-name">${model.name}</div>
+            </div>
+          </div>
+          <div class="mobile-model-info">
+            <div class="mobile-model-info-row">
+              <span class="mobile-model-label">Category:</span>
+              <span class="mobile-model-value">${category}</span>
+            </div>
+            <div class="mobile-model-info-row">
+              <span class="mobile-model-label">Industry:</span>
+              <span class="mobile-model-value">${industry}</span>
+            </div>
+          </div>
+        `;
+        
+        container.appendChild(item);
+    });
+}
+
+// 显示手机端模型详情
+function showMobileBenchmarkDetail(model) {
+    // 隐藏列表视图、搜索栏、标题和所有筛选控件，显示详情视图
+    const mobileList = document.getElementById('mobileBenchmarkModelsList');
+    const mobileSearch = document.querySelector('.mobile-search-filters');
+    const pagination = document.querySelector('.pagination-container');
+    const benchmarkTitle = document.querySelector('.benchmark-title');
+    const desktopSearchControls = document.querySelector('.desktop-search-controls');
+    
+    if (mobileList) mobileList.style.display = 'none';
+    if (mobileSearch) mobileSearch.style.display = 'none';
+    if (pagination) pagination.style.display = 'none';
+    if (benchmarkTitle) benchmarkTitle.style.display = 'none';
+    if (desktopSearchControls) desktopSearchControls.style.display = 'none';
+    
+    const detailView = document.getElementById('mobileBenchmarkModelDetail');
+    detailView.style.display = 'block';
+    
+    // 设置标题
+    document.getElementById('mobileBenchmarkDetailTitle').textContent = model.name;
+    
+    // 生成详情内容（只保留模型详细信息）
+    const content = document.getElementById('mobileBenchmarkDetailContent');
+    
+    const change = model.change || 0;
+    const changeAbs = Math.abs(change);
+    const isUp = change >= 0;
+    const changeClass = isUp ? 'positive' : 'negative';
+    const changeIcon = isUp ? '↑' : '↓';
+    const changeColor = isUp ? '#10b981' : '#ef4444';
+    
+    content.innerHTML = `
+      <div class="mobile-detail-section">
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">CATEGORY</span>
+          <span class="mobile-detail-value">${model.category || 'N/A'}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">INDUSTRY</span>
+          <span class="mobile-detail-value">${model.industry || 'N/A'}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">API PRICE</span>
+          <span class="mobile-detail-value mobile-detail-price">${model.tokenPrice || 0} <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">PRICE PER SHARE</span>
+          <span class="mobile-detail-value mobile-detail-price">${model.sharePrice || 0}K <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">MARKET CHANGE</span>
+          <span class="mobile-detail-value mobile-detail-change ${changeClass}" style="color: ${changeColor};">${changeIcon} ${changeAbs.toFixed(2)}%</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">USAGE SCORE</span>
+          <span class="mobile-detail-value" style="color: #8b7cf6; font-weight: 600;">${(model.usage || 0).toLocaleString()}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">COMPATIBILITY</span>
+          <span class="mobile-detail-value">${model.compatibility || 'N/A'}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">TOTAL SCORE</span>
+          <span class="mobile-detail-value" style="color: #8b7cf6; font-weight: 700; font-size: 18px;">${model.totalScore || 0}%</span>
+        </div>
+      </div>
+      
+      <div class="mobile-detail-actions">
+        <button class="mobile-detail-btn primary" onclick="tryModel('${model.name}')">Try</button>
+        <button class="mobile-detail-btn success" onclick="addToCart('${model.name}')">Add to Cart</button>
+      </div>
+    `;
+    
+    // 滚动到顶部
+    window.scrollTo(0, 0);
+}
+
+// 显示手机端列表视图
+function showMobileBenchmarkListView() {
+    // 隐藏详情视图
+    document.getElementById('mobileBenchmarkModelDetail').style.display = 'none';
+    
+    // 显示列表视图、搜索栏、标题和分页
+    const mobileList = document.getElementById('mobileBenchmarkModelsList');
+    const mobileSearch = document.querySelector('.mobile-search-filters');
+    const pagination = document.querySelector('.pagination-container');
+    const benchmarkTitle = document.querySelector('.benchmark-title');
+    const desktopSearchControls = document.querySelector('.desktop-search-controls');
+    
+    // 根据屏幕尺寸显示/隐藏元素
+    const isMobile = window.innerWidth <= 768;
+    
+    if (isMobile) {
+        // 手机端：显示手机端元素和桌面端控件（根据图片，手机端也需要显示桌面端的搜索和筛选控件）
+        if (mobileList) mobileList.style.display = 'block';
+        if (mobileSearch) mobileSearch.style.display = 'block';
+        if (benchmarkTitle) benchmarkTitle.style.display = 'block';
+        // 在手机端也显示桌面端的搜索和筛选控件
+        if (desktopSearchControls) desktopSearchControls.style.display = 'block';
+        if (pagination) pagination.style.display = 'flex';
+    } else {
+        // 桌面端：显示桌面端元素
+        if (mobileList) mobileList.style.display = 'none';
+        if (mobileSearch) mobileSearch.style.display = 'none';
+        if (benchmarkTitle) benchmarkTitle.style.display = 'block';
+        if (desktopSearchControls) desktopSearchControls.style.display = 'flex';
+        if (pagination) pagination.style.display = 'flex';
+    }
+    
+    // 滚动到顶部
+    window.scrollTo(0, 0);
 }
 
 // 设置工具提示
@@ -836,8 +1046,17 @@ let currentFilters = {
 
 // 搜索筛选功能
 function filterBenchmarkTable() {
-    const searchInput = document.querySelector('.search-input');
-    currentFilters.search = searchInput.value.toLowerCase();
+    // 支持桌面端和手机端搜索输入
+    const desktopSearch = document.querySelector('.search-input');
+    const mobileSearch = document.getElementById('mobileBenchmarkSearchInput');
+    const searchValue = (desktopSearch ? desktopSearch.value : (mobileSearch ? mobileSearch.value : '')).toLowerCase();
+    
+    // 同步搜索值
+    if (desktopSearch && mobileSearch) {
+        desktopSearch.value = mobileSearch.value;
+    }
+    
+    currentFilters.search = searchValue;
     applyAllFilters();
 }
 
@@ -925,8 +1144,28 @@ function applyAllFilters() {
     // 更新表格显示
     populateBenchmarkTable(filteredData);
     
-    // 更新结果统计
+    // 更新手机端列表（基于筛选后的数据）
+    generateMobileBenchmarkList(filteredData);
+    
+    // 更新结果统计（包括手机端）
     updateResultsCount(filteredData.length, originalModelsData.length);
+    
+    // 手机端：更新分页控件位置和显示
+    if (window.innerWidth <= 768) {
+        const pagination = document.querySelector('#modelBenchmarkPagination');
+        if (pagination) {
+            const mobileList = document.getElementById('mobileBenchmarkModelsList');
+            if (mobileList && pagination.parentNode !== mobileList.parentNode) {
+                mobileList.parentNode.insertBefore(pagination, mobileList.nextSibling);
+            }
+            // 更新页面信息（不显示 items）
+            const pageInfo = pagination.querySelector('.page-info');
+            if (pageInfo) {
+                const config = PAGINATION_CONFIG.modelBenchmark;
+                pageInfo.textContent = `Page ${config.currentPage} of ${config.totalPages}`;
+            }
+        }
+    }
 }
 
 // 清除所有筛选条件
@@ -939,12 +1178,18 @@ function clearAllFilters() {
         sort: 'total-score'
     };
     
-    // 重置界面元素
-    document.querySelector('.search-input').value = '';
-    document.querySelector('.sort-select').value = 'total-score';
+    // 重置桌面端界面元素
+    const desktopSearch = document.querySelector('.search-input');
+    if (desktopSearch) desktopSearch.value = '';
+    const sortSelect = document.querySelector('.sort-select');
+    if (sortSelect) sortSelect.value = 'total-score';
     document.querySelectorAll('.filter-select').forEach(select => {
         select.value = '';
     });
+    
+    // 重置手机端界面元素
+    const mobileSearch = document.getElementById('mobileBenchmarkSearchInput');
+    if (mobileSearch) mobileSearch.value = '';
     
     // 重新显示所有数据
     applyAllFilters();
@@ -952,29 +1197,37 @@ function clearAllFilters() {
 
 // 更新结果统计
 function updateResultsCount(filteredCount, totalCount) {
-    // 将统计信息放在搜索控件内部，而不是 header 中
+    // 更新桌面端结果计数
     const searchControls = document.querySelector('.search-controls');
-    let countDisplay = searchControls.querySelector('.results-count');
-    
-    if (!countDisplay) {
-        countDisplay = document.createElement('div');
-        countDisplay.className = 'results-count';
-        countDisplay.style.cssText = `
-            text-align: right;
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: rgba(139, 92, 246, 0.1);
-            border: 1px solid rgba(139, 92, 246, 0.2);
-            border-radius: 6px;
+    if (searchControls) {
+        let countDisplay = searchControls.querySelector('.results-count');
+        
+        if (!countDisplay) {
+            countDisplay = document.createElement('div');
+            countDisplay.className = 'results-count';
+            countDisplay.style.cssText = `
+                text-align: right;
+                margin-top: 10px;
+                padding: 8px 16px;
+                background: rgba(139, 92, 246, 0.1);
+                border: 1px solid rgba(139, 92, 246, 0.2);
+                border-radius: 6px;
+            `;
+            searchControls.appendChild(countDisplay);
+        }
+        
+        countDisplay.innerHTML = `
+            <span class="count-text">
+                Showing <strong>${filteredCount}</strong> of <strong>${totalCount}</strong> models
+            </span>
         `;
-        searchControls.appendChild(countDisplay);
     }
     
-    countDisplay.innerHTML = `
-        <span class="count-text">
-            Showing <strong>${filteredCount}</strong> of <strong>${totalCount}</strong> models
-        </span>
-    `;
+    // 更新手机端结果计数
+    const mobileInfo = document.getElementById('mobileBenchmarkSearchResults');
+    if (mobileInfo) {
+        mobileInfo.textContent = `${filteredCount}/${totalCount} models`;
+    }
 }
 
 // 导出新函数
@@ -983,3 +1236,5 @@ window.filterByScore = filterByScore;
 window.filterByUsage = filterByUsage;
 window.sortBenchmarkTable = sortBenchmarkTable;
 window.clearAllFilters = clearAllFilters;
+window.showMobileBenchmarkDetail = showMobileBenchmarkDetail;
+window.showMobileBenchmarkListView = showMobileBenchmarkListView;
