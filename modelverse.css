@@ -9,6 +9,434 @@
     padding: 0;
 }
 
+/* Mobile Search & Filters (类似 Hugging Face) */
+.mobile-search-filters {
+    display: none;
+    padding: 16px;
+    background: white;
+}
+
+.mobile-search-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.mobile-search-input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #f9fafb;
+    color: #374151;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.mobile-search-input:focus {
+    background: white;
+    border-color: #8b7cf6;
+    box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.1);
+}
+
+.mobile-search-btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #6b7280;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.mobile-search-btn:hover {
+    background: #4b5563;
+}
+
+.mobile-search-btn:active {
+    transform: scale(0.98);
+}
+
+.mobile-search-results {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+
+.mobile-search-hint {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 0 4px;
+}
+
+.mobile-filter-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+}
+
+.mobile-filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: white;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.mobile-filter-btn:hover {
+    background: #f9fafb;
+    border-color: #8b7cf6;
+}
+
+.mobile-filter-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* Desktop Search Container */
+.desktop-search-container {
+    display: block;
+}
+
+/* Mobile Models List View */
+.mobile-models-list {
+    display: none;
+    padding: 12px 16px;
+}
+
+.mobile-model-item {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mobile-model-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-color: #8b7cf6;
+}
+
+.mobile-model-item-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.mobile-model-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #374151;
+    flex-shrink: 0;
+}
+
+.mobile-model-name {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.mobile-model-info {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #f3f4f6;
+}
+
+.mobile-model-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 13px;
+}
+
+.mobile-model-info-row:last-child {
+    padding-bottom: 0;
+}
+
+.mobile-model-label {
+    color: #6b7280;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.mobile-model-value {
+    color: #111827;
+    font-weight: 500;
+    text-align: right;
+    flex: 1;
+    margin-left: 12px;
+}
+
+.mobile-model-price {
+    color: #059669;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mobile-token-logo {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+}
+
+.mobile-model-change {
+    font-weight: 600;
+}
+
+.mobile-model-change.positive {
+    color: #10b981;
+}
+
+.mobile-model-change.negative {
+    color: #ef4444;
+}
+
+/* Mobile Model Detail View */
+.mobile-model-detail {
+    display: none;
+    padding: 0;
+    background: white;
+    min-height: 100vh;
+}
+
+.mobile-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background: white;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.mobile-back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: #f9fafb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #374151;
+}
+
+.mobile-back-btn:hover {
+    background: #f3f4f6;
+}
+
+.mobile-detail-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+    flex: 1;
+}
+
+.mobile-detail-content {
+    padding: 20px 16px;
+}
+
+.mobile-detail-section {
+    margin-bottom: 24px;
+}
+
+.mobile-detail-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.mobile-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.mobile-detail-row:last-child {
+    border-bottom: none;
+}
+
+.mobile-detail-label {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.mobile-detail-value {
+    font-size: 14px;
+    color: #111827;
+    font-weight: 500;
+    text-align: right;
+    flex: 1;
+    margin-left: 16px;
+}
+
+.mobile-detail-price {
+    font-size: 18px;
+    font-weight: 700;
+    color: #059669;
+}
+
+.mobile-detail-change {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.mobile-detail-change.positive {
+    color: #10b981;
+}
+
+.mobile-detail-change.negative {
+    color: #ef4444;
+}
+
+.mobile-detail-chart {
+    background: #f9fafb;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.mobile-detail-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.mobile-detail-btn {
+    flex: 1;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mobile-detail-btn.primary {
+    background: #8b7cf6;
+    color: white;
+}
+
+.mobile-detail-btn.primary:hover {
+    background: #7c3aed;
+}
+
+.mobile-detail-btn.success {
+    background: #10b981;
+    color: white;
+}
+
+.mobile-detail-btn.success:hover {
+    background: #059669;
+}
+
+/* Responsive: Show/Hide based on screen size */
+@media (max-width: 768px) {
+    .desktop-search-container {
+        display: none;
+    }
+    
+    .mobile-search-filters {
+        display: block;
+    }
+    
+    .desktop-table {
+        display: none;
+    }
+    
+    .mobile-models-list {
+        display: block;
+    }
+    
+    .modelverse-title {
+        display: block; /* 手机端显示标题 */
+        font-size: 24px;
+        margin-bottom: 20px;
+        text-align: center;
+        padding: 0 16px;
+    }
+    
+    .modelverse-header {
+        margin-bottom: 20px;
+    }
+    
+    .mobile-search-filters {
+        padding: 0 16px 20px;
+    }
+    
+    /* 手机端隐藏所有 trend chart */
+    .trend-chart,
+    .mobile-detail-chart,
+    .models-table td.trend-chart,
+    .models-table th:has(+ th + th + th + th + th + th) {
+        display: none !important;
+    }
+}
+
+@media (min-width: 769px) {
+    .mobile-search-filters {
+        display: none;
+    }
+    
+    .mobile-models-list {
+        display: none;
+    }
+    
+    .mobile-model-detail {
+        display: none !important;
+    }
+}
+
 .modelverse-content.full-width {
     width: 100%;
     margin: 0;
@@ -39,7 +467,15 @@ body:has(.modelverse-content.full-width) .main-layout,
 
 @media (max-width: 480px) {
     .modelverse-container {
-        padding: 16px 12px;
+        padding: 0;
+    }
+    
+    .mobile-search-filters {
+        padding: 12px;
+    }
+    
+    .mobile-models-list {
+        padding: 12px;
     }
 }
 
@@ -1488,6 +1924,11 @@ body:has(.modelverse-content.full-width) .main-layout,
     
     .models-table td.daily-delta {
         font-size: 13px !important;
+    }
+    
+    /* 手机端隐藏 trend chart */
+    .models-table td.trend-chart {
+        display: none !important;
     }
     
     .price-value {

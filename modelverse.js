@@ -9,7 +9,7 @@
 
 // ---------- Search ----------
 function performSearch() {
-  const input = document.getElementById('searchInput');
+  const input = document.getElementById('searchInput') || document.getElementById('mobileSearchInput');
   const searchTerm = (input ? input.value : '').toLowerCase().trim();
 
   if (!searchTerm) {
@@ -17,6 +17,7 @@ function performSearch() {
     return;
   }
 
+  // 桌面端表格搜索
   const rows = document.querySelectorAll('.models-table tbody tr');
   let visibleCount = 0;
 
@@ -46,12 +47,40 @@ function performSearch() {
     }
   });
 
+  // 手机端列表搜索
+  const mobileItems = document.querySelectorAll('.mobile-model-item');
+  mobileItems.forEach(item => {
+    const nameElement = item.querySelector('.mobile-model-name');
+    if (!nameElement) return;
+    
+    const modelName = nameElement.textContent.trim();
+    const modelData = (typeof getModelData === 'function') ? getModelData(modelName) : null;
+    
+    const searchable = [
+      modelName,
+      modelData?.purpose || '',
+      modelData?.useCase || '',
+      modelData?.category || '',
+      modelData?.industry || ''
+    ].join(' ').toLowerCase();
+    
+    if (searchable.includes(searchTerm)) {
+      item.style.display = '';
+      visibleCount++;
+    } else {
+      item.style.display = 'none';
+    }
+  });
+
   updateSearchResultCount(visibleCount);
 }
 
 function clearSearch() {
   const input = document.getElementById('searchInput');
+  const mobileInput = document.getElementById('mobileSearchInput');
   if (input) input.value = '';
+  if (mobileInput) mobileInput.value = '';
+  
   const rows = document.querySelectorAll('.models-table tbody tr');
   rows.forEach(row => {
     row.style.display = '';
@@ -59,7 +88,15 @@ function clearSearch() {
     if (!nameCell) return;
     nameCell.innerHTML = nameCell.textContent;
   });
-  updateSearchResultCount(rows.length);
+  
+  const mobileItems = document.querySelectorAll('.mobile-model-item');
+  mobileItems.forEach(item => {
+    item.style.display = '';
+  });
+  
+  // 更新搜索结果计数（包括手机端）
+  const total = rows.length > 0 ? rows.length : (mobileItems.length > 0 ? mobileItems.length : 0);
+  updateSearchResultCount(total);
 }
 
 function highlightSearchTerms(cellEl, term) {
@@ -72,6 +109,24 @@ function updateSearchResultCount(count) {
   const total = document.querySelectorAll('.models-table tbody tr').length;
   const info = document.querySelector('.search-info') || document.getElementById('searchResults');
   if (info) info.textContent = `Showing ${count} / ${total} models`;
+  
+  // 更新手机端搜索结果
+  const mobileInfo = document.getElementById('mobileSearchResults');
+  if (mobileInfo) {
+    // 计算手机端实际显示的模型数量
+    const mobileItems = document.querySelectorAll('.mobile-model-item');
+    let visibleMobileCount = 0;
+    mobileItems.forEach(item => {
+      if (item.style.display !== 'none') {
+        visibleMobileCount++;
+      }
+    });
+    // 如果手机端有列表，使用手机端的计数，否则使用桌面端的计数
+    const displayCount = mobileItems.length > 0 ? visibleMobileCount : count;
+    // 使用和桌面端一致的硬编码总数 202
+    const displayTotal = 202;
+    mobileInfo.textContent = `${displayCount}/${displayTotal} models`;
+  }
 }
 
 window.performSearch = performSearch;

@@ -764,14 +764,14 @@
                 <div class="modelverse-header">
                     <h1 class="modelverse-title">Modelverse Market Trends</h1>
                     
-                    <!-- Model Search -->
-        <div style="
-            position: relative;
-            padding: 20px;
-            margin: 20px auto;
-            max-width: 800px;
-            text-align: center;
-        ">
+                    <!-- Desktop Search -->
+                    <div class="desktop-search-container" style="
+                        position: relative;
+                        padding: 20px;
+                        margin: 20px auto;
+                        max-width: 800px;
+                        text-align: center;
+                    ">
                         <div style="display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <input 
                                 type="text" 
@@ -834,13 +834,38 @@
                             margin-top: 10px;
                         "></div>
                     </div>
+
+                    <!-- Mobile Search & Filters (类似 Hugging Face) -->
+                    <div class="mobile-search-filters">
+                        <div class="mobile-search-bar">
+                            <input 
+                                type="text" 
+                                id="mobileSearchInput" 
+                                placeholder="Search models..." 
+                                class="mobile-search-input"
+                                onkeyup="performSearch()"
+                            />
+                            <button 
+                                class="mobile-search-btn"
+                                onclick="performSearch()"
+                            >
+                                Search
+                            </button>
+                        </div>
+                        <div id="mobileSearchResults" class="mobile-search-results">
+                            <!-- 搜索结果将显示在这里 -->
+                        </div>
+                        <div class="mobile-search-hint">
+                            Browse models in Modelverse. Tap to view details.
+                        </div>
+                    </div>
                     
 
                 </div>
-                <!-- Models Table -->
-                <div class="models-table-container">
+                <!-- Models Table (Desktop) -->
+                <div class="models-table-container desktop-table">
                     <table class="models-table">
-                                                                                                                                                                        <thead>
+                        <thead>
                             <tr>
                                 <th>Model</th>
                                 <th>Paper</th>
@@ -849,12 +874,31 @@
                                 <th>Price per Share</th>
                                 <th>Market Change</th>
                                 <th>Trend Chart</th>
-                                
                             </tr>
                         </thead>
                         <tbody>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Mobile Model List View -->
+                <div class="mobile-models-list" id="mobileModelsList">
+                    <!-- 模型列表将通过JS动态生成 -->
+                </div>
+
+                <!-- Mobile Model Detail View -->
+                <div class="mobile-model-detail" id="mobileModelDetail" style="display: none;">
+                    <div class="mobile-detail-header">
+                        <button class="mobile-back-btn" onclick="showMobileListView()">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                        </button>
+                        <h2 class="mobile-detail-title" id="mobileDetailTitle">Model Details</h2>
+                    </div>
+                    <div class="mobile-detail-content" id="mobileDetailContent">
+                        <!-- 详细内容将通过JS动态生成 -->
+                    </div>
                 </div>
             </div>
         </main>
@@ -1180,9 +1224,193 @@
 		  }
 		}
 
+		  // 生成手机端模型列表
+		function generateMobileModelList() {
+		  const container = document.getElementById('mobileModelsList');
+		  if (!container) return;
+		  
+		  container.innerHTML = '';
+		  
+		  Object.entries(MODEL_DATA).forEach(([modelName, modelData]) => {
+		    const item = document.createElement('div');
+		    item.className = 'mobile-model-item';
+		    item.onclick = () => showMobileModelDetail(modelName);
+		    
+		    // 获取模型图标（使用首字母）
+		    const icon = modelName.charAt(0).toUpperCase();
+		    
+		    // 获取数据
+		    const category = modelData.category || 'N/A';
+		    const industry = modelData.industry || 'N/A';
+		    
+		    item.innerHTML = `
+		      <div class="mobile-model-item-header">
+		        <div class="mobile-model-icon">${icon}</div>
+		        <div style="flex: 1;">
+		          <div class="mobile-model-name">${modelName}</div>
+		        </div>
+		      </div>
+		      <div class="mobile-model-info">
+		        <div class="mobile-model-info-row">
+		          <span class="mobile-model-label">Category:</span>
+		          <span class="mobile-model-value">${category}</span>
+		        </div>
+		        <div class="mobile-model-info-row">
+		          <span class="mobile-model-label">Industry:</span>
+		          <span class="mobile-model-value">${industry}</span>
+		        </div>
+		      </div>
+		    `;
+		    
+		    container.appendChild(item);
+		  });
+		}
+		
+		// 显示手机端模型详情
+		function showMobileModelDetail(modelName) {
+		  const modelData = MODEL_DATA[modelName];
+		  if (!modelData) return;
+		  
+		  // 隐藏列表视图，显示详情视图
+		  document.getElementById('mobileModelsList').style.display = 'none';
+		  const detailView = document.getElementById('mobileModelDetail');
+		  detailView.style.display = 'block';
+		  
+		  // 设置标题
+		  document.getElementById('mobileDetailTitle').textContent = modelName;
+		  
+		  // 生成详情内容
+		  const content = document.getElementById('mobileDetailContent');
+		  
+		  // 计算价格和变化
+		  const pToken = Number(modelData.tokenPrice) || 0;
+		  const pShare = Number(modelData.sharePrice) || 0;
+		  const change = Number(modelData.change) || 0;
+		  const changeAbs = Math.abs(change);
+		  const isUp = change >= 0;
+		  
+		  // 生成趋势图SVG
+		  const style = trendStyleFor(modelName, isUp);
+		  
+		  content.innerHTML = `
+		    <div class="mobile-detail-section">
+		      <div class="mobile-detail-row">
+		        <span class="mobile-detail-label">PAPER</span>
+		        <span class="mobile-detail-value">
+		          ${modelData.paperLink ? `<a href="${modelData.paperLink}" target="_blank" style="color: #3b82f6;">Link</a>` : 'No Link'}
+		        </span>
+		      </div>
+		      <div class="mobile-detail-row">
+		        <span class="mobile-detail-label">DETAILS</span>
+		        <span class="mobile-detail-value">
+		          <button class="mobile-detail-btn" style="padding: 6px 12px; font-size: 12px; background: #8b7cf6; color: white; border: none; border-radius: 6px; cursor: pointer;" onclick="showModelCard('${modelName}')">Model Card</button>
+		        </span>
+		      </div>
+		      <div class="mobile-detail-row">
+		        <span class="mobile-detail-label">PRICE PER 1K</span>
+		        <span class="mobile-detail-value mobile-detail-price">${pToken.toFixed(1)} <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+		      </div>
+		      <div class="mobile-detail-row">
+		        <span class="mobile-detail-label">PRICE PER SHARE</span>
+		        <span class="mobile-detail-value mobile-detail-price">${pShare.toFixed(1)}K <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+		      </div>
+		      <div class="mobile-detail-row">
+		        <span class="mobile-detail-label">MARKET CHANGE</span>
+		        <span class="mobile-detail-value mobile-detail-change ${isUp ? 'positive' : 'negative'}">
+		          ${isUp ? '↑' : '↓'} ${changeAbs.toFixed(2)}%
+		        </span>
+		      </div>
+		    </div>
+		    
+		    <div class="mobile-detail-actions">
+		      <button class="mobile-detail-btn primary" onclick="tryModelFromModelverseByName('${modelName}')">Try</button>
+		      <button class="mobile-detail-btn success" onclick="addToCartFromModelverseByName('${modelName}')">Add to Cart</button>
+		    </div>
+		  `;
+		  
+		  // 滚动到顶部
+		  window.scrollTo(0, 0);
+		}
+		
+		// 显示手机端列表视图
+		function showMobileListView() {
+		  document.getElementById('mobileModelDetail').style.display = 'none';
+		  document.getElementById('mobileModelsList').style.display = 'block';
+		}
+		
+		// 初始化手机端搜索结果显示
+		function initMobileSearchResults() {
+		  const mobileInfo = document.getElementById('mobileSearchResults');
+		  if (mobileInfo) {
+		    // 使用和桌面端一致的硬编码总数 202
+		    const forcedTotal = 202;
+		    mobileInfo.textContent = `${forcedTotal}/${forcedTotal} models`;
+		  }
+		}
+		
+		// 过滤器函数（占位符）
+		function toggleFullTextSearch() {
+		  console.log('Toggle full-text search');
+		}
+		
+		function toggleInferenceFilter() {
+		  console.log('Toggle inference filter');
+		}
+		
+		function showAddFilters() {
+		  console.log('Show add filters');
+		}
+		
+		function showSortOptions() {
+		  console.log('Show sort options');
+		}
+		
+		// 从模型名称执行操作
+		function tryModelFromModelverseByName(modelName) {
+		  // 找到对应的按钮并触发点击
+		  const rows = document.querySelectorAll('.models-table tbody tr');
+		  rows.forEach(row => {
+		    const nameCell = row.querySelector('.model-name');
+		    if (nameCell && nameCell.textContent.trim() === modelName) {
+		      const tryBtn = row.querySelector('.try-btn');
+		      if (tryBtn) tryBtn.click();
+		    }
+		  });
+		}
+		
+		function addToCartFromModelverseByName(modelName) {
+		  // 找到对应的按钮并触发点击
+		  const rows = document.querySelectorAll('.models-table tbody tr');
+		  rows.forEach(row => {
+		    const nameCell = row.querySelector('.model-name');
+		    if (nameCell && nameCell.textContent.trim() === modelName) {
+		      const cartBtn = row.querySelector('.add-cart-btn');
+		      if (cartBtn) cartBtn.click();
+		    }
+		  });
+		}
+		
+		// 同步搜索输入
+		document.addEventListener('DOMContentLoaded', function() {
+		  const desktopSearch = document.getElementById('searchInput');
+		  const mobileSearch = document.getElementById('mobileSearchInput');
+		  
+		  if (desktopSearch && mobileSearch) {
+		    desktopSearch.addEventListener('input', function() {
+		      mobileSearch.value = this.value;
+		    });
+		    
+		    mobileSearch.addEventListener('input', function() {
+		      desktopSearch.value = this.value;
+		    });
+		  }
+		});
+
 		  // 页面加载后生成
 		document.addEventListener('DOMContentLoaded', function() {
 		    generateModelTable();
+		    generateMobileModelList(); // 同时生成手机端列表
+		    initMobileSearchResults(); // 初始化手机端搜索结果显示
 		  });
 
         window.addToCartFromModelverse = addToCartFromModelverse;
@@ -1193,6 +1421,14 @@
         window.addToCart = addToCart;
         window.performSearch = performSearch;
         window.clearSearch = clearSearch;
+        window.showMobileModelDetail = showMobileModelDetail;
+        window.showMobileListView = showMobileListView;
+        window.tryModelFromModelverseByName = tryModelFromModelverseByName;
+        window.addToCartFromModelverseByName = addToCartFromModelverseByName;
+        window.toggleFullTextSearch = toggleFullTextSearch;
+        window.toggleInferenceFilter = toggleInferenceFilter;
+        window.showAddFilters = showAddFilters;
+        window.showSortOptions = showSortOptions;
         // ?????????
         function showWalletSelectionModal() {
             // ??????
@@ -2816,8 +3052,7 @@
         .models-table td.model-details,
         .models-table td.api-price,
         .models-table td.value,
-        .models-table td.daily-delta,
-        .models-table td.trend-chart {
+        .models-table td.daily-delta {
             display: grid !important;
             grid-template-columns: 140px 1fr !important;
             gap: 12px !important;
@@ -2825,6 +3060,11 @@
             align-items: center !important;
             border-bottom: 1px solid #f9fafb !important;
             text-align: left !important;
+        }
+        
+        /* 手机端隐藏 trend chart */
+        .models-table td.trend-chart {
+            display: none !important;
         }
         
         /* 确保价格和图标同列显示 */
@@ -2844,13 +3084,17 @@
         .models-table td.model-details:before,
         .models-table td.api-price:before,
         .models-table td.value:before,
-        .models-table td.daily-delta:before,
-        .models-table td.trend-chart:before {
+        .models-table td.daily-delta:before {
             font-weight: 600 !important;
             color: #6b7280 !important;
             font-size: 12px !important;
             text-transform: uppercase !important;
             letter-spacing: 0.5px !important;
+        }
+        
+        /* 手机端隐藏 trend chart 的 before 伪元素 */
+        .models-table td.trend-chart:before {
+            display: none !important;
         }
         
         .models-table td.paper-link:before {
@@ -2873,8 +3117,9 @@
             content: "MARKET CHANGE" !important;
         }
         
+        /* 手机端不显示 trend chart 标签 */
         .models-table td.trend-chart:before {
-            content: "TREND CHART" !important;
+            display: none !important;
         }
         
         .models-table td.action-cell {
