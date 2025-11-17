@@ -634,6 +634,7 @@ input:checked + .slider:before {
     cursor: pointer;
     padding: 8px;
     color: #374151;
+    order: -1; /* 确保在最左边 */
 }
 
 .mobile-menu-toggle svg {
@@ -716,6 +717,8 @@ input:checked + .slider:before {
     .header-left {
         gap: 12px;
         flex: 1;
+        display: flex;
+        align-items: center;
     }
     
     .logo-image {
