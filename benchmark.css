@@ -17,6 +17,10 @@
         padding: 0 16px;
     }
     
+    .desktop-search-wrapper {
+        display: none;
+    }
+    
     .desktop-search-controls {
         display: none;
     }
@@ -1116,6 +1120,137 @@
         font-size: 12px;
         width: 100%;
         text-align: center;
+    }
+}
+
+/* 桌面版搜索框（框子外面，靠左） */
+@media (min-width: 769px) {
+    .desktop-search-wrapper {
+        margin-bottom: 16px;
+        display: flex;
+        justify-content: flex-start;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .desktop-search-wrapper .search-container {
+        max-width: 600px;
+        width: 100%;
+        position: relative;
+    }
+    
+    .desktop-search-wrapper .search-icon {
+        left: 10px;
+        width: 13px;
+        height: 13px;
+        z-index: 2;
+        pointer-events: none;
+    }
+    
+    .desktop-search-wrapper .search-input {
+        padding: 8px 12px 8px 36px;
+        font-size: 12px;
+        border-radius: 6px;
+        border-width: 1px;
+        height: 36px;
+        position: relative;
+        z-index: 1;
+        background: white;
+        cursor: text;
+    }
+    
+    .desktop-search-wrapper .search-input:focus {
+        outline: none;
+        border-color: #8b5cf6;
+        box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    }
+}
+
+/* 桌面版优化 - 更紧凑美观 */
+@media (min-width: 769px) {
+    .desktop-search-controls.search-controls {
+        padding: 14px 16px;
+        gap: 12px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+        background: linear-gradient(135deg, #fafbfc 0%, #f5f7fa 100%);
+        border: 1px solid #e8eaed;
+    }
+    
+    .desktop-search-controls .header-tabs {
+        gap: 6px;
+        margin-bottom: 2px;
+    }
+    
+    .desktop-search-controls .tab-btn {
+        padding: 6px 14px;
+        font-size: 12px;
+        border-radius: 5px;
+        font-weight: 500;
+    }
+    
+    .desktop-search-controls .search-controls {
+        gap: 10px;
+    }
+    
+    .desktop-search-controls .search-container {
+        max-width: 400px;
+    }
+    
+    .desktop-search-controls .search-icon {
+        left: 10px;
+        width: 13px;
+        height: 13px;
+    }
+    
+    .desktop-search-controls .search-input {
+        padding: 8px 12px 8px 36px;
+        font-size: 12px;
+        border-radius: 6px;
+        border-width: 1px;
+        height: 36px;
+    }
+    
+    .desktop-search-controls .filter-container {
+        grid-template-columns: 120px 120px 120px 1fr;
+        gap: 10px;
+        align-items: end;
+    }
+    
+    .desktop-search-controls .filter-group {
+        gap: 4px;
+    }
+    
+    .desktop-search-controls .filter-label {
+        font-size: 10px;
+        letter-spacing: 0.2px;
+        margin-bottom: 0;
+    }
+    
+    .desktop-search-controls .sort-select, 
+    .desktop-search-controls .filter-select {
+        padding: 6px 10px;
+        font-size: 11px;
+        border-radius: 5px;
+        border-width: 1px;
+        height: 32px;
+        min-height: 32px;
+    }
+    
+    .desktop-search-controls .clear-filters-btn {
+        padding: 6px 12px;
+        font-size: 10px;
+        border-radius: 5px;
+        gap: 4px;
+        height: 32px;
+        min-height: 32px;
+        font-weight: 600;
+    }
+    
+    .desktop-search-controls .clear-filters-btn svg {
+        width: 11px;
+        height: 11px;
     }
 }
 

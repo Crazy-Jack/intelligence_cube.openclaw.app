@@ -943,6 +943,17 @@
         <div class="benchmark-header">
             <h1 class="benchmark-title">Model Benchmark</h1>
             
+            <!-- Desktop Search Input (Outside the box, left aligned) -->
+            <div class="desktop-search-wrapper">
+                <div class="search-container">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    <input type="text" id="desktopBenchmarkSearchInput" class="search-input" placeholder="Search models by name, category, or industry..." onkeyup="filterBenchmarkTable()" oninput="filterBenchmarkTable()">
+                </div>
+            </div>
+            
             <!-- Desktop Search Controls -->
             <div class="desktop-search-controls search-controls">
             <div class="header-tabs">
@@ -951,14 +962,6 @@
             </div>
             
             <div class="search-controls">
-			    <div class="search-container">
-			        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-			            <circle cx="11" cy="11" r="8"/>
-			            <path d="m21 21-4.35-4.35"/>
-			        </svg>
-			        <input type="text" class="search-input" placeholder="Search models by name, category, or industry..." onkeyup="filterBenchmarkTable()">
-			    </div>
-			    
 			    <div class="filter-container">
 			        <div class="filter-group">
 			            <label class="filter-label">Sort by:</label>

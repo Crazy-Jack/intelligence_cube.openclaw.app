@@ -1047,13 +1047,15 @@ let currentFilters = {
 // 搜索筛选功能
 function filterBenchmarkTable() {
     // 支持桌面端和手机端搜索输入
-    const desktopSearch = document.querySelector('.search-input');
+    const desktopSearch = document.getElementById('desktopBenchmarkSearchInput');
     const mobileSearch = document.getElementById('mobileBenchmarkSearchInput');
-    const searchValue = (desktopSearch ? desktopSearch.value : (mobileSearch ? mobileSearch.value : '')).toLowerCase();
+    
+    // 获取搜索值（优先桌面端）
+    const searchValue = (desktopSearch ? desktopSearch.value : (mobileSearch ? mobileSearch.value : '')).toLowerCase().trim();
     
     // 同步搜索值
     if (desktopSearch && mobileSearch) {
-        desktopSearch.value = mobileSearch.value;
+        mobileSearch.value = desktopSearch.value;
     }
     
     currentFilters.search = searchValue;
@@ -1197,31 +1199,7 @@ function clearAllFilters() {
 
 // 更新结果统计
 function updateResultsCount(filteredCount, totalCount) {
-    // 更新桌面端结果计数
-    const searchControls = document.querySelector('.search-controls');
-    if (searchControls) {
-        let countDisplay = searchControls.querySelector('.results-count');
-        
-        if (!countDisplay) {
-            countDisplay = document.createElement('div');
-            countDisplay.className = 'results-count';
-            countDisplay.style.cssText = `
-                text-align: right;
-                margin-top: 10px;
-                padding: 8px 16px;
-                background: rgba(139, 92, 246, 0.1);
-                border: 1px solid rgba(139, 92, 246, 0.2);
-                border-radius: 6px;
-            `;
-            searchControls.appendChild(countDisplay);
-        }
-        
-        countDisplay.innerHTML = `
-            <span class="count-text">
-                Showing <strong>${filteredCount}</strong> of <strong>${totalCount}</strong> models
-            </span>
-        `;
-    }
+    // 桌面端不再显示计数（已删除）
     
     // 更新手机端结果计数
     const mobileInfo = document.getElementById('mobileBenchmarkSearchResults');
