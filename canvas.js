@@ -49,6 +49,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if ('ontouchstart' in window) {
         addTouchSupport();
     }
+    
+    // Setup canvas scroll handler for mobile
+    const canvasWorkspace = document.getElementById('canvasWorkspace');
+    if (canvasWorkspace) {
+        let scrollTimeout;
+        canvasWorkspace.addEventListener('scroll', () => {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                updateAllConnections();
+            }, 50);
+        });
+    }
 });
 
 // 新增函数：恢复工作流
@@ -140,7 +152,7 @@ function createNodeElement(nodeData, options = {}) {
         </div>
     `;
     
-    // 添加连接点
+    // 添加连接点 (left, right, top, bottom)
     const leftPoint = document.createElement('div');
     leftPoint.className = 'connection-point left';
     leftPoint.dataset.node = nodeData.id;
@@ -151,8 +163,20 @@ function createNodeElement(nodeData, options = {}) {
     rightPoint.dataset.node = nodeData.id;
     rightPoint.dataset.type = 'right';
     
+    const topPoint = document.createElement('div');
+    topPoint.className = 'connection-point top';
+    topPoint.dataset.node = nodeData.id;
+    topPoint.dataset.type = 'top';
+    
+    const bottomPoint = document.createElement('div');
+    bottomPoint.className = 'connection-point bottom';
+    bottomPoint.dataset.node = nodeData.id;
+    bottomPoint.dataset.type = 'bottom';
+    
     nodeElement.appendChild(leftPoint);
     nodeElement.appendChild(rightPoint);
+    nodeElement.appendChild(topPoint);
+    nodeElement.appendChild(bottomPoint);
     
     setupNodeDragging(nodeElement, nodeData);
     setupConnectionPoints(nodeElement, nodeData);
@@ -1016,6 +1040,9 @@ function updateConnectionPath(connection, line) {
     if (!fromNode || !toNode) return;
     
     const svg = document.getElementById('connectionsSvg');
+    if (!svg) return;
+    
+    const canvasWorkspace = document.getElementById('canvasWorkspace');
     const canvasRect = svg.getBoundingClientRect();
     
     // Get connection points
@@ -1027,10 +1054,26 @@ function updateConnectionPath(connection, line) {
     const fromRect = fromPoint.getBoundingClientRect();
     const toRect = toPoint.getBoundingClientRect();
     
-    const fromX = fromRect.left + fromRect.width / 2 - canvasRect.left;
-    const fromY = fromRect.top + fromRect.height / 2 - canvasRect.top;
-    const toX = toRect.left + toRect.width / 2 - canvasRect.left;
-    const toY = toRect.top + toRect.height / 2 - canvasRect.top;
+    // Calculate positions relative to SVG, accounting for scroll
+    let fromX, fromY, toX, toY;
+    
+    if (canvasWorkspace) {
+        // Use workspace scroll offset for accurate positioning
+        const workspaceRect = canvasWorkspace.getBoundingClientRect();
+        const scrollLeft = canvasWorkspace.scrollLeft || 0;
+        const scrollTop = canvasWorkspace.scrollTop || 0;
+        
+        fromX = fromRect.left - workspaceRect.left + scrollLeft;
+        fromY = fromRect.top - workspaceRect.top + scrollTop;
+        toX = toRect.left - workspaceRect.left + scrollLeft;
+        toY = toRect.top - workspaceRect.top + scrollTop;
+    } else {
+        // Fallback to original method
+        fromX = fromRect.left + fromRect.width / 2 - canvasRect.left;
+        fromY = fromRect.top + fromRect.height / 2 - canvasRect.top;
+        toX = toRect.left + toRect.width / 2 - canvasRect.left;
+        toY = toRect.top + toRect.height / 2 - canvasRect.top;
+    }
     
     const path = createCurvedPath(fromX, fromY, toX, toY);
     line.setAttribute('d', path);
@@ -1045,6 +1088,16 @@ function updateAllConnections() {
         }
     });
 }
+
+// Update connections on window resize (especially important for mobile)
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        updateAllConnections();
+    }, 250);
+});
+
 
 // Update all node priorities based on position
 function updateAllPriorities() {
@@ -1379,13 +1432,34 @@ function loadWorkflowToCanvas(workflow) {
     connectionIdCounter = 0;
     
     // Create nodes for each model in the workflow
+    const isMobile = window.innerWidth <= 768;
     let xOffset = 100;
+    let yOffset = 100;
+    
+    // Calculate center position for mobile
+    let centerX = 50; // Default fallback
+    if (isMobile) {
+        const canvasWorkspace = document.getElementById('canvasWorkspace');
+        if (canvasWorkspace) {
+            const workspaceWidth = canvasWorkspace.clientWidth || canvasWorkspace.offsetWidth;
+            const nodeWidth = 200; // Mobile node width (max-width from CSS)
+            centerX = Math.max(20, (workspaceWidth - nodeWidth) / 2);
+        }
+    }
+    
     workflow.models.forEach((model, index) => {
         // Find the model in our model data
         const modelData = findModelByName(model.name);
         if (modelData) {
-            createWorkflowNode(modelData, xOffset, 200);
-            xOffset += 350; // Space between nodes
+            if (isMobile) {
+                // Mobile: vertical layout (top to bottom), centered horizontally
+                createWorkflowNode(modelData, centerX, yOffset);
+                yOffset += 250; // Space between nodes vertically
+            } else {
+                // Desktop: horizontal layout (left to right)
+                createWorkflowNode(modelData, xOffset, 200);
+                xOffset += 350; // Space between nodes horizontally
+            }
         }
     });
     
@@ -1449,41 +1523,70 @@ function connectWorkflowNodes() {
     connections = [];
     connectionIdCounter = 0;
     
-    // Get all nodes and sort them by x position (left to right)
+    // Get all nodes and sort them appropriately
     const nodes = Array.from(document.querySelectorAll('.workflow-node'));
+    const isMobile = window.innerWidth <= 768;
+    
+    // Sort nodes: mobile = top to bottom (by y), desktop = left to right (by x)
     const sortedNodes = nodes.sort((a, b) => {
         const rectA = a.getBoundingClientRect();
         const rectB = b.getBoundingClientRect();
-        return rectA.left - rectB.left;
+        if (isMobile) {
+            // Mobile: sort by top position (top to bottom)
+            return rectA.top - rectB.top;
+        } else {
+            // Desktop: sort by left position (left to right)
+            return rectA.left - rectB.left;
+        }
     });
     
-    console.log(`🔗 Connecting ${sortedNodes.length} nodes sequentially...`);
+    console.log(`🔗 Connecting ${sortedNodes.length} nodes sequentially (${isMobile ? 'mobile: top-to-bottom' : 'desktop: left-to-right'})...`);
     
-    // Connect nodes in order (first to second, second to third, etc.)
+    // Connect nodes in order
     for (let i = 0; i < sortedNodes.length - 1; i++) {
         const currentNode = sortedNodes[i];
         const nextNode = sortedNodes[i + 1];
         
-        const currentRightPoint = currentNode.querySelector('.connection-point.right');
-        const nextLeftPoint = nextNode.querySelector('.connection-point.left');
+        let startPoint, endPoint, startType, endType;
         
-        if (currentRightPoint && nextLeftPoint) {
+        if (isMobile) {
+            // Mobile: connect from bottom to top (bottom of current to top of next)
+            startPoint = currentNode.querySelector('.connection-point.bottom') || 
+                        currentNode.querySelector('.connection-point.right');
+            endPoint = nextNode.querySelector('.connection-point.top') || 
+                      nextNode.querySelector('.connection-point.left');
+            startType = startPoint?.classList.contains('bottom') ? 'bottom' : 'right';
+            endType = endPoint?.classList.contains('top') ? 'top' : 'left';
+        } else {
+            // Desktop: connect from right to left (right of current to left of next)
+            startPoint = currentNode.querySelector('.connection-point.right');
+            endPoint = nextNode.querySelector('.connection-point.left');
+            startType = 'right';
+            endType = 'left';
+        }
+        
+        if (startPoint && endPoint) {
             // Create connection between nodes
             const start = {
-                element: currentRightPoint,
-                nodeId: currentRightPoint.dataset.node,
-                type: 'right'
+                element: startPoint,
+                nodeId: startPoint.dataset.node,
+                type: startType
             };
             
             const end = {
-                element: nextLeftPoint,
-                nodeId: nextLeftPoint.dataset.node,
-                type: 'left'
+                element: endPoint,
+                nodeId: endPoint.dataset.node,
+                type: endType
             };
             
             createNodeConnection(start, end);
         }
     }
+    
+    // Update all connections after a short delay to ensure DOM is ready
+    setTimeout(() => {
+        updateAllConnections();
+    }, 100);
     
     console.log(`✅ Connected ${connections.length} connections`);
 }

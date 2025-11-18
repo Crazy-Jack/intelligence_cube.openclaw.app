@@ -654,6 +654,34 @@
     right: -7px;
 }
 
+.connection-point.top {
+    top: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.connection-point.bottom {
+    bottom: -7px;
+    top: auto;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.connection-point.top:hover,
+.connection-point.bottom:hover {
+    transform: translateX(-50%) scale(1.3);
+}
+
+.connection-point.top.connecting,
+.connection-point.bottom.connecting {
+    transform: translateX(-50%) scale(1.2);
+}
+
+.connection-point.top.target,
+.connection-point.bottom.target {
+    transform: translateX(-50%) scale(1.4);
+}
+
 .connection-point.connecting {
     border-color: #10b981;
     background: #10b981;
