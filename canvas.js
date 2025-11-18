@@ -1361,7 +1361,13 @@ function loadWorkflowToCanvas(workflow) {
         if (nodeElement) nodeElement.remove();
     });
     
-    // Clear connections
+    // Clear connections from DOM
+    const connectionsGroup = document.getElementById('connectionsGroup');
+    if (connectionsGroup) {
+        connectionsGroup.innerHTML = '';
+    }
+    
+    // Clear connections array
     connections.forEach(connection => {
         const lineElement = document.getElementById(connection.id);
         if (lineElement) lineElement.remove();
@@ -1433,11 +1439,30 @@ function findModelByName(name) {
 
 // Connect workflow nodes sequentially
 function connectWorkflowNodes() {
-    const nodes = document.querySelectorAll('.workflow-node');
+    // First, clear all existing connections from DOM
+    const connectionsGroup = document.getElementById('connectionsGroup');
+    if (connectionsGroup) {
+        connectionsGroup.innerHTML = '';
+    }
     
-    for (let i = 0; i < nodes.length - 1; i++) {
-        const currentNode = nodes[i];
-        const nextNode = nodes[i + 1];
+    // Clear connections array
+    connections = [];
+    connectionIdCounter = 0;
+    
+    // Get all nodes and sort them by x position (left to right)
+    const nodes = Array.from(document.querySelectorAll('.workflow-node'));
+    const sortedNodes = nodes.sort((a, b) => {
+        const rectA = a.getBoundingClientRect();
+        const rectB = b.getBoundingClientRect();
+        return rectA.left - rectB.left;
+    });
+    
+    console.log(`🔗 Connecting ${sortedNodes.length} nodes sequentially...`);
+    
+    // Connect nodes in order (first to second, second to third, etc.)
+    for (let i = 0; i < sortedNodes.length - 1; i++) {
+        const currentNode = sortedNodes[i];
+        const nextNode = sortedNodes[i + 1];
         
         const currentRightPoint = currentNode.querySelector('.connection-point.right');
         const nextLeftPoint = nextNode.querySelector('.connection-point.left');
@@ -1459,6 +1484,8 @@ function connectWorkflowNodes() {
             createNodeConnection(start, end);
         }
     }
+    
+    console.log(`✅ Connected ${connections.length} connections`);
 }
 
 // Run selected workflow
