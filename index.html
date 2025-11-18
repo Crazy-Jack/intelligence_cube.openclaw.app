@@ -672,10 +672,33 @@
 
         /* --- Chat UI (light theme) --- */
         body.chat-mode { background:linear-gradient(135deg, #fefefe 0%, #f8fafc 100%); color:#1f2937; }
-        .chat-app { display:flex; height:calc(100vh - 64px); gap:0; }
-        .chat-sidebar { width:260px; border-right:1px solid #e5e7eb; padding:8px; overflow:auto; background:#ffffff; }
+        .chat-app { display:flex; height:calc(100vh - 64px); gap:0; position:relative; }
+        .chat-sidebar { width:260px; border-right:1px solid #e5e7eb; padding:8px; overflow:auto; background:#ffffff; transition: transform 0.3s ease; }
         .chat-main { flex:1; display:flex; flex-direction:column; }
-        .chat-header { padding:12px 16px; border-bottom:1px solid #e5e7eb; color:#374151; font-weight:600; background:#f9fafb; }
+        .chat-header { padding:12px 16px; border-bottom:1px solid #e5e7eb; color:#374151; font-weight:600; background:#f9fafb; display:flex; align-items:center; gap:12px; }
+        .chat-history-toggle-btn { 
+            display:none; 
+            padding:6px 10px; 
+            border:1px solid #e5e7eb; 
+            border-radius:6px; 
+            background:#fff; 
+            color:#374151; 
+            font-size:14px; 
+            cursor:pointer;
+            align-items:center;
+            gap:6px;
+        }
+        .chat-history-toggle-btn svg { width:16px; height:16px; }
+        .chat-sidebar-overlay { 
+            display:none; 
+            position:fixed; 
+            left:0;
+            top:64px;
+            right:0;
+            bottom:0;
+            background:rgba(0,0,0,0.5); 
+            z-index:998; 
+        }
         .chat-messages { flex:1; padding:16px; overflow:auto; background:#ffffff; }
         .message { max-width:900px; margin:0 auto 14px; line-height:1.6; }
         .message.user { background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.15); color:#1f2937; border-radius:12px; padding:8px 12px; }
@@ -687,6 +710,130 @@
         .chat-input::placeholder { color:#9ca3af; }
         .send-btn-dark { width:44px; height:44px; border-radius:12px; border:0; background:linear-gradient(135deg, #8b5cf6, #7c3aed); color:white; font-size:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
         .send-btn-dark:active { transform:translateY(1px); }
+        
+        /* 手机版聊天侧边栏 - 默认隐藏，需要按钮切换 */
+        @media (max-width: 768px) {
+            .chat-app {
+                position: relative;
+            }
+            .chat-sidebar {
+                position: fixed;
+                left: 0;
+                top: 64px;
+                height: calc(100vh - 64px);
+                width: 280px;
+                z-index: 999;
+                transform: translateX(-100%);
+                box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            }
+            .chat-sidebar.show {
+                transform: translateX(0);
+            }
+            .chat-sidebar-overlay.show {
+                display: block;
+            }
+            .chat-history-toggle-btn {
+                display: flex;
+            }
+            .chat-main {
+                width: 100%;
+            }
+        }
+        
+        /* 手机版聊天输入框优化 - 输入框和发送按钮同行 */
+        @media (max-width: 768px) {
+            .chat-composer { 
+                padding: 10px 12px; 
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            /* 按钮行 - 第一行水平排列 */
+            .chat-composer select#inputTypeSelect {
+                padding: 8px 32px 8px 12px !important;
+                font-size: 14px !important;
+                min-width: 120px;
+                width: auto;
+                flex: 0 0 auto;
+                border: 1px solid #e5e7eb !important;
+                border-radius: 8px !important;
+                background: #fff !important;
+                color: #374151 !important;
+                -webkit-appearance: menulist;
+                appearance: menulist;
+                order: 1;
+                cursor: pointer;
+            }
+            /* 确保下拉菜单选项可见 */
+            .chat-composer select#inputTypeSelect option {
+                padding: 8px 12px;
+                background: #fff;
+                color: #374151;
+            }
+            .chat-composer button#attachBtn {
+                padding: 8px 12px !important;
+                font-size: 14px !important;
+                width: auto;
+                flex: 0 0 auto;
+                border: 1px solid #e5e7eb !important;
+                border-radius: 8px !important;
+                background: #fff !important;
+                color: #374151 !important;
+                order: 1;
+            }
+            /* 附件预览 - 在第一行 */
+            .chat-composer > div#chatAttachmentPreview {
+                order: 1;
+                width: 100%;
+                margin-bottom: 8px;
+            }
+            /* 输入框和发送按钮行 - 第二行，输入框占大部分，发送按钮在右侧 */
+            .chat-composer > input.chat-input {
+                flex: 1 1 auto;
+                min-width: 0;
+                padding: 12px 16px;
+                font-size: 16px;
+                border: 1px solid #d1d5db;
+                border-radius: 12px;
+                box-sizing: border-box;
+                order: 2;
+                margin-top: 0;
+            }
+            /* 发送按钮 - 与输入框同行，小一点 */
+            .chat-composer > button.send-btn-dark {
+                width: 44px;
+                height: 44px;
+                min-width: 44px;
+                font-size: 18px;
+                flex-shrink: 0;
+                margin-top: 0;
+                order: 2;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .chat-composer { 
+                padding: 8px 10px; 
+                gap: 6px;
+            }
+            .chat-composer select#inputTypeSelect {
+                padding: 8px 10px !important;
+                font-size: 13px !important;
+            }
+            .chat-composer button#attachBtn {
+                padding: 8px 10px !important;
+                font-size: 13px !important;
+            }
+            .chat-input { 
+                padding: 12px 14px;
+                font-size: 16px;
+            }
+            .send-btn-dark { 
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                font-size: 16px;
+            }
+        }
         
         /* 钱包模态框 */
 		.wallet-modal {
@@ -1440,6 +1587,7 @@
 
     <!-- ===== Light Chat UI (hidden until first prompt) ===== -->
     <div id="chatApp" class="chat-app" style="display:none;">
+        <div class="chat-sidebar-overlay" onclick="toggleChatSidebar()"></div>
         <aside class="chat-sidebar">
             <div class="chat-history-title">Chats</div>
             <div id="chatHistoryList">
@@ -1461,7 +1609,17 @@
             </div>
         </aside>
         <section class="chat-main">
-            <div class="chat-header" id="chatHeader">Select a model to start chatting</div>
+            <div class="chat-header" id="chatHeader">
+                <button class="chat-history-toggle-btn" onclick="toggleChatSidebar()" title="Show chat history">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                    <span>Chats</span>
+                </button>
+                <span id="chatHeaderText">Select a model to start chatting</span>
+            </div>
             <div id="chatMessages" class="chat-messages"></div>
             <div class="chat-composer">
                 <select id="inputTypeSelect" style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; color:#374151; font-size:14px;">
@@ -2457,13 +2615,23 @@
             composer.style.display = visible ? 'flex' : 'none';
         }
 
+        // 切换聊天侧边栏显示/隐藏
+        function toggleChatSidebar() {
+            const sidebar = document.querySelector('.chat-sidebar');
+            const overlay = document.querySelector('.chat-sidebar-overlay');
+            if (sidebar && overlay) {
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            }
+        }
+        
         function updateChatHeader() {
-            const header = document.getElementById('chatHeader');
-            if (header) {
+            const headerText = document.getElementById('chatHeaderText');
+            if (headerText) {
                 // Check for forced model first
                 const forcedModel = localStorage.getItem('forcedModel');
                 if (forcedModel) {
-                    header.textContent = forcedModel;
+                    headerText.textContent = forcedModel;
                     console.log('🔍 Updated chat header for forced model:', forcedModel);
                     return;
                 }
@@ -2471,9 +2639,9 @@
                 // Then check for workflow
                 const wf = getCurrentWorkflow();
                 if (wf && wf.status === 'running') {
-                    header.textContent = wf.name;
+                    headerText.textContent = wf.name;
                 } else {
-                    header.textContent = 'Select a model to start chatting';
+                    headerText.textContent = 'Select a model to start chatting';
                 }
             }
         }
