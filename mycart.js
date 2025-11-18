@@ -233,6 +233,19 @@ function renderMobileCart() {
         const shareSubtotal = (modelData.sharePrice * shareQuantity).toFixed(2);
         const totalSubtotal = (parseFloat(tokenSubtotal) + parseFloat(shareSubtotal) * 1000).toFixed(2);
         
+        // 获取用户余额（用于显示SHARES INVESTMENT的可用余额）
+        let availableBalance = '0';
+        try {
+            if (window.walletManager && window.walletManager.getUserInfo) {
+                const userInfo = window.walletManager.getUserInfo();
+                if (userInfo && userInfo.credits) {
+                    availableBalance = (userInfo.credits / 1000).toFixed(1) + 'K';
+                }
+            }
+        } catch (e) {
+            console.warn('无法获取用户余额:', e);
+        }
+        
         const card = document.createElement('div');
         card.className = 'mobile-cart-item';
         card.innerHTML = `
@@ -242,9 +255,8 @@ function renderMobileCart() {
                 <div class="cart-category">${modelData.category}</div>
             </div>
             
-            ${tokenQuantity > 0 ? `
             <div class="mobile-purchase-section">
-                <div class="mobile-purchase-type">Token Purchase</div>
+                <div class="mobile-purchase-type">TOKEN PURCHASE</div>
                 <div class="mobile-price-row">
                     <div class="mobile-price-info">
                         ${modelData.tokenPrice}/K
@@ -262,14 +274,12 @@ function renderMobileCart() {
                     <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3" style="width: 12px; height: 12px;">
                 </div>
             </div>
-            ` : ''}
             
-            ${shareQuantity > 0 ? `
             <div class="mobile-purchase-section">
-                <div class="mobile-purchase-type">Share Purchase</div>
+                <div class="mobile-purchase-type">SHARES INVESTMENT</div>
                 <div class="mobile-price-row">
-                    <div class="mobile-price-info">
-                        ${modelData.sharePrice}K
+                    <div class="mobile-price-info" style="color: #10b981;">
+                        ${availableBalance}
                         <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3">
                     </div>
                     <div class="quantity-controls">
@@ -284,7 +294,6 @@ function renderMobileCart() {
                     <img src="svg/i3-token-logo.svg" class="token-logo" alt="i3" style="width: 12px; height: 12px;">
                 </div>
             </div>
-            ` : ''}
             
             <div class="mobile-item-total">
                 <span class="mobile-total-label">Item Total:</span>
