@@ -352,6 +352,9 @@ function populatePeerBenchmarkTable(models) {
     `).join('');
     
     console.log('Peer Benchmark table populated successfully');
+    
+    // 同时生成手机端列表
+    generateMobileBenchmarkList(models);
 }
 
 // 设置同行基准测试工具提示 - 已在 HTML 中直接添加
@@ -710,7 +713,13 @@ function generateMobileBenchmarkList(models) {
     models.forEach(model => {
         const item = document.createElement('div');
         item.className = 'mobile-model-item';
-        item.onclick = () => showMobileBenchmarkDetail(model);
+        
+        // 根据当前标签页选择正确的详情显示函数
+        if (currentTab === 'peer') {
+            item.onclick = () => showMobilePeerBenchmarkDetail(model);
+        } else {
+            item.onclick = () => showMobileBenchmarkDetail(model);
+        }
         
         // 获取模型图标（使用首字母）
         const icon = model.name.charAt(0).toUpperCase();
@@ -806,6 +815,89 @@ function showMobileBenchmarkDetail(model) {
         <div class="mobile-detail-row">
           <span class="mobile-detail-label">TOTAL SCORE</span>
           <span class="mobile-detail-value" style="color: #8b7cf6; font-weight: 700; font-size: 18px;">${model.totalScore || 0}%</span>
+        </div>
+      </div>
+      
+      <div class="mobile-detail-actions">
+        <button class="mobile-detail-btn primary" onclick="tryModel('${model.name}')">Try</button>
+        <button class="mobile-detail-btn success" onclick="addToCart('${model.name}')">Add to Cart</button>
+      </div>
+    `;
+    
+    // 滚动到顶部
+    window.scrollTo(0, 0);
+}
+
+// 显示手机端 Peer Benchmark 模型详情
+function showMobilePeerBenchmarkDetail(model) {
+    // 隐藏列表视图、搜索栏、标题和所有筛选控件，显示详情视图
+    const mobileList = document.getElementById('mobileBenchmarkModelsList');
+    const mobileSearch = document.querySelector('.mobile-search-filters');
+    const pagination = document.querySelector('.pagination-container');
+    const benchmarkTitle = document.querySelector('.benchmark-title');
+    const desktopSearchControls = document.querySelector('.desktop-search-controls');
+    
+    if (mobileList) mobileList.style.display = 'none';
+    if (mobileSearch) mobileSearch.style.display = 'none';
+    if (pagination) pagination.style.display = 'none';
+    if (benchmarkTitle) benchmarkTitle.style.display = 'none';
+    if (desktopSearchControls) desktopSearchControls.style.display = 'none';
+    
+    const detailView = document.getElementById('mobileBenchmarkModelDetail');
+    detailView.style.display = 'block';
+    
+    // 设置标题
+    document.getElementById('mobileBenchmarkDetailTitle').textContent = model.name;
+    
+    // 生成 Peer Benchmark 详情内容
+    const content = document.getElementById('mobileBenchmarkDetailContent');
+    
+    // 获取 Peer Benchmark 特有的字段
+    const rating = model.rating || 'N/A';
+    const usage = model.usage || 0;
+    const verticalIndex = model.verticalIndex || 0;
+    const pwcScore = model.pwcScore || 0;
+    const economicValue = model.economicValue || 0;
+    const lateralComp = model.lateralComp || 'N/A';
+    const totalScore = model.totalScore || 0;
+    
+    content.innerHTML = `
+      <div class="mobile-detail-section">
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">CATEGORY</span>
+          <span class="mobile-detail-value">${model.category || 'N/A'}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">INDUSTRY</span>
+          <span class="mobile-detail-value">${model.industry || 'N/A'}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">RATING</span>
+          <span class="mobile-detail-value" style="color: #f59e0b; font-weight: 600;">${rating}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">USAGE</span>
+          <span class="mobile-detail-value" style="color: #8b7cf6; font-weight: 600;">${usage.toLocaleString()}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">VERTICAL INDEX</span>
+          <span class="mobile-detail-value">${verticalIndex}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">PWC SCORE</span>
+          <span class="mobile-detail-value">${pwcScore}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">ECONOMIC VALUE</span>
+          <span class="mobile-detail-value">${economicValue}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">LATERAL COMP.</span>
+          <span class="mobile-detail-value">${lateralComp}</span>
+        </div>
+        <div class="mobile-detail-row">
+          <span class="mobile-detail-label">TOTAL SCORE</span>
+          <span class="mobile-detail-value" style="color: #8b7cf6; font-weight: 700; font-size: 18px;">${totalScore}</span>
         </div>
       </div>
       
@@ -1215,4 +1307,5 @@ window.filterByUsage = filterByUsage;
 window.sortBenchmarkTable = sortBenchmarkTable;
 window.clearAllFilters = clearAllFilters;
 window.showMobileBenchmarkDetail = showMobileBenchmarkDetail;
+window.showMobilePeerBenchmarkDetail = showMobilePeerBenchmarkDetail;
 window.showMobileBenchmarkListView = showMobileBenchmarkListView;

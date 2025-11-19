@@ -93,7 +93,20 @@
         }
       } catch (_) {}
     }
-    if (dropdown) dropdown.classList.toggle('show');
+    if (dropdown) {
+      dropdown.classList.toggle('show');
+      
+      // 添加以下代码：确保下拉框在视口内
+      if (dropdown.classList.contains('show')) {
+        setTimeout(() => {
+          const rect = dropdown.getBoundingClientRect();
+          const viewportHeight = window.innerHeight;
+          if (rect.bottom > viewportHeight) {
+            dropdown.style.maxHeight = (viewportHeight - rect.top - 20) + 'px';
+          }
+        }, 10);
+      }
+    }
   }
 
   function injectAccountDropdown(targetEl){
