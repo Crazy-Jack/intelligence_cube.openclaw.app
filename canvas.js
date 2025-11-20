@@ -669,6 +669,11 @@ function createModelElement(model) {
     modelElement.addEventListener('dragstart', handleDragStart);
     modelElement.addEventListener('dragend', handleDragEnd);
     
+    // 添加触摸事件支持
+    modelElement.addEventListener('touchstart', handleTouchStart, { passive: false });
+    modelElement.addEventListener('touchmove', handleTouchMove, { passive: false });
+    modelElement.addEventListener('touchend', handleTouchEnd, { passive: false });
+    
     return modelElement;
 }
 
@@ -1748,10 +1753,143 @@ function saveWorkflowToMyAssets(workflow) {
     }
 }
 
-// 触摸事件支持（添加到 canvas.js 末尾）
+// 触摸拖拽相关变量
+let touchDragState = {
+    isDragging: false,
+    model: null,
+    startX: 0,
+    startY: 0,
+    ghostElement: null
+};
+
+// 触摸开始
+function handleTouchStart(e) {
+    const modelItem = e.currentTarget;
+    if (!modelItem.classList.contains('model-item')) return;
+    
+    const touch = e.touches[0];
+    touchDragState.startX = touch.clientX;
+    touchDragState.startY = touch.clientY;
+    touchDragState.model = {
+        name: modelItem.dataset.modelName,
+        type: modelItem.dataset.modelType,
+        category: modelItem.dataset.category,
+        quantity: modelItem.dataset.quantity
+    };
+    
+    // 创建拖拽时的虚拟元素
+    const ghost = modelItem.cloneNode(true);
+    ghost.style.position = 'fixed';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.opacity = '0.7';
+    ghost.style.zIndex = '10000';
+    ghost.style.width = modelItem.offsetWidth + 'px';
+    ghost.style.left = touch.clientX - modelItem.offsetWidth / 2 + 'px';
+    ghost.style.top = touch.clientY - 30 + 'px';
+    ghost.classList.add('dragging');
+    document.body.appendChild(ghost);
+    touchDragState.ghostElement = ghost;
+    
+    // 标记原始元素
+    modelItem.style.opacity = '0.5';
+    
+    console.log('📱 Touch drag started:', touchDragState.model.name);
+}
+
+// 触摸移动
+function handleTouchMove(e) {
+    if (!touchDragState.model || !touchDragState.ghostElement) return;
+    
+    e.preventDefault();
+    const touch = e.touches[0];
+    
+    // 更新虚拟元素位置
+    touchDragState.ghostElement.style.left = touch.clientX - touchDragState.ghostElement.offsetWidth / 2 + 'px';
+    touchDragState.ghostElement.style.top = touch.clientY - 30 + 'px';
+    
+    // 检查是否在canvas区域
+    const canvasWorkspace = document.getElementById('canvasWorkspace');
+    const canvasRect = canvasWorkspace.getBoundingClientRect();
+    const dropZone = document.getElementById('dropZone');
+    
+    if (touch.clientX >= canvasRect.left && 
+        touch.clientX <= canvasRect.right &&
+        touch.clientY >= canvasRect.top && 
+        touch.clientY <= canvasRect.bottom) {
+        touchDragState.isDragging = true;
+        if (dropZone) {
+            dropZone.style.display = 'block';
+            dropZone.classList.add('active');
+        }
+    } else {
+        if (dropZone) {
+            dropZone.style.display = 'none';
+            dropZone.classList.remove('active');
+        }
+    }
+}
+
+// 触摸结束
+function handleTouchEnd(e) {
+    const modelItems = document.querySelectorAll('.model-item');
+    modelItems.forEach(item => item.style.opacity = '1');
+    
+    if (!touchDragState.model) return;
+    
+    const touch = e.changedTouches[0];
+    const canvasWorkspace = document.getElementById('canvasWorkspace');
+    const canvasRect = canvasWorkspace.getBoundingClientRect();
+    const dropZone = document.getElementById('dropZone');
+    
+    // 移除虚拟元素
+    if (touchDragState.ghostElement) {
+        touchDragState.ghostElement.remove();
+    }
+    
+    // 隐藏drop zone
+    if (dropZone) {
+        dropZone.style.display = 'none';
+        dropZone.classList.remove('active');
+    }
+    
+    // 检查是否在canvas上放下
+    if (touch.clientX >= canvasRect.left && 
+        touch.clientX <= canvasRect.right &&
+        touch.clientY >= canvasRect.top && 
+        touch.clientY <= canvasRect.bottom) {
+        
+        // 计算相对于canvas的位置
+        const x = Math.max(10, touch.clientX - canvasRect.left - 140 + canvasWorkspace.scrollLeft);
+        const y = Math.max(10, touch.clientY - canvasRect.top - 100 + canvasWorkspace.scrollTop);
+        
+        console.log('📱 Touch drop at:', x, y);
+        createWorkflowNode(touchDragState.model, x, y);
+        
+        // 调整视口
+        if (window.innerWidth <= 768) {
+            setTimeout(() => {
+                adjustCanvasViewport();
+            }, 150);
+        }
+    }
+    
+    // 重置状态
+    touchDragState = {
+        isDragging: false,
+        model: null,
+        startX: 0,
+        startY: 0,
+        ghostElement: null
+    };
+    
+    console.log('📱 Touch drag ended');
+}
+
+// 保留原有的触摸支持函数用于节点拖拽
 function addTouchSupport() {
+    // 节点拖拽的触摸支持
     document.addEventListener('touchstart', function(e) {
-        if (e.target.closest('.model-item') || e.target.closest('.workflow-node')) {
+        if (e.target.closest('.workflow-node') && !e.target.closest('.connection-point')) {
             const touch = e.touches[0];
             const mouseEvent = new MouseEvent('mousedown', {
                 clientX: touch.clientX,
@@ -1763,21 +1901,25 @@ function addTouchSupport() {
     }, { passive: false });
     
     document.addEventListener('touchmove', function(e) {
-        const touch = e.touches[0];
-        const mouseEvent = new MouseEvent('mousemove', {
-            clientX: touch.clientX,
-            clientY: touch.clientY,
-            bubbles: true
-        });
-        document.dispatchEvent(mouseEvent);
-        e.preventDefault();
+        if (e.target.closest('.workflow-node') || touchDragState.isDragging) {
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            document.dispatchEvent(mouseEvent);
+            e.preventDefault();
+        }
     }, { passive: false });
     
-    document.addEventListener('touchend', function() {
-        const mouseEvent = new MouseEvent('mouseup', {
-            bubbles: true
-        });
-        document.dispatchEvent(mouseEvent);
+    document.addEventListener('touchend', function(e) {
+        if (e.target.closest('.workflow-node')) {
+            const mouseEvent = new MouseEvent('mouseup', {
+                bubbles: true
+            });
+            document.dispatchEvent(mouseEvent);
+        }
     });
 }
 
