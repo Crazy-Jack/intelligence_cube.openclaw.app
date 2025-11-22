@@ -1338,31 +1338,40 @@ function hideSaveRunModal() {
 }
 
 function saveAndRunWorkflow() {
-    const workflowName = document.getElementById('workflowName').value.trim();
-    const workflowDescription = document.getElementById('workflowDescription').value.trim();
+    const nameInput = document.getElementById('workflowName');
+    const descInput = document.getElementById('workflowDescription');
+
+    const workflowName = nameInput ? nameInput.value.trim() : '';
+    const workflowDescription = descInput ? descInput.value.trim() : '';
     const visibility = 'private';
-    
+
     if (!workflowName) {
         alert('请输入工作流名称。');
         return;
     }
 
-    // 收集模型列表 - 在这里添加
+    if (!workflowNodes || workflowNodes.length === 0) {
+        alert('请先在画布中添加至少一个模型。');
+        return;
+    }
+
+    // 模型列表（用于 My Workflows 显示）
     const modelsList = workflowNodes.map(node => node.modelName);
-    const modelsUsed = modelsList.length > 0 ? `${modelsList.join(', ')} (${modelsList.length} models)` : 'None';
-    
-    
-    // 保存完整的工作流数据
+    const modelsUsed = modelsList.length > 0
+        ? `${modelsList.join(', ')} (${modelsList.length} models)`
+        : 'None';
+
+    // 构造基础 workflow 对象（注意这里还没有 sequence/graph，稍后由 runSelectedWorkflow 补齐）
     const completeWorkflowData = {
         id: 'workflow_' + Date.now(),
         name: workflowName,
         description: workflowDescription,
         visibility: visibility,
-        // 添加这些字段用于 My Workflows 显示
+        // My Workflows 需要的字段
         models: modelsList,
         modelsUsed: modelsUsed,
         modelCount: modelsList.length,
-        // 保存节点的完整信息
+        // 节点信息
         nodes: workflowNodes.map(node => ({
             id: node.id,
             modelName: node.modelName,
@@ -1372,7 +1381,7 @@ function saveAndRunWorkflow() {
             x: node.x,
             y: node.y
         })),
-        // 保存连接的完整信息
+        // 连接信息
         connections: connections.map(conn => ({
             id: conn.id,
             from: {
@@ -1386,27 +1395,28 @@ function saveAndRunWorkflow() {
         })),
         createdAt: new Date().toISOString(),
         lastModified: new Date().toISOString(),
-        status: 'running'
+        // 先标记为 ready，真正开始运行由 runSelectedWorkflow 改成 running
+        status: 'ready'
     };
-    
-    // 保存到 currentWorkflow（用于index.html显示状态）
-    localStorage.setItem('currentWorkflow', JSON.stringify(completeWorkflowData));
-    
-    // 保存到 canvasWorkflow（用于Canvas恢复）
+
+    // 保存到 canvasWorkflow：方便 Canvas 恢复
     localStorage.setItem('canvasWorkflow', JSON.stringify(completeWorkflowData));
-    
-    
-    // 无论公有还是私有，都保存到 myWorkflows（用户点击Run就自动保存）
-    let myWorkflows = JSON.parse(localStorage.getItem('myWorkflows') || '[]');
-    myWorkflows.push(completeWorkflowData);
-    localStorage.setItem('myWorkflows', JSON.stringify(myWorkflows));
-    
+
+    // 保存到 My Workflows 列表（统一用已有的工具函数）
+    saveWorkflowToMyAssets(completeWorkflowData);
+
+    // 设置当前要运行的 workflow，稍后 runSelectedWorkflow 会在此基础上补充 graph/sequence 等字段
+    localStorage.setItem('currentWorkflow', JSON.stringify(completeWorkflowData));
+
+    // 关掉弹窗
     hideSaveRunModal();
-    alert(`工作流 "${workflowName}" 保存成功！正在跳转到聊天页面...`);
-    
-    setTimeout(() => {
-        window.location.href = 'index.html';
-    }, 1000);
+
+    // 直接复用统一的运行逻辑：
+    // 1）根据 workflowNodes / connections 计算 sequence 和 graph
+    // 2）把 wf.status 设置为 'running'
+    // 3）写回 currentWorkflow
+    // 4）弹出顺序提示并跳转到 index.html
+    runSelectedWorkflow();
 }
 
 // Load workflow to canvas

@@ -456,96 +456,115 @@ function closeCheckoutModal() {
     }
 }
 
-// 保存购买记录到My Assets
+// 保存购物车购买到 My Assets，并写一条交易记录
 function savePurchaseToAssets(cartItems, orderSummary) {
-    console.log('💾 Saving purchase to My Assets...');
-    console.log('📦 Cart items to save:', cartItems);
-    
     try {
-        let myAssets = JSON.parse(localStorage.getItem('myAssets')) || {
-            tokens: [],
-            shares: [],
-            history: []
-        };
-        
-        const purchaseDate = new Date().toISOString();
-        
+        console.log('💾 Saving purchase to My Assets...', { cartItems, orderSummary });
+
+        // 1. 读出已有 myAssets，兼容旧结构
+        let stored = null;
+        try {
+            const raw = localStorage.getItem('myAssets');
+            stored = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            console.warn('⚠️ Failed to parse existing myAssets, resetting:', e);
+        }
+
+        let myAssets = stored || { tokens: [], shares: [], history: [] };
+
+        // 确保这三个字段一定是数组，避免 .push / .length 报错
+        if (!Array.isArray(myAssets.tokens)) myAssets.tokens = [];
+        if (!Array.isArray(myAssets.shares)) myAssets.shares = [];
+        if (!Array.isArray(myAssets.history)) myAssets.history = [];
+
+        // 2. 更新 tokens / shares 持仓
         cartItems.forEach(item => {
             const modelData = getModelData(item.modelName);
             if (!modelData) {
-                console.warn('⚠️ Model data not found for:', item.modelName);
+                console.warn('⚠️ Model data not found for item:', item);
                 return;
             }
             
-            console.log(`📄 Processing item: ${item.modelName}, Tokens: ${item.tokenQuantity}, Shares: ${item.shareQuantity}`);
-            
-            if (item.tokenQuantity > 0) {
-                const existingTokenIndex = myAssets.tokens.findIndex(
-                    token => token.modelName === item.modelName
-                );
-                
+            const tokensToAdd = item.tokenQuantity || 0;
+            const sharesToAdd = item.shareQuantity || 0;
+
+            if (tokensToAdd > 0) {
+                const existingTokenIndex = myAssets.tokens.findIndex(t => t.modelName === item.modelName);
                 if (existingTokenIndex >= 0) {
-                    myAssets.tokens[existingTokenIndex].quantity += item.tokenQuantity;
-                    myAssets.tokens[existingTokenIndex].lastPurchase = purchaseDate;
-                    console.log(`✅ Updated existing token record for ${item.modelName}`);
+                    myAssets.tokens[existingTokenIndex].quantity += tokensToAdd;
+                    myAssets.tokens[existingTokenIndex].lastPurchase = new Date().toISOString();
                 } else {
                     myAssets.tokens.push({
                         modelName: item.modelName,
+                        quantity: tokensToAdd,
                         category: modelData.category,
                         industry: modelData.industry,
-                        quantity: item.tokenQuantity,
                         tokenPrice: modelData.tokenPrice,
-                        purchaseDate: purchaseDate,
-                        lastPurchase: purchaseDate
+                        sharePrice: modelData.sharePrice,
+                        change: modelData.change,
+                        rating: modelData.rating,
+                        usage: modelData.usage,
+                        compatibility: modelData.compatibility,
+                        totalScore: modelData.totalScore,
+                        purchaseDate: new Date().toISOString(),
+                        lastPurchase: new Date().toISOString()
                     });
-                    console.log(`✅ Created new token record for ${item.modelName}`);
                 }
             }
-            
-            if (item.shareQuantity > 0) {
-                const existingShareIndex = myAssets.shares.findIndex(
-                    share => share.modelName === item.modelName
-                );
-                
+
+            if (sharesToAdd > 0) {
+                const existingShareIndex = myAssets.shares.findIndex(s => s.modelName === item.modelName);
                 if (existingShareIndex >= 0) {
-                    myAssets.shares[existingShareIndex].quantity += item.shareQuantity;
-                    myAssets.shares[existingShareIndex].lastPurchase = purchaseDate;
-                    console.log(`✅ Updated existing share record for ${item.modelName}`);
+                    myAssets.shares[existingShareIndex].quantity += sharesToAdd;
+                    myAssets.shares[existingShareIndex].lastPurchase = new Date().toISOString();
                 } else {
                     myAssets.shares.push({
                         modelName: item.modelName,
+                        quantity: sharesToAdd,
                         category: modelData.category,
                         industry: modelData.industry,
-                        quantity: item.shareQuantity,
+                        tokenPrice: modelData.tokenPrice,
                         sharePrice: modelData.sharePrice,
-                        marketChange: modelData.change,
-                        purchaseDate: purchaseDate,
-                        lastPurchase: purchaseDate
+                        change: modelData.change,
+                        rating: modelData.rating,
+                        usage: modelData.usage,
+                        compatibility: modelData.compatibility,
+                        totalScore: modelData.totalScore,
+                        purchaseDate: new Date().toISOString(),
+                        lastPurchase: new Date().toISOString()
                     });
-                    console.log(`✅ Created new share record for ${item.modelName}`);
                 }
             }
         });
+
+        // 3. 写入一条订单级别的 history 记录（Payment History 后面会用）
+        const now = new Date();
+        const orderId = 'order_' + now.getTime() + '_' + Math.random().toString(36).slice(2, 8);
         
         myAssets.history.push({
-            orderId: 'ORD-' + Date.now(),
-            purchaseDate: purchaseDate,
-            models: cartItems.length,
-            totalTokens: orderSummary.totalTokenQuantity,
-            totalShares: orderSummary.totalShareQuantity,
-            totalAmount: orderSummary.grandTotal,
-            items: cartItems.map(item => ({
-                modelName: item.modelName,
-                tokenQuantity: item.tokenQuantity || 0,
-                shareQuantity: item.shareQuantity || 0
-            }))
+            id: orderId,
+            type: 'buy_tokens',                   // 先统一当作 buy_tokens，后面如果要拆 share 再细化
+            timestamp: now.getTime(),
+            modelName: orderSummary.models === 1 && cartItems[0]
+                ? cartItems[0].modelName
+                : 'Multiple models',
+            quantity: orderSummary.totalTokens || 0,     // 这里用 K tokens 数量
+            creditsSpent: -orderSummary.totalAmount,     // 负号 = 花掉的 i3 credits
+            status: 'completed',
+            meta: {
+                from: 'mycart',
+                models: orderSummary.models,
+                totalTokens: orderSummary.totalTokens,
+                totalShares: orderSummary.totalShares,
+                totalAmount: orderSummary.totalAmount
+            }
         });
         
         localStorage.setItem('myAssets', JSON.stringify(myAssets));
         console.log('✅ Purchase saved to My Assets:', myAssets);
-        
     } catch (error) {
-        console.error('⚠ Error saving purchase to My Assets:', error);
+        console.error('❌ Error saving purchase to My Assets:', error);
+        throw error;
     }
 }
 
@@ -598,12 +617,54 @@ function placeOrder() {
     
     // 5. 保存购买记录到My Assets
     savePurchaseToAssets(cartItems, {
-        totalTokenQuantity,
-        totalShareQuantity,
-        tokenPriceTotal,
-        sharePriceTotal,
-        grandTotal
+        models: cartItems.length,
+        totalTokens: totalTokenQuantity,
+        totalShares: totalShareQuantity,
+        totalAmount: grandTotal
     });
+    
+    // 5.1. 逐个条目写入 Payment History 交易记录
+    if (window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
+        const orderId = 'order_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        cartItems.forEach(item => {
+            const modelData = getModelData(item.modelName);
+            if (!modelData) return;
+
+            // 1）买 tokens
+            if (item.tokenQuantity && item.tokenQuantity > 0 && modelData.tokenPrice) {
+                const tokenCost = Number((item.tokenQuantity * modelData.tokenPrice).toFixed(3));
+                window.apiManager.recordTransaction({
+                    type: 'buy_tokens',
+                    modelName: item.modelName,
+                    quantity: item.tokenQuantity,
+                    creditsSpent: -tokenCost,
+                    timestamp: Date.now(),
+                    status: 'completed',
+                    source: 'mycart',
+                    orderId: orderId
+                }).catch(err => {
+                    console.warn('[PaymentHistory] Failed to record buy_tokens tx:', err);
+                });
+            }
+
+            // 2）买 shares
+            if (item.shareQuantity && item.shareQuantity > 0 && modelData.sharePrice) {
+                const shareCost = Number((item.shareQuantity * modelData.sharePrice).toFixed(3));
+                window.apiManager.recordTransaction({
+                    type: 'buy_shares',
+                    modelName: item.modelName,
+                    quantity: item.shareQuantity,
+                    creditsSpent: -shareCost,
+                    timestamp: Date.now(),
+                    status: 'completed',
+                    source: 'mycart',
+                    orderId: orderId
+                }).catch(err => {
+                    console.warn('[PaymentHistory] Failed to record buy_shares tx:', err);
+                });
+            }
+        });
+    }
     
     // 6. 显示成功消息
     alert(`🎉 Order Placed Successfully!\n\n💳 Payment: ${grandTotal.toFixed(2)} I3 tokens\n📊 Models: ${cartItems.length}\n🎯 Tokens: ${totalTokenQuantity}K\n📈 Shares: ${totalShareQuantity}\n\n💰 Remaining Balance: ${spendResult.newBalance} I3 tokens\n\n✅ Your models have been added to your account.\nThank you for your purchase!`);

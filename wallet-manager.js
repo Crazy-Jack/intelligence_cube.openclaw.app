@@ -784,6 +784,25 @@ disconnectWallet() {
 
 		this.recordTransaction(DAILY_REWARD, 'daily_checkin');
 
+		// NEW: 同步一条 daily_checkin 收入交易到 Payment History
+		if (window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
+			try {
+				window.apiManager.recordTransaction({
+					type: 'daily_checkin',
+					modelName: null,
+					quantity: 1,
+					creditsSpent: DAILY_REWARD,   // 收入 → 正数
+					timestamp: Date.now(),
+					status: 'completed',
+					source: 'daily_checkin'
+				}).catch(err => {
+					console.warn('[PaymentHistory] Failed to record daily_checkin tx:', err);
+				});
+			} catch (e) {
+				console.warn('[PaymentHistory] Error while recording daily_checkin tx:', e);
+			}
+		}
+
 		window.dispatchEvent(new CustomEvent('dailyCheckinSuccess', {
 			detail: {
 				reward: DAILY_REWARD,

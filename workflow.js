@@ -428,6 +428,30 @@ function placeOrder() {
         return;
     }
     
+    // NEW: 为 Workflow 中购买的 tokens 写入 Payment History 交易
+    if (window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
+        const nowTs = Date.now();
+        missingTokens.forEach(token => {
+            // token: { name, required, current, price, cost }
+            if (!token || !token.name || !token.required || !token.cost) return;
+
+            const tokenCost = Number(token.cost.toFixed(3));
+            window.apiManager.recordTransaction({
+                type: 'buy_tokens',
+                modelName: token.name,
+                quantity: token.required,
+                creditsSpent: -tokenCost,
+                timestamp: nowTs,
+                status: 'completed',
+                source: 'workflow',
+                workflowId: workflow.id,
+                workflowName: workflow.name
+            }).catch(err => {
+                console.warn('[PaymentHistory] Failed to record workflow buy_tokens tx:', err);
+            });
+        });
+    }
+    
     // 5. 更新用户资产 (添加购买的tokens)
     missingTokens.forEach(token => {
         userAssets[token.name] = (userAssets[token.name] || 0) + token.required;

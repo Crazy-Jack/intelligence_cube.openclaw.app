@@ -2834,6 +2834,32 @@
                     runId: runMeta.runId || null
                 });
 
+                // NEW: 把这次 API 调用记成一条 Payment History 交易
+                if (spend && spend.success && window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
+                    try {
+                        window.apiManager.recordTransaction({
+                            type: 'api_call',
+                            modelName,
+                            quantity: 1,                    // 一次调用记 1 call
+                            creditsSpent: -amount,          // 花费用负号
+                            timestamp: Date.now(),
+                            status: 'completed',
+                            source: runMeta.reason || 'chat',
+                            meta: {
+                                inTokens,
+                                outTokens,
+                                totalTokens,
+                                runId: runMeta.runId || null,
+                                step: runMeta.step || null
+                            }
+                        }).catch(err => {
+                            console.warn('[PaymentHistory] Failed to record api_call transaction:', err);
+                        });
+                    } catch (e) {
+                        console.warn('[PaymentHistory] Error while recording api_call transaction:', e);
+                    }
+                }
+
                 // Always log result; if balance now <= 0, show top-up modal
                 if (spend && spend.success === false && spend.error) {
                     console.warn('I3 deduction failed:', spend.error);
@@ -3897,8 +3923,15 @@
                         await runWorkflowGroupChat(q);
                         return; // 已处理
                     }
-                    // 否则退回到单模型名称
-                    selectedModel = { name: wf.name };
+
+                    // 走到这里说明 wf.status 是 running，但没有 sequence
+                    // 这代表 workflow 没有正确从 Canvas 导出执行顺序，
+                    // 为了避免把 workflow 名称当成模型名去请求后端，这里直接给出提示并中止。
+                    appendMessageDark(
+                        'assistant',
+                        'Current workflow is not fully initialized. Please open it in Canvas, confirm nodes are connected, then click "Save and Run" again.'
+                    );
+                    return;
                 }
 
                 // 普通聊天模式：更具互动性

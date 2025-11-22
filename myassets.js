@@ -8,26 +8,30 @@ function getMyAssets() {
     try {
         const rawData = localStorage.getItem('myAssets');
         console.log('🔍 Raw myAssets data from localStorage:', rawData);
-        
-        const myAssets = JSON.parse(rawData) || {
-            tokens: [],
-            shares: [],
-            history: []
+
+        let parsed = null;
+        if (rawData) {
+            try {
+                parsed = JSON.parse(rawData);
+            } catch (e) {
+                console.warn('⚠️ Failed to parse myAssets JSON, resetting to empty:', e);
+            }
+        }
+
+        const myAssets = {
+            tokens: Array.isArray(parsed?.tokens) ? parsed.tokens : [],
+            shares: Array.isArray(parsed?.shares) ? parsed.shares : [],
+            history: Array.isArray(parsed?.history) ? parsed.history : []
         };
-        
+
         console.log('📦 Parsed my assets from localStorage:', myAssets);
         console.log('📊 Tokens count:', myAssets.tokens.length);
         console.log('📊 Shares count:', myAssets.shares.length);
         console.log('📊 History count:', myAssets.history.length);
-        
-        // Log individual items for debugging
-        if (myAssets.tokens.length > 0) {
-            console.log('🪙 Token items:', myAssets.tokens);
-        }
-        if (myAssets.shares.length > 0) {
-            console.log('📈 Share items:', myAssets.shares);
-        }
-        
+
+        // 顺便把老数据升级成带 history 字段的新结构
+        localStorage.setItem('myAssets', JSON.stringify(myAssets));
+
         return myAssets;
     } catch (error) {
         console.error('❌ Error loading my assets:', error);
@@ -405,10 +409,146 @@ function editWorkflow(workflowId) {
 
 function runWorkflow(workflowId) {
     const confirmed = confirm(`Are you sure you want to run this workflow?`);
-    if (confirmed) {
-        localStorage.setItem('runWorkflowId', workflowId);
-        window.location.href = 'index.html?workflow=' + encodeURIComponent(workflowId);
+    if (!confirmed) return;
+
+    // 1️⃣ 从 myWorkflows 里找到目标 workflow
+    let myWorkflows = [];
+    try {
+        myWorkflows = JSON.parse(localStorage.getItem('myWorkflows')) || [];
+    } catch (_) {
+        myWorkflows = [];
     }
+
+    const wf = myWorkflows.find(w => w.id === workflowId);
+    if (!wf) {
+        alert('⚠️ Workflow not found.');
+        return;
+    }
+
+    // 2️⃣ 根据保存下来的 nodes / connections 重新计算 graph + sequence
+    function exportGraphAndSequenceFromSavedWorkflow(savedWf) {
+        const rawNodes = Array.isArray(savedWf.nodes) ? savedWf.nodes : [];
+        const rawConns = Array.isArray(savedWf.connections) ? savedWf.connections : [];
+
+        // 补充模型元数据（可选，如果有 getModelData）
+        const nodes = rawNodes.map(n => {
+            const md = (typeof getModelData === 'function') ? getModelData(n.modelName) : null;
+            return {
+                id: n.id,
+                name: n.modelName,
+                category: n.category || (md && md.category) || '',
+                industry: n.industry || (md && md.industry) || '',
+                purpose: n.purpose || (md && md.purpose) || '',
+                useCase: n.useCase || (md && md.useCase) || ''
+            };
+        });
+
+        const nodeIds = new Set(nodes.map(n => n.id));
+
+        // 兼容两种结构： {from: {nodeId: ...}} 或 {from: 'id'}
+        const edges = rawConns
+            .map(c => {
+                const fromId = c.from && typeof c.from === 'object' ? c.from.nodeId : c.from;
+                const toId   = c.to   && typeof c.to   === 'object' ? c.to.nodeId   : c.to;
+                return { from: fromId, to: toId };
+            })
+            .filter(e => nodeIds.has(e.from) && nodeIds.has(e.to) && e.from !== e.to);
+
+        // 用 x 坐标做拓扑排序 tie-breaker（没有 x 就当 0）
+        const posX = new Map(rawNodes.map(n => [n.id, n.x || 0]));
+
+        const inDeg = new Map();
+        nodes.forEach(n => inDeg.set(n.id, 0));
+        edges.forEach(e => inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1));
+
+        const adj = new Map();
+        nodes.forEach(n => adj.set(n.id, []));
+        edges.forEach(e => adj.get(e.from).push(e.to));
+
+        const byId = new Map(nodes.map(n => [n.id, n]));
+        const ready = [];
+        inDeg.forEach((deg, id) => { if (deg === 0) ready.push(id); });
+        ready.sort((a, b) => (posX.get(a) - posX.get(b)) || (byId.get(a).name.localeCompare(byId.get(b).name)));
+
+        const seq = [];
+        let processed = 0;
+        while (ready.length) {
+            const u = ready.shift();
+            seq.push(u);
+            processed++;
+            for (const v of adj.get(u)) {
+                inDeg.set(v, (inDeg.get(v) || 0) - 1);
+                if (inDeg.get(v) === 0) {
+                    ready.push(v);
+                    ready.sort((a, b) => (posX.get(a) - posX.get(b)) || (byId.get(a).name.localeCompare(byId.get(b).name)));
+                }
+            }
+        }
+
+        let sequenceByNames;
+        if (processed !== nodes.length) {
+            console.warn('⚠️ Cycle detected in saved workflow; falling back to left→right order.');
+            const leftToRight = [...rawNodes].sort((a, b) => (a.x || 0) - (b.x || 0)).map(n => n.id);
+            sequenceByNames = leftToRight
+                .map(id => nodes.find(n => n.id === id))
+                .filter(Boolean)
+                .map(n => n.name);
+        } else {
+            sequenceByNames = seq
+                .map(id => nodes.find(n => n.id === id))
+                .filter(Boolean)
+                .map(n => n.name);
+        }
+
+        return { nodes, edges, sequenceByNames };
+    }
+
+    const { nodes, edges, sequenceByNames } = exportGraphAndSequenceFromSavedWorkflow(wf);
+
+    if (!sequenceByNames.length) {
+        alert('⚠️ This workflow has no valid sequence. Please edit it in Canvas.');
+        return;
+    }
+
+    // 3️⃣ 构造 runtime 版本的 workflow，写入 currentWorkflow
+    const runId = Date.now().toString();
+    const experts = nodes.map(n => n.name);
+    const expertDetails = nodes.map(n => ({
+        name: n.name,
+        purpose: n.purpose,
+        useCase: n.useCase,
+        category: n.category,
+        industry: n.industry
+    }));
+
+    const runtimeWorkflow = {
+        ...wf,
+        status: 'running',
+        runId,
+        experts,
+        expertDetails,
+        graph: { nodes, edges },
+        sequence: sequenceByNames,
+        lastModified: new Date().toISOString()
+    };
+
+    // 更新 myWorkflows 里的 status（可选）
+    const idx = myWorkflows.findIndex(w => w.id === workflowId);
+    if (idx !== -1) {
+        myWorkflows[idx] = { ...myWorkflows[idx], status: 'running', lastModified: runtimeWorkflow.lastModified };
+        localStorage.setItem('myWorkflows', JSON.stringify(myWorkflows));
+    }
+
+    // 写入 currentWorkflow，让 Chat 页识别
+    localStorage.setItem('currentWorkflow', JSON.stringify(runtimeWorkflow));
+
+    // 清掉任何强制单模型
+    localStorage.removeItem('forcedModel');
+
+    alert(`🚀 Starting workflow: ${wf.name}\n\nOrder: ${sequenceByNames.join(' → ')}`);
+
+    // 4️⃣ 跳转到 Chat 页，index.html 会通过 currentWorkflow 自动进入 workflow 模式
+    window.location.href = 'index.html';
 }
 
 function deleteWorkflow(workflowId) {

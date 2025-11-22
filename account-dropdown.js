@@ -25,6 +25,11 @@
           <div id="googleSignInStatus" style="margin-top:8px;font-size:12px;color:#6b7280;"></div>
           <button id="logoutBtn" onclick="handleGoogleLogout && handleGoogleLogout()" style="width:100%;padding:8px 12px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;margin-top:8px;display:none;">Log out of Google</button>
         </div>
+        <a href="payment-history.html" class="dropdown-item">
+          <img src="svg/payment.svg" alt="Payment History" 
+          style="width:16px;height:16px;object-fit:contain;" />
+          Payment History
+        </a>
         <a href="myassets.html" class="dropdown-item">
           <img src="svg/myasset.svg" alt="My Assets" 
           style="width:16px;height:16px;object-fit:contain;" />

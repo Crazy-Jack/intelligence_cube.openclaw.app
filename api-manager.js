@@ -466,4 +466,141 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = APIManager;
 }
 
-console.log('✅ API Manager loaded successfully'); 
+console.log('✅ API Manager loaded successfully');
+
+// ========== TRANSACTION RECORDING ==========
+
+// Record a transaction
+APIManager.prototype.recordTransaction = async function(transactionData) {
+    try {
+        // Generate transaction ID if not provided
+        if (!transactionData.id) {
+            transactionData.id = 'tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Add timestamp if not provided
+        if (!transactionData.timestamp) {
+            transactionData.timestamp = Date.now();
+        }
+        
+        // Add wallet address if connected
+        if (window.walletManager && window.walletManager.isConnected) {
+            transactionData.walletAddress = window.walletManager.walletAddress;
+        }
+        
+        // Set default status
+        if (!transactionData.status) {
+            transactionData.status = 'completed';
+        }
+        
+        console.log('📝 Recording transaction:', transactionData);
+        
+        // Save to localStorage
+        const myAssets = JSON.parse(localStorage.getItem('myAssets')) || { tokens: [], shares: [], history: [] };
+        if (!myAssets.history) {
+            myAssets.history = [];
+        }
+        myAssets.history.push(transactionData);
+        localStorage.setItem('myAssets', JSON.stringify(myAssets));
+        console.log('✅ Transaction saved to localStorage');
+        
+        // Save to Firestore if available
+        if (window.firebaseDb) {
+            try {
+                const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+                const transactionRef = doc(window.firebaseDb, 'transactions', transactionData.id);
+                await setDoc(transactionRef, transactionData);
+                console.log('✅ Transaction saved to Firestore');
+            } catch (error) {
+                console.warn('⚠️ Failed to save transaction to Firestore:', error);
+            }
+        }
+        
+        return { success: true, transaction: transactionData };
+    } catch (error) {
+        console.error('❌ Error recording transaction:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+// Get transaction history
+APIManager.prototype.getTransactionHistory = async function(walletAddress, options = {}) {
+    try {
+        const { limit = 100, offset = 0, type = null, startDate = null, endDate = null } = options;
+        
+        // Get from localStorage
+        const myAssets = JSON.parse(localStorage.getItem('myAssets')) || { history: [] };
+        let transactions = myAssets.history || [];
+        
+        // Get from Firestore if available
+        if (window.firebaseDb && walletAddress) {
+            try {
+                const { collection, query, where, getDocs, orderBy, limit: firestoreLimit } = 
+                    await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+                
+                const transactionsRef = collection(window.firebaseDb, 'transactions');
+                let q = query(
+                    transactionsRef,
+                    where('walletAddress', '==', walletAddress.toLowerCase()),
+                    orderBy('timestamp', 'desc')
+                );
+                
+                if (limit) {
+                    q = query(q, firestoreLimit(limit));
+                }
+                
+                const querySnapshot = await getDocs(q);
+                const firestoreTransactions = [];
+                
+                querySnapshot.forEach((doc) => {
+                    firestoreTransactions.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                
+                // Merge transactions (Firestore is authoritative)
+                const localIds = new Set(transactions.map(t => t.id));
+                firestoreTransactions.forEach(tx => {
+                    if (!localIds.has(tx.id)) {
+                        transactions.push(tx);
+                    }
+                });
+                
+                console.log('✅ Fetched transactions from Firestore:', firestoreTransactions.length);
+            } catch (error) {
+                console.warn('⚠️ Failed to fetch from Firestore:', error);
+            }
+        }
+        
+        // Apply filters
+        if (type) {
+            transactions = transactions.filter(tx => tx.type === type);
+        }
+        
+        if (startDate) {
+            transactions = transactions.filter(tx => tx.timestamp >= startDate);
+        }
+        
+        if (endDate) {
+            transactions = transactions.filter(tx => tx.timestamp <= endDate);
+        }
+        
+        // Sort by timestamp (newest first)
+        transactions.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Apply pagination
+        const paginatedTransactions = transactions.slice(offset, offset + limit);
+        
+        return {
+            success: true,
+            transactions: paginatedTransactions,
+            total: transactions.length
+        };
+    } catch (error) {
+        console.error('❌ Error getting transaction history:', error);
+        return { success: false, error: error.message, transactions: [] };
+    }
+};
+
+console.log('✅ Transaction recording methods added to API Manager'); 
