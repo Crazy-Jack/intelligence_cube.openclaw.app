@@ -225,12 +225,46 @@ function showModelCardForRow(rowEl) {
 }
 
 // Main entry
-function showModelCard(modelName, signOverride) {
+async function showModelCard(modelName, signOverride) {
   if (typeof getModelData !== 'function') {
     alert('Error: model-data.js 未正确加载');
     return;
   }
-  const data = getModelData(modelName);
+  let data = getModelData(modelName);
+  // If model not in local MODEL_DATA, attempt to lazy-load from Hugging Face
+  if (!data) {
+    try {
+      // Try fetching from HF API and populate MODEL_DATA for subsequent uses
+      if (typeof fetchHuggingFaceModelCard === 'function') {
+        const hf = await fetchHuggingFaceModelCard(modelName);
+        if (hf) {
+            // If fetchHuggingFaceModelCard returned a normalized object use it
+            const normalized = hf.normalized || {
+              purpose: hf.readme || (hf.api && (hf.api.card?.description || hf.api.description)) || '-',
+              useCase: (hf.api && (hf.api.card?.use_case || hf.api.card?.usecase)) || '-',
+              category: (hf.api && (hf.api.pipeline_tag || (hf.api.pipeline_tags && hf.api.pipeline_tags[0]) || (hf.api.tags && hf.api.tags[0]))) || '-',
+              industry: (hf.api && (hf.api.pipeline_tag || (hf.api.pipeline_tags && hf.api.pipeline_tags[0]) || (hf.api.tags && hf.api.tags[0]))) || '-',
+              tokenPrice: '-',
+              sharePrice: '-',
+              change: '-',
+              rating: '-',
+              ratingFormatted: '-',
+              starsHtml: '—',
+              purchasedPercent: 0,
+              paperLink: (hf.normalized && hf.normalized.paperLink) || (hf.readme && null) || '-'
+            };
+            // mark as coming from Hugging Face so UI can render disabled actions
+            normalized._hf = true;
+            // If normalized was built from readme parsing inside fetch, prefer that paperLink
+            if (hf.normalized && hf.normalized.paperLink) normalized.paperLink = hf.normalized.paperLink;
+            if (typeof MODEL_DATA === 'object') MODEL_DATA[modelName] = normalized;
+            data = normalized;
+          }
+      }
+    } catch (err) {
+      console.warn('Lazy HF load failed for', modelName, err);
+    }
+  }
   if (!data) {
     alert('Model data not found for: ' + modelName);
     return;
@@ -303,6 +337,29 @@ function showModelCard(modelName, signOverride) {
   modal.classList.add('active');
   modal.style.display = 'flex';
   document.body.classList.add('mvpro-lock');
+
+  // Disable Try/Add in modal for HF models
+  try {
+    const tryBtnModal = modal.querySelector('.mvpro-actions .mvpro-btn.primary');
+    const addBtnModal = modal.querySelector('.mvpro-actions .mvpro-btn.success');
+    if (data && data._hf) {
+      if (tryBtnModal) {
+        tryBtnModal.disabled = true;
+        tryBtnModal.style.opacity = '0.5';
+        tryBtnModal.style.cursor = 'not-allowed';
+        tryBtnModal.title = 'Not available for external Hugging Face models';
+      }
+      if (addBtnModal) {
+        addBtnModal.disabled = true;
+        addBtnModal.style.opacity = '0.5';
+        addBtnModal.style.cursor = 'not-allowed';
+        addBtnModal.title = 'Not available for external Hugging Face models';
+      }
+    } else {
+      if (tryBtnModal) { tryBtnModal.disabled = false; tryBtnModal.style.opacity = ''; tryBtnModal.style.cursor = ''; tryBtnModal.title = ''; }
+      if (addBtnModal) { addBtnModal.disabled = false; addBtnModal.style.opacity = ''; addBtnModal.style.cursor = ''; addBtnModal.title = ''; }
+    }
+  } catch (e) { console.warn('Failed to set modal Try/Add disabled state', e); }
 
   // Hide floating search while modal is open
   const panel = getFloatingSearchPanel();
@@ -646,3 +703,294 @@ document.addEventListener('click', function(e) {
 });
 
 window.showFullContentModal = showFullContentModal;
+
+// ---------- Hugging Face integration (fetch list + lazy model card) ----------
+// Quick HTML-escape helper to avoid breaking inline templates when inserting model IDs or URLs
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function fetchHuggingFaceModels(limit = 50) {
+  try {
+    const url = `https://huggingface.co/api/models?limit=${encodeURIComponent(limit)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HF models request failed: ' + res.status);
+    const data = await res.json();
+    // data is an array of model objects; return as-is
+    return data;
+  } catch (err) {
+    console.error('fetchHuggingFaceModels error:', err);
+    return [];
+  }
+}
+
+async function fetchHuggingFaceModelCard(modelId) {
+  // Fetch model metadata from HF API and attempt to fetch README.raw for purpose and paper link.
+  try {
+  const safeId = encodeURIComponent(modelId).replace(/%2F/g, '/');
+  const apiUrl = `https://huggingface.co/api/models/${safeId}`;
+  const res = await fetch(apiUrl);
+    if (!res.ok) throw new Error('HF model fetch failed: ' + res.status);
+    const api = await res.json();
+
+    // Try to fetch README.md from raw/main then raw/master
+    let readme = null;
+    const tryUrls = [
+      `https://huggingface.co/${safeId}/raw/main/README.md`,
+      `https://huggingface.co/${safeId}/raw/master/README.md`
+    ];
+    for (const u of tryUrls) {
+      try {
+        const r = await fetch(u);
+        if (r.ok) {
+          readme = await r.text();
+          break;
+        }
+      } catch (e) {
+        // ignore and try next
+      }
+    }
+
+    // Extract paper link from README text
+    let paperLink = null;
+    // Quick sanitizer for extracted URLs to remove trailing punctuation or embedded HTML fragments
+    function sanitizeUrl(u) {
+      if (!u) return null;
+      let s = String(u).trim();
+      // Try decoding percent-encodings (safe guard)
+      try { if (/%[0-9A-Fa-f]{2}/.test(s)) s = decodeURIComponent(s); } catch (e) { /* ignore */ }
+      // Remove leading/trailing angle brackets or quotes commonly surrounding URLs
+      s = s.replace(/^["'\(<\[]+/, '').replace(/[\)\]>"'}]+$/, '');
+      // Extract only the initial http(s)://... chunk up to first space or disallowed char
+      const m = s.match(/(https?:\/\/[^\s\)\]\}\<\>"']+)/i);
+      if (m && m[1]) s = m[1];
+      // Trim trailing punctuation
+      s = s.replace(/[.,;:]+$/,'');
+      return s || null;
+    }
+
+    // Helper to prefer academic sources
+    function isAcademicUrl(u) {
+      if (!u) return false;
+      try {
+        const url = u.toLowerCase();
+        // prefer explicit academic hosts or direct PDF links
+        const academicHosts = ['arxiv.org', 'doi.org', 'openreview.net', 'ieeexplore.ieee.org', 'paperswithcode.com', 'acm.org', 'semanticscholar.org', 'nature.com', 'science.org', 'springer.com'];
+        if (academicHosts.some(h => url.includes(h))) return true;
+        if (url.endsWith('.pdf')) return true;
+        // sometimes papers are hosted on github as PDF or in /paper.pdf
+        if (url.includes('raw.githubusercontent.com') && url.endsWith('.pdf')) return true;
+        return false;
+      } catch (e) { return false; }
+    }
+
+    if (readme) {
+      // 1) Look for explicit markdown links whose link text contains 'paper' (e.g., [paper](url))
+      const mdLinkRegex = /\[([^\]]*paper[^\]]*)\]\((https?:\/\/[^)\s]+)\)/i;
+      const mmd = readme.match(mdLinkRegex);
+      if (mmd && mmd[2]) paperLink = mmd[2];
+
+      // 2) Look for explicit 'arXiv: 1234.5678' mentions and convert to an arXiv URL
+      if (!paperLink) {
+        const arxivIdMatch = readme.match(/arXiv[:\s]*([0-9]{4}\.[0-9]{4,5}(v\d+)?)/i);
+        if (arxivIdMatch && arxivIdMatch[1]) paperLink = `https://arxiv.org/abs/${arxivIdMatch[1]}`;
+      }
+
+      // 3) Look for explicit 'paper:' or 'Paper:' followed by a URL
+      if (!paperLink) {
+        const kwRegex = /(?:paper|Paper|paper_link|paper-link|arxiv|ArXiv)[:\s\-–—]{0,40}(https?:\/\/[^\s\)\]]+)/m;
+        const m1 = readme.match(kwRegex);
+        if (m1 && m1[1]) paperLink = m1[1];
+      }
+
+      // 4) Fallback: collect all http/https URLs and pick the most academic-looking one
+      if (!paperLink) {
+        const urlRegex = /(https?:\/\/[^\s\)\]]+)/g;
+        let match;
+        const candidates = [];
+        while ((match = urlRegex.exec(readme)) !== null) {
+          candidates.push(match[1]);
+        }
+        if (candidates.length) {
+            // Prefer true academic hosts
+            const academic = candidates.map(sanitizeUrl).find(u => u && isAcademicUrl(u));
+            if (academic) paperLink = academic;
+            else {
+              // prefer PDFs hosted anywhere
+              const pdf = candidates.map(sanitizeUrl).find(u => u && u.toLowerCase().endsWith('.pdf'));
+              if (pdf) paperLink = pdf;
+            }
+          }
+      }
+    }
+
+      // sanitize any discovered link (also applied to fallbacks later)
+      if (paperLink) paperLink = sanitizeUrl(paperLink);
+
+    // Determine pipeline tag
+    let pipeline = null;
+    if (api.pipeline_tag) pipeline = api.pipeline_tag;
+    else if (api.pipeline_tags && api.pipeline_tags.length) pipeline = api.pipeline_tags[0];
+    else if (api.tags && api.tags.length) pipeline = api.tags[0];
+
+    // Normalized object to be used by showModelCard
+    const normalized = {
+      purpose: readme || (api.card && api.card.description) || api.description || '-',
+      useCase: (api.card && (api.card.use_case || api.card.usecase)) || '-',
+      category: pipeline || '-',
+      industry: pipeline || '-',
+      tokenPrice: '-',
+      sharePrice: '-',
+      change: '-',
+      rating: '-',
+      ratingFormatted: '-',
+      starsHtml: '—',
+      purchasedPercent: 0,
+  paperLink: sanitizeUrl(paperLink) || sanitizeUrl(api.card && (api.card.paperLink || api.card.paper)) || '-',
+      // include raw api/readme if caller wants
+      _rawApi: api,
+      _readme: readme
+    };
+
+    return { api, readme, normalized };
+  } catch (err) {
+    console.error('fetchHuggingFaceModelCard error for', modelId, err);
+    return null;
+  }
+}
+
+// Append simple HF model rows to the desktop table. Fields are placeholders and actions disabled.
+async function appendHuggingFaceModels(limit = 50) {
+  const tbody = document.querySelector('.models-table tbody');
+  if (!tbody) return;
+  const models = await fetchHuggingFaceModels(limit);
+  if (!models || !models.length) return;
+  // Eagerly fetch model cards (bounded concurrency) so we can show paperLink in desktop rows
+  const modelIds = models.map(m => m.modelId || m.id || m.model || (m.repository?.name)).filter(Boolean);
+  const hfMap = await fetchAllModelCards(modelIds, 8); // id -> {api, readme, normalized}
+
+  modelIds.forEach(modelId => {
+    // Skip if already in table (avoid duplicates)
+    if ([...tbody.querySelectorAll('.model-name')].some(el => el.textContent.trim() === modelId)) return;
+
+    const hf = hfMap[modelId];
+    const normalized = (hf && hf.normalized) ? hf.normalized : null;
+    if (normalized) normalized._hf = true;
+    if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
+
+    const row = document.createElement('tr');
+    row.className = 'model-row hf-model-row';
+    row.setAttribute('data-hf', 'true');
+
+    const escModelId = escapeHtml(modelId);
+    const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
+    const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
+    const categoryHtml = escapeHtml((normalized && normalized.category) ? normalized.category : '-');
+    const industryHtml = escapeHtml((normalized && normalized.industry) ? normalized.industry : '-');
+
+    row.innerHTML = `
+      <td class="model-name">${escModelId}</td>
+      <td class="paper-link" data-label="Paper">${paperLinkHtml}</td>
+      <td class="model-details" data-label="Details">
+        <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
+      </td>
+      <td class="api-price" data-label="Price per 1K Tokens"><div class="price-value">-</div></td>
+      <td class="value" data-label="Price per Share"><div class="price-value">-</div></td>
+      <td class="daily-delta" data-label="Market Change"><span>-</span></td>
+      <td class="trend-chart" data-label="Trend Chart"><span>-</span></td>
+      <td class="action-cell" data-label="Actions">
+        <div class="invest">
+          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
+          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
+        </div>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+  // Update counts
+  updateSearchResultCount(document.querySelectorAll('.models-table tbody tr').length);
+}
+
+// Append HF models to mobile list with placeholders and disabled actions
+async function appendHuggingFaceModelsToMobile(limit = 50) {
+  const container = document.getElementById('mobileModelsList');
+  if (!container) return;
+  const models = await fetchHuggingFaceModels(limit);
+  if (!models || !models.length) return;
+  // Eagerly fetch HF model cards so we can render category/industry in the mobile list
+  const modelIds = models.map(m => m.modelId || m.id || m.model || (m.repository?.name)).filter(Boolean);
+  const hfMap = await fetchAllModelCards(modelIds, 8);
+
+  modelIds.forEach(modelId => {
+    if (!modelId) return;
+    // Skip existing
+    if ([...container.querySelectorAll('.mobile-model-name')].some(el => el.textContent.trim() === modelId)) return;
+
+    const hf = hfMap[modelId];
+    const normalized = (hf && hf.normalized) ? hf.normalized : null;
+    if (normalized) normalized._hf = true;
+    if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
+
+    const icon = escapeHtml(modelId.charAt(0).toUpperCase());
+    const escModelId = escapeHtml(modelId);
+    const category = escapeHtml((normalized && normalized.category) ? normalized.category : '-');
+    const industry = escapeHtml((normalized && normalized.industry) ? normalized.industry : '-');
+
+    const item = document.createElement('div');
+    item.className = 'mobile-model-item hf-mobile-item';
+    item.setAttribute('data-hf', 'true');
+    item.innerHTML = `
+      <div class="mobile-model-item-header">
+        <div class="mobile-model-icon">${icon}</div>
+        <div style="flex: 1;">
+          <div class="mobile-model-name">${escModelId}</div>
+        </div>
+      </div>
+      <div class="mobile-model-info">
+        <div class="mobile-model-info-row">
+          <span class="mobile-model-label">Category:</span>
+          <span class="mobile-model-value">${category}</span>
+        </div>
+        <div class="mobile-model-info-row">
+          <span class="mobile-model-label">Industry:</span>
+          <span class="mobile-model-value">${industry}</span>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(item);
+  });
+}
+
+// Helper: fetch all model cards with bounded concurrency
+async function fetchAllModelCards(modelIds, concurrency = 4) {
+  const results = {};
+  let i = 0;
+  const runners = new Array(concurrency).fill(null).map(async () => {
+    while (i < modelIds.length) {
+      const idx = i++;
+      const id = modelIds[idx];
+      try {
+        const hf = await fetchHuggingFaceModelCard(id);
+        if (hf) results[id] = hf;
+      } catch (e) {
+        console.warn('fetchAllModelCards error for', id, e);
+      }
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+// expose
+window.fetchHuggingFaceModels = fetchHuggingFaceModels;
+window.fetchHuggingFaceModelCard = fetchHuggingFaceModelCard;
+window.appendHuggingFaceModels = appendHuggingFaceModels;
+window.appendHuggingFaceModelsToMobile = appendHuggingFaceModelsToMobile;

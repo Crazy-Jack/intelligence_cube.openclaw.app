@@ -1267,9 +1267,30 @@
 		}
 		
 		// 显示手机端模型详情
-		function showMobileModelDetail(modelName) {
-		  const modelData = MODEL_DATA[modelName];
-		  if (!modelData) return;
+        async function showMobileModelDetail(modelName) {
+          let modelData = MODEL_DATA[modelName];
+          // If not in local data, check if this is a HF item and lazy-load its README/metadata
+          if (!modelData) {
+            try {
+              const listItem = [...document.querySelectorAll('.mobile-model-item')].find(it => it.querySelector('.mobile-model-name') && it.querySelector('.mobile-model-name').textContent.trim() === modelName);
+              const isHF = listItem && (listItem.getAttribute('data-hf') === 'true' || listItem.classList.contains('hf-mobile-item'));
+              if (isHF && typeof fetchHuggingFaceModelCard === 'function') {
+                const hf = await fetchHuggingFaceModelCard(modelName);
+                if (hf && hf.normalized) {
+                  hf.normalized._hf = true;
+                  MODEL_DATA[modelName] = hf.normalized;
+                  modelData = hf.normalized;
+                } else if (hf && hf.readme) {
+                  const normalized = { purpose: hf.readme, category: hf.api?.pipeline_tag||hf.api?.pipeline_tags?.[0]||'-', industry: hf.api?.pipeline_tag||'-', tokenPrice:'-', sharePrice:'-', change:'-', rating:'-', ratingFormatted:'-', starsHtml:'—', purchasedPercent:0, paperLink: hf.normalized?.paperLink || '-', _hf:true };
+                  MODEL_DATA[modelName] = normalized;
+                  modelData = normalized;
+                }
+              }
+            } catch (e) {
+              console.warn('HF lazy load for mobile detail failed', e);
+            }
+          }
+          if (!modelData) return;
 		  
 		  // 隐藏列表视图，显示详情视图
 		  document.getElementById('mobileModelsList').style.display = 'none';
@@ -1322,10 +1343,15 @@
 		      </div>
 		    </div>
 		    
-		    <div class="mobile-detail-actions">
-		      <button class="mobile-detail-btn primary" onclick="tryModelFromModelverseByName('${modelName}')">Try</button>
-		      <button class="mobile-detail-btn success" onclick="addToCartFromModelverseByName('${modelName}')">Add to Cart</button>
-		    </div>
+                <div class="mobile-detail-actions">
+                    ${modelData && modelData._hf ?
+                        `<button class="mobile-detail-btn primary" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
+                         <button class="mobile-detail-btn success" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>`
+                        :
+                        `<button class="mobile-detail-btn primary" onclick="tryModelFromModelverseByName('${modelName}')">Try</button>
+                         <button class="mobile-detail-btn success" onclick="addToCartFromModelverseByName('${modelName}')">Add to Cart</button>`
+                    }
+                </div>
 		  `;
 		  
 		  // 滚动到顶部
@@ -1407,11 +1433,18 @@
 		});
 
 		  // 页面加载后生成
-		document.addEventListener('DOMContentLoaded', function() {
-		    generateModelTable();
-		    generateMobileModelList(); // 同时生成手机端列表
-		    initMobileSearchResults(); // 初始化手机端搜索结果显示
-		  });
+        document.addEventListener('DOMContentLoaded', function() {
+            generateModelTable();
+            generateMobileModelList(); // 同时生成手机端列表
+            // Append Hugging Face models (placeholders + disabled actions)
+            try {
+              if (window.appendHuggingFaceModels) window.appendHuggingFaceModels(100);
+              if (window.appendHuggingFaceModelsToMobile) window.appendHuggingFaceModelsToMobile(100);
+            } catch (e) {
+              console.warn('Appending HF models failed', e);
+            }
+            initMobileSearchResults(); // 初始化手机端搜索结果显示
+          });
 
         window.addToCartFromModelverse = addToCartFromModelverse;
         window.tryModelFromModelverse = tryModelFromModelverse;
