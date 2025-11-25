@@ -9,7 +9,7 @@ const fetch = require('node-fetch');
 console.log('✅ Dependencies loaded successfully');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 console.log(`🔧 Server configuration: PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
 

@@ -533,12 +533,6 @@ class BSCNetworkGuide {
             background: white;
         }
 
-        .bsc-network-card.recommended {
-            border-color: #8b5cf6;
-            background: linear-gradient(135deg, #f8faff 0%, #f0f9ff 100%);
-            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
-        }
-
         .bsc-network-header {
             display: flex;
             justify-content: space-between;
@@ -559,11 +553,6 @@ class BSCNetworkGuide {
             font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
-        }
-
-        .bsc-badge.recommended {
-            background: #8b5cf6;
-            color: white;
         }
 
         .bsc-badge.testnet {
@@ -747,10 +736,9 @@ class BSCNetworkGuide {
 	            </div>
 
 	            <div class="bsc-network-options">
-	                <div class="bsc-network-card recommended">
+	                <div class="bsc-network-card">
 	                    <div class="bsc-network-header">
-	                        <h4>🌟 BNB Mainnet (Recommended)</h4>
-	                        <span class="bsc-badge recommended">Recommended</span>
+	                        <h4>🌟 BNB Mainnet</h4>
 	                    </div>
 	                    <div class="bsc-network-details">
 	                        <p>• Real BNB tokens and transactions</p>

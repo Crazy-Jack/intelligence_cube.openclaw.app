@@ -5,7 +5,7 @@ import { copyFileSync, mkdirSync, readdirSync, statSync } from 'fs'
 export default defineConfig({
   server: {
     host: '0.0.0.0', // Allow external access
-    port: 3000,
+    port: 3001,
     strictPort: true,
   },
   build: {

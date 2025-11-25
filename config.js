@@ -12,7 +12,7 @@ const config = {
     
     // Server Configuration
     server: {
-        port: 3000,
+        port: 3001,
         host: 'localhost'
     },
     

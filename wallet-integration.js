@@ -1136,7 +1136,6 @@ const makeRow = (net) => {
     <div class="wallet-info">
       <div class="wallet-name">
         ${net.name}
-        ${supportsCheckIn ? '<span style="margin-left: 6px; font-size: 11px; background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 600;">✓ Recommended</span>' : ''}
       </div>
     </div>
   `;
@@ -1189,11 +1188,6 @@ const makeRow = (net) => {
   const footer = document.createElement('div');
   footer.className = 'network-modal-footer';
   footer.innerHTML = `
-  <div style="margin-bottom: 12px; padding: 10px; background: #fef3c7; border-radius: 8px; border: 1px solid #fcd34d;">
-    <p style="font-size: 13px; color: #92400e; margin: 0; text-align: center;">
-      ℹ️ Daily check-in is currently only supported on <strong>BNB Chain</strong>,<strong>opBNB</strong> and <strong>Solana Devnet</strong>. Other chains are coming soon!
-    </p>
-  </div>
   <div style="text-align: center; color: #6b7280; font-size: 13px;">
     By Intelligence Cubed
   </div>
