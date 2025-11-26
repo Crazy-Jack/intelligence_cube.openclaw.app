@@ -197,7 +197,8 @@ body {
 /* Main Layout */
 .main-layout {
     display: flex;
-    height: calc(100vh - 56px);
+    /* 用 min-height 避免 100vh 在移动端地址栏伸缩时造成跳动 */
+    min-height: calc(100vh - 56px);
 }
 
 /* Sidebar */
