@@ -12,6 +12,12 @@ body {
     color: #333;
     line-height: 1.4;
     min-height: 100vh;
+    /* 移动端优化 */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    /* 确保在真机上正确显示 */
+    width: 100%;
+    overflow-x: hidden;
 }
 
 /* Top Banner */
