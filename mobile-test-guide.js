@@ -1,4 +1,4 @@
-// mobile-test-guide.js - 移动设备测试指南
+  // mobile-test-guide.js - 移动设备测试指南
 // 运行此脚本以获取在手机上测试应用所需的信息
 
 const os = require('os');

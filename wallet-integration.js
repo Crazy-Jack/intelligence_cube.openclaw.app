@@ -127,23 +127,29 @@ async function connectMetaMaskWallet() {
   }
 
   const isMobileEnv = isMobileDevice() || isRealMobileDevice();
+  const hasInjectedProvider = window.ethereum && (window.ethereum.isMetaMask || window.ethereum.isTrust || window.ethereum.isTokenPocket);
 
-  // === 手机端：统一走 WalletConnect / AppKit 管道 ===
-  if (isMobileEnv) {
-    console.log('[Connect][MetaMask] Mobile detected → using WalletConnect/AppKit');
+  // === 手机端：只有在没有注入钱包环境时，才走 WalletConnect / AppKit 管道 ===
+  // 如果是在 MetaMask App / Trust Wallet App 等内置浏览器中，直接走下面的直连逻辑
+  if (isMobileEnv && !hasInjectedProvider) {
+    console.log('[Connect][MetaMask] Mobile detected & No Injected Provider → using WalletConnect/AppKit');
     await connectWalletConnect();
     return;
   }
 
-  // === 桌面端：保持原来的 MetaMask 直连逻辑 ===
-  console.log('[Connect][MetaMask] start (desktop switch-first)');
+  // === 桌面端 或 移动端内置浏览器：保持原来的 MetaMask 直连逻辑 ===
+  console.log('[Connect][MetaMask] start (injected/desktop flow)');
   try {
     // ① 取得 provider（尽量用已注入的）
     const provider = window.walletManager?.getMetaMaskProvider?.()
                   || window.walletManager?.ethereum
                   || window.ethereum;
     if (!provider || typeof provider.request !== 'function') {
-      throw new Error('MetaMask provider not found');
+       if (window.bscGuide && typeof window.bscGuide.showInstallMetaMaskGuide === 'function') {
+          window.bscGuide.showInstallMetaMaskGuide();
+          return;
+       }
+       throw new Error('MetaMask provider not found');
     }
 
     // ② 先确保切到"用户选的链"（必要时添加链）
@@ -154,6 +160,8 @@ async function connectMetaMaskWallet() {
     const address = await waitForAccounts(provider);
 
     // ④ 写入状态 & 刷UI & 广播
+    const chainId = await provider.request({ method: 'eth_chainId' });
+
     if (window.walletManager) {
       window.walletManager.walletType = 'metamask';
       window.walletManager.walletAddress = address;
@@ -176,11 +184,19 @@ async function connectMetaMaskWallet() {
       modal.style.display = 'none';
     }
 
-    showNotification('MetaMask connected.', 'success');
+    if (window.bscGuide && typeof window.bscGuide.showSuccessMessage === 'function') {
+        window.bscGuide.showSuccessMessage(address, chainId);
+    } else {
+        showNotification('MetaMask connected.', 'success');
+    }
     console.log('[Connect][MetaMask] success ->', address);
   } catch (e) {
     console.error('[Connect][MetaMask] error:', e);
-    showNotification(e?.message || 'Failed to connect MetaMask', 'error');
+    if (window.bscGuide && typeof window.bscGuide.handleConnectionError === 'function') {
+        window.bscGuide.handleConnectionError(e);
+    } else {
+        showNotification(e?.message || 'Failed to connect MetaMask', 'error');
+    }
   }
 }
 
@@ -1318,7 +1334,8 @@ function getPreferredNetwork() {
     const data = raw ? JSON.parse(raw) : null;
     if (data && I3_NETWORKS[data.key]) return I3_NETWORKS[data.key];
   } catch {}
-  return I3_NETWORKS.bnb; // 默认 BNB
+  // Return null if no preference is set (do not force switch to BNB)
+  return null; 
 }
 
 function setPreferredNetwork(key) {
