@@ -452,9 +452,16 @@ body:has(.modelverse-content.full-width) .main-layout,
 .main-layout.full-width-layout {
     display: block;
     width: 100%;
-    max-width: 450px;   /* “手机宽度”上限 */
+    max-width: 100%;    /* 桌面端全宽显示 */
     margin: 0 auto;     /* 居中 */
     padding: 16px;      /* 两边留白 */
+}
+
+/* 仅在移动端限制宽度 */
+@media (max-width: 768px) {
+    .main-layout.full-width-layout {
+        max-width: 450px;
+    }
 }
 
 @media (min-width: 1024px) {

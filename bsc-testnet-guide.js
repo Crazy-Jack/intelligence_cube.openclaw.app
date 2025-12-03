@@ -585,18 +585,31 @@ class BSCNetworkGuide {
 			let accounts = [];
 			try {
 				accounts = await provider.request({ method: 'eth_requestAccounts' });
-			} catch (e) {
-				if (e?.code === -32002) {
-					// 已有请求在进行中，退回读取现有账户
-					accounts = await provider.request({ method: 'eth_accounts' });
-				} else if (e?.code === 4001) {
-					this.showUserRejectedMessage();
-					return;
-				} else {
-					throw e;
-				}
+		} catch (e) {
+			if (e?.code === -32002) {
+				// 已有请求在进行中，退回读取现有账户
+				accounts = await provider.request({ method: 'eth_accounts' });
+			} else if (e?.code === 4001) {
+				this.showUserRejectedMessage();
+				return;
+			} else {
+				throw e;
 			}
-			if (!accounts?.length) { this.showSwitchToEthereumAccount(); return; }
+		}
+		// 🔑 修复：账户为空时，检查是否真的是 Solana 账户问题
+		if (!accounts?.length) { 
+			const preferred = typeof getPreferredNetwork === 'function' ? getPreferredNetwork() : null;
+			const walletType = window.walletManager?.walletType || '';
+			const isActuallyUsingSolana = (preferred?.kind === 'solana') || walletType.includes('solana') || walletType.includes('phantom');
+			
+			if (isActuallyUsingSolana) {
+				this.showSwitchToEthereumAccount();
+			} else {
+				// 不是 Solana 问题，显示通用的连接失败提示
+				throw new Error('No accounts found. Please make sure your wallet is unlocked and try again.');
+			}
+			return;
+		}
 			// 2) 确保主网/测试网已添加
 			await this.ensureNetworksAdded();
 			// 3) Check current chain (Auto-switch disabled for multi-chain support)
@@ -1044,14 +1057,14 @@ class BSCNetworkGuide {
     handleConnectionError(error) {
         console.log('Connection error details:', error);
         
-        // Check for specific error patterns that indicate Solana account
-        const errorMessage = error.message || '';
-        const isSolanaError = errorMessage.includes('eth_requestAccounts') || 
-                             errorMessage.includes('MetaMask is not connected') ||
-                             error.code === -32603 ||
-                             errorMessage.includes('Please Finish connecting your wallet(entering login information in the extension)!');
+        // 🔑 修复：正确检查用户是否真的在使用 Solana 账户
+        // 只有当用户选择的网络是 Solana 或钱包类型是 Solana 时，才提示切换
+        const preferred = typeof getPreferredNetwork === 'function' ? getPreferredNetwork() : null;
+        const walletType = window.walletManager?.walletType || '';
+        const isActuallyUsingSolana = (preferred?.kind === 'solana') || walletType.includes('solana') || walletType.includes('phantom');
         
-        if (isSolanaError) {
+        // 只有确实在使用 Solana 时才提示切换到 EVM 账户
+        if (isActuallyUsingSolana) {
             this.showSwitchToEthereumAccount();
             return;
         }
