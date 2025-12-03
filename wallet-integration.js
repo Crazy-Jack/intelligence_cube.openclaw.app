@@ -17,7 +17,19 @@ function showWalletSelectionModal() {
     // === Filter wallet options by selected network ===
     try {
       const preferred = getPreferredNetwork?.();
-      const isEvm = preferred?.kind === 'evm';
+      
+      // If no preference is set, show all wallets
+      if (!preferred) {
+         modal.querySelectorAll('.wallet-option').forEach(el => {
+            el.style.display = 'flex';
+            el.classList.remove('disabled');
+            el.style.pointerEvents = 'auto';
+            el.style.opacity = '1';
+         });
+         return;
+      }
+
+      const isEvm = preferred.kind === 'evm';
 
       // 你的按钮是 class="wallet-option"，onclick 分别是 connectMetaMaskWallet / connectWalletConnect / connectCoinbaseWallet / connectSolanaPhantom
       const items = modal.querySelectorAll('.wallet-option');
@@ -119,7 +131,13 @@ function getBinanceProvider() {
  */
 // 1) MetaMask —— 桌面走 extension，手机走 WalletConnect/AppKit
 async function connectMetaMaskWallet() {
-  const preferred = getPreferredNetwork();
+  let preferred = getPreferredNetwork();
+  // Auto-select Ethereum if no preference is set
+  if (!preferred) {
+      setPreferredNetwork('ethereum');
+      preferred = getPreferredNetwork();
+  }
+  
   if (!preferred || preferred.kind !== 'evm') {
     showNotification('Invalid network: Please choose an EVM network first.', 'error');
     try { openNetworkPickerModal?.(); } catch (_) {}
@@ -202,7 +220,14 @@ async function connectMetaMaskWallet() {
 
 // 1.5) Binance Wallet —— 桌面走扩展，手机走 WalletConnect/AppKit
 async function connectBinanceWallet() {
-  const preferred = getPreferredNetwork();
+  let preferred = getPreferredNetwork();
+  // Auto-select BNB if no preference is set for Binance Wallet? Or just Ethereum. 
+  // Binance Wallet supports multiple chains, but usually associated with BNB. Let's default to BNB for Binance Wallet.
+  if (!preferred) {
+      setPreferredNetwork('bnb');
+      preferred = getPreferredNetwork();
+  }
+
   if (!preferred || preferred.kind !== 'evm') {
     showNotification('Invalid network: Please choose an EVM network first.', 'error');
     try { openNetworkPickerModal?.(); } catch (_) {}
@@ -306,7 +331,12 @@ async function connectBinanceWallet() {
  */
 // 3) Coinbase（CDP）—— 桌面走 CDP，手机走 WalletConnect/AppKit
 async function connectCoinbaseWallet() {
-  const preferred = getPreferredNetwork();
+  let preferred = getPreferredNetwork();
+  if (!preferred) {
+      setPreferredNetwork('base'); // Default to Base for Coinbase Wallet
+      preferred = getPreferredNetwork();
+  }
+
   if (!preferred || preferred.kind !== 'evm') {
     showNotification('Invalid network: Please choose an EVM network first.', 'error');
     try { openNetworkPickerModal?.(); } catch (_) {}
@@ -315,14 +345,57 @@ async function connectCoinbaseWallet() {
 
   const isMobileEnv = isMobileDevice() || isRealMobileDevice();
 
-  // === 手机端：统一走 WalletConnect / AppKit 管道 ===
-  if (isMobileEnv) {
-    console.log('[Connect][Coinbase] Mobile detected → using WalletConnect/AppKit');
+  // === 新增：检测是否在 Coinbase Wallet App 的浏览器中 (In-App Browser) ===
+  // Coinbase Wallet 通常会注入 isCoinbaseWallet=true，但也可能伪装成 MetaMask
+  const hasInjectedProvider = window.ethereum && (
+      window.ethereum.isCoinbaseWallet || 
+      window.ethereum.isMetaMask || 
+      (window.ethereum.providers && window.ethereum.providers.some(p => p.isCoinbaseWallet))
+  );
+
+  // 1. 如果是移动端且没有注入 Provider -> 走 WalletConnect (AppKit)
+  if (isMobileEnv && !hasInjectedProvider) {
+    console.log('[Connect][Coinbase] Mobile detected & No Injected Provider → using WalletConnect/AppKit');
     await connectWalletConnect();
     return;
   }
 
-  // === 桌面端：保留原来的 CDP 逻辑 ===
+  // 2. 如果检测到注入 Provider (移动端 In-App 或 桌面端已安装插件) -> 直接尝试标准连接
+  if (hasInjectedProvider) {
+      console.log('[Connect][Coinbase] Injected provider found. Attempting direct connection...');
+      try {
+          if (!window.walletManager) throw new Error('WalletManager not ready');
+          
+          // 调用 walletManager 的通用连接逻辑 (已修复支持 isCoinbaseWallet)
+          const result = await window.walletManager.connectWallet('coinbase');
+          
+          if (result.success) {
+               // 关弹窗
+               const modal = document.getElementById('walletModal');
+               if (modal) {
+                 modal.classList.remove('show');
+                 modal.style.display = 'none';
+               }
+               const dropdown = document.getElementById('accountDropdown');
+               if (dropdown) dropdown.classList.remove('show');
+               
+               showNotification('Coinbase Wallet connected!', 'success');
+               return;
+          } else {
+               throw new Error(result.error || 'Connection failed');
+          }
+      } catch (e) {
+          console.warn('[Connect][Coinbase] Direct connection failed:', e);
+          // 如果是移动端 In-App，这里失败了就真失败了，报出来
+          if (isMobileEnv) {
+              showNotification(e.message || 'Failed to connect in-app wallet', 'error');
+              return;
+          }
+          // 如果是桌面端，还可以继续尝试下面的 CDP 逻辑作为 fallback
+      }
+  }
+
+  // === 桌面端：保留原来的 CDP 逻辑 (Smart Wallet / Scan QR) ===
   console.log('[Connect][CDP] start');
   try {
     if (!window.cdpConnect) throw new Error('CDP not ready. Check SDK loader.');
@@ -372,7 +445,12 @@ async function connectCoinbaseWallet() {
 // 2) WalletConnect —— 先切链 → 请求账户 → 等到账户 → 刷UI → 关弹窗
 // 2) WalletConnect —— 先关自家弹窗 → 发起连接(二维码) → 切链 → 要账户 → 等到账户 → 刷UI → 兜底再关
 async function connectWalletConnect() {
-  const preferred = getPreferredNetwork();
+  let preferred = getPreferredNetwork();
+  if (!preferred) {
+      setPreferredNetwork('ethereum'); // Default to Ethereum
+      preferred = getPreferredNetwork();
+  }
+
   if (!preferred || preferred.kind !== 'evm') {
     showNotification('Invalid network: Please choose an EVM network first.', 'error');
     try { openNetworkPickerModal?.(); } catch {}
@@ -460,8 +538,24 @@ async function connectWalletConnect() {
     // 连接 Phantom (Solana)
 // 4) Phantom (Solana)
 async function connectSolanaPhantom() {
-  const preferred = getPreferredNetwork();
-  if (!preferred || preferred.kind !== 'solana') {
+  // In-app browser detection for Phantom (mobile or desktop)
+  if (window.phantom?.solana?.isPhantom || window.solana?.isPhantom) {
+      console.log('[Connect][Phantom] In-app/Extension detected');
+      // Allow direct pass-through without forced network check initially?
+      // Actually, we still want to set preferred network to Solana if not set, 
+      // but we should rely on wallet-manager's logic to handle the provider.
+  }
+
+  let preferred = getPreferredNetwork();
+  if (!preferred) {
+      setPreferredNetwork('solana'); // Auto-select Solana
+      preferred = getPreferredNetwork();
+  }
+
+  // If user explicitly selected EVM, warn them. But if they are in Phantom App, 
+  // they likely want Solana. We might want to auto-switch to Solana if they are in Phantom App?
+  // For now, strict check:
+  if (preferred.kind !== 'solana') {
     showNotification('Invalid network: Please switch to Solana before using Phantom.', 'error');
     return;
   }
@@ -470,8 +564,15 @@ async function connectSolanaPhantom() {
   try {
     // ⚠️ 不要先关弹窗；保持手势先连接
     if (!window.walletManager) throw new Error('Wallet manager not available');
+    
+    // Force "phantom" type
     const result = await window.walletManager.connectSolana('phantom');
-    if (!result?.success) throw new Error(result?.error || 'Failed to connect Phantom');
+    
+    if (!result?.success) {
+        // If failed, check if we are on mobile but NOT in Phantom app (e.g. Safari)
+        // wallet-manager already handles the deep link logic in connectSolana
+        throw new Error(result?.error || 'Failed to connect Phantom');
+    }
 
     // 成功后再关你的白色弹窗
     const modal = document.getElementById('walletModal');
