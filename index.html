@@ -1125,7 +1125,7 @@
 		  opacity: 0;
 		  pointer-events: none;
 		  transition: opacity .25s ease;
-		  z-index: 9999;
+		  z-index: 10010; /* Ensure it's above wallet-modal (10000) and follow-x (10001) */
 		}
 		.network-modal.show {
 		  opacity: 1;

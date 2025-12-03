@@ -816,7 +816,12 @@ function initializeWalletUI() {
             // 初始化时渲染首选网络徽章
             try {
                 const preferred = getPreferredNetwork?.();
-                if (preferred) renderNetworkBadge(preferred);
+                if (preferred) {
+                    renderNetworkBadge(preferred);
+                } else {
+                    // 如果没有偏好，设置默认值并显示
+                    setPreferredNetwork('bnb');
+                }
             } catch (e) {
                 console.error('Failed to render preferred network badge:', e);
             }
@@ -1448,8 +1453,13 @@ function setPreferredNetwork(key) {
 
 document.addEventListener('DOMContentLoaded', () => {
   const n = getPreferredNetwork();
-  // 未连接也显示徽章
-  renderNetworkBadge({ name: n.name, icon: n.icon });
+  // 未连接也显示徽章（如果没有偏好，默认显示 BNB Chain）
+  if (n) {
+    renderNetworkBadge({ name: n.name, icon: n.icon });
+  } else {
+    // 默认设置为 BNB Chain 并显示
+    setPreferredNetwork('bnb');
+  }
   // 点击徽章 -> 打开网络选择面板
   const badge = document.getElementById('networkBadge');
   if (badge) badge.addEventListener('click', openNetworkPickerModal);
