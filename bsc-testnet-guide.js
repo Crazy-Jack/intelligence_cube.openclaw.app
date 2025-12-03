@@ -30,6 +30,7 @@ class BSCNetworkGuide {
         }
         this.initializeStyles();
         this.isConnecting = false;
+        this.lastChainId = null;
     }
 
     isSupportedNetwork(chainId) {
@@ -584,27 +585,41 @@ class BSCNetworkGuide {
 			let accounts = [];
 			try {
 				accounts = await provider.request({ method: 'eth_requestAccounts' });
-			} catch (e) {
-				if (e?.code === -32002) {
-					// 已有请求在进行中，退回读取现有账户
-					accounts = await provider.request({ method: 'eth_accounts' });
-				} else if (e?.code === 4001) {
-					this.showUserRejectedMessage();
-					return;
-				} else {
-					throw e;
-				}
+		} catch (e) {
+			if (e?.code === -32002) {
+				// 已有请求在进行中，退回读取现有账户
+				accounts = await provider.request({ method: 'eth_accounts' });
+			} else if (e?.code === 4001) {
+				this.showUserRejectedMessage();
+				return;
+			} else {
+				throw e;
 			}
-			if (!accounts?.length) { this.showSwitchToEthereumAccount(); return; }
+		}
+		// 🔑 修复：账户为空时，检查是否真的是 Solana 账户问题
+		if (!accounts?.length) { 
+			const preferred = typeof getPreferredNetwork === 'function' ? getPreferredNetwork() : null;
+			const walletType = window.walletManager?.walletType || '';
+			const isActuallyUsingSolana = (preferred?.kind === 'solana') || walletType.includes('solana') || walletType.includes('phantom');
+			
+			if (isActuallyUsingSolana) {
+				this.showSwitchToEthereumAccount();
+			} else {
+				// 不是 Solana 问题，显示通用的连接失败提示
+				throw new Error('No accounts found. Please make sure your wallet is unlocked and try again.');
+			}
+			return;
+		}
 			// 2) 确保主网/测试网已添加
 			await this.ensureNetworksAdded();
-			// 3) 判定当前链，必要时切到主网
-			const currentChainId = await provider.request({ method: 'eth_chainId' });
-			if (currentChainId !== this.PREFERRED_CHAIN_ID) {
-				await this.switchToNetwork('mainnet'); // 内部已处理 4902 等
-			}
-			// 4) 成功反馈
+			// 3) Check current chain (Auto-switch disabled for multi-chain support)
+			// const currentChainId = await provider.request({ method: 'eth_chainId' });
+			// if (currentChainId !== this.PREFERRED_CHAIN_ID) {
+			// 	await this.switchToNetwork('mainnet'); 
+			// }
+			// 4) Success feedback
 			const finalChainId = await provider.request({ method: 'eth_chainId' });
+            this.lastChainId = finalChainId;
 			if (window.handleWalletConnect) await window.handleWalletConnect();
 			this.showSuccessMessage(accounts[0], finalChainId);
 			this.setupNetworkMonitoring();
@@ -970,75 +985,25 @@ class BSCNetworkGuide {
 
     // Show success message
 	showSuccessMessage(address, chainId) {
-	    const networkType = this.getNetworkType(chainId);
-	    const config = this.NETWORK_CONFIGS[networkType];
-	    const isMainnet = networkType === 'mainnet';
-	    
 	    this.showModal({
-	        title: 'Connection Successful!',
+	        title: 'Connection Successful',
 	        icon: 'check',
 	        iconClass: 'success',
 	        content: `
 	            <div class="bsc-description">
-	                Your wallet has been successfully connected to ${config.chainName}. You're all set to start using our platform!
+	                Wallet connected successfully.<br>
+	                Welcome to use Intelligence Cubed.
 	            </div>
-
-	            <div class="bsc-info-card highlight">
-	                <h4>✅ Connection Details</h4>
-	                <div class="bsc-network-info">
-	                    <div class="bsc-network-item">
-	                        <div class="bsc-network-label">Network</div>
-	                        <div class="bsc-network-value required">${config.chainName}</div>
-	                    </div>
-	                    <div class="bsc-network-item">
-	                        <div class="bsc-network-label">Status</div>
-	                        <div class="bsc-network-value required">Connected</div>
-	                    </div>
-	                </div>
-	                <div class="bsc-address-display">
-	                    ${address.slice(0, 6)}...${address.slice(-4)}
-	                </div>
-	            </div>
-
-	            <div class="bsc-benefits-list">
-	                <div class="bsc-benefit-item">
-	                    <div class="bsc-benefit-icon ${isMainnet ? 'fast' : 'free'}">
-	                        ${isMainnet ? '🚀' : '🎉'}
-	                    </div>
-	                    <div class="bsc-benefit-text">
-	                        ${isMainnet ? 'Full ecosystem access' : 'Ready to earn free test tokens'}
-	                    </div>
-	                </div>
-	                <div class="bsc-benefit-item">
-	                    <div class="bsc-benefit-icon fast">⚡</div>
-	                    <div class="bsc-benefit-text">Fast and secure transactions</div>
-	                </div>
-	                <div class="bsc-benefit-item">
-	                    <div class="bsc-benefit-icon safe">🌟</div>
-	                    <div class="bsc-benefit-text">Platform features unlocked</div>
-	                </div>
-	            </div>
-
-	            ${!isMainnet ? `
-	                <div class="bsc-info-card">
-	                    <h4>💡 Want the Full Experience?</h4>
-	                    <p>You're currently on Testnet. <a href="#" onclick="bscGuide.switchToNetwork('mainnet')" style="color: #8b5cf6; font-weight: 600;">Switch to Mainnet</a> for access to real tokens and the complete ecosystem.</p>
-	                </div>
-	            ` : ''}
 	        `,
 	        actions: `
 	            <div class="bsc-actions">
 	                <button class="bsc-btn bsc-btn-success" onclick="bscGuide.closeModal()">
-	                    🚀 Get Started
+	                    OK
 	                </button>
-	                ${!isMainnet ? `
-	                    <button class="bsc-btn bsc-btn-primary" onclick="bscGuide.switchToNetwork('mainnet')">
-	                        🌟 Upgrade to Mainnet
-	                    </button>
-	                ` : ''}
 	            </div>
 	        `,
-	        autoClose: isMainnet ? 3000 : null
+	        showCloseBtn: true,
+	        autoClose: 3000
 	    });
 	}
 
@@ -1047,39 +1012,15 @@ class BSCNetworkGuide {
     setupNetworkMonitoring() {
         if (window.ethereum) {
             window.ethereum.on('chainChanged', (chainId) => {
-                if (!this.isSupportedNetwork(chainId)) {
-                    this.showNetworkChangeWarning();
-                }
+                // Update internal state but do not show modal
+                this.lastChainId = chainId;
+                console.log('Network changed to:', chainId);
             });
         }
     }
 
-    showNetworkChangeWarning() {
-        this.showModal({
-            title: 'Network Changed',
-            icon: 'warning',
-            iconClass: 'warning',
-            content: `
-                <div class="bsc-description">
-                    You've switched to a different network. Some features may not work properly until you return to BSC Testnet.
-                </div>
-
-                <div class="bsc-info-card">
-                    <h4>⚠️ What This Means</h4>
-                    <p>• Platform features may be limited<br>
-                       • Transactions might fail<br>
-                       • Your assets may not display correctly</p>
-                </div>
-            `,
-            actions: `
-                <div class="bsc-actions">
-                    <button class="bsc-btn bsc-btn-warning" onclick="bscGuide.attemptNetworkSwitch()">
-                        🔄 Return to BSC Testnet
-                    </button>
-                </div>
-            `,
-            showCloseBtn: true
-        });
+    showNetworkChangeWarning(oldChainId, newChainId) {
+        // Notification disabled per user request
     }
 
     // Show loading modal
@@ -1116,14 +1057,14 @@ class BSCNetworkGuide {
     handleConnectionError(error) {
         console.log('Connection error details:', error);
         
-        // Check for specific error patterns that indicate Solana account
-        const errorMessage = error.message || '';
-        const isSolanaError = errorMessage.includes('eth_requestAccounts') || 
-                             errorMessage.includes('MetaMask is not connected') ||
-                             error.code === -32603 ||
-                             errorMessage.includes('Please Finish connecting your wallet(entering login information in the extension)!');
+        // 🔑 修复：正确检查用户是否真的在使用 Solana 账户
+        // 只有当用户选择的网络是 Solana 或钱包类型是 Solana 时，才提示切换
+        const preferred = typeof getPreferredNetwork === 'function' ? getPreferredNetwork() : null;
+        const walletType = window.walletManager?.walletType || '';
+        const isActuallyUsingSolana = (preferred?.kind === 'solana') || walletType.includes('solana') || walletType.includes('phantom');
         
-        if (isSolanaError) {
+        // 只有确实在使用 Solana 时才提示切换到 EVM 账户
+        if (isActuallyUsingSolana) {
             this.showSwitchToEthereumAccount();
             return;
         }
@@ -1247,7 +1188,8 @@ class BSCNetworkGuide {
 const bscGuide = new BSCNetworkGuide();
 
 // Update wallet connection function to use guide
-function connectMetaMaskWallet() {
+// Renamed to avoid conflict with wallet-integration.js
+function connectMetaMaskWallet_BSC_GUIDE() {
     if (typeof closeWalletModal === 'function') {
         closeWalletModal();
     }
@@ -1257,5 +1199,6 @@ function connectMetaMaskWallet() {
 // Export for use in other scripts
 if (typeof window !== 'undefined') {
     window.bscGuide = bscGuide;
-    window.connectMetaMaskWallet = connectMetaMaskWallet;
+    // Do not overwrite global connectMetaMaskWallet to allow wallet-integration.js to handle logic
+    // window.connectMetaMaskWallet = connectMetaMaskWallet;
 }

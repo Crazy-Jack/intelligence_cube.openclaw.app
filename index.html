@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Intelligence Cubed - AI Terminal</title>
     <link rel="icon" type="image/svg+xml" href="/svg/i3-token-logo.svg">
     <link rel="icon" type="image/png" sizes="192x192" href="/png/i3-token-logo.png">  <!-- 可选: 准备一张 192x192 PNG -->
@@ -16,7 +19,7 @@
     <link rel="preload" as="image" href="/svg/chains/base.svg">
     <link rel="preload" as="image" href="/svg/chains/zksync.svg">
     <link rel="preload" as="image" href="/svg/chains/opbnb.svg">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
@@ -1075,6 +1078,19 @@
             font-weight: 400;
         }
 
+        /* 移动设备上 Binance Wallet 移到最前面 */
+        @media (max-width: 768px) {
+            .binance-wallet-option {
+                order: -1; /* 移到最前面 */
+            }
+        }
+
+        /* 桌面端 Binance Wallet 移到最前面 */
+        @media (min-width: 769px) {
+            .binance-wallet-option {
+                order: -1; /* 移到最前面 */
+            }
+        }
 
         /* 响应式设计 */
         @media (max-width: 480px) {
@@ -1091,6 +1107,10 @@
             .wallet-name {
                 font-size: 1rem;
             }
+            
+            .binance-wallet-option {
+                border-width: 2px;
+            }
         }
 
 /* Network modal (独立于 wallet modal) */
@@ -1105,7 +1125,7 @@
 		  opacity: 0;
 		  pointer-events: none;
 		  transition: opacity .25s ease;
-		  z-index: 9999;
+		  z-index: 10010; /* Ensure it's above wallet-modal (10000) and follow-x (10001) */
 		}
 		.network-modal.show {
 		  opacity: 1;
@@ -1225,9 +1245,9 @@
 		.network-badge__icon{ width:20px; height:20px; object-fit:contain; display:block }
 		.network-badge__text{ font-size:14px; font-weight:600; letter-spacing:.2px }
 		.network-badge__caret{ width:16px; height:16px; opacity:.6 }
-		@media (max-width: 768px){
+		/* @media (max-width: 768px){
 		  .network-badge{ display:none !important; }
-		}
+		} */
 
         /* Follow X Modal */
         .follow-x-modal {
@@ -5787,7 +5807,13 @@
             }
         };
 
-        // 显示钱包选择模态框 - 修复事件冒泡问题 + 延迟机制
+        // 检测是否为移动设备
+        function isMobileDevice() {
+            return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || 
+                   (window.innerWidth <= 768 && 'ontouchstart' in window);
+        }
+
+        // 显示钱包选择模态框 - 修复事件冒泡问题 + 延迟机制 + 移动设备优化
         window.showWalletSelectionModal = function(event) {
             // 阻止事件冒泡，防止触发外部点击关闭
             if (event) {
@@ -6179,6 +6205,17 @@
             </div>
 
             <div class="wallet-options">
+                <!-- Binance Wallet 选项 - 优先显示，特别是移动设备 -->
+                <div class="wallet-option available binance-wallet-option" id="binanceWalletOption" onclick="window.open('https://www.binance.com/en/web3wallet', '_blank')">
+                    <span class="wallet-icon-wrap">
+                        <!-- 使用 binance_wallet.jpeg 作为图标 -->
+                        <img src="png/binance_wallet.jpeg" alt="Binance Wallet">
+                    </span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">Binance Wallet</div>
+                    </div>
+                </div>
+
                 <!-- MetaMask 选项 -->
                 <div class="wallet-option available" onclick="connectMetaMaskWallet()">
                     <span class="wallet-icon-wrap">
@@ -6210,17 +6247,6 @@
                     </span>
                     <div class="wallet-info">
                         <div class="wallet-name">Coinbase Wallet</div>
-                    </div>
-                </div>
-
-                <!-- Binance Wallet 选项 -->
-                <div class="wallet-option available" onclick="connectBinanceWallet()">
-                    <span class="wallet-icon-wrap">
-                        <!-- 你自己的官方 SVG/PNG -->
-                        <img src="svg/binance.svg" alt="Binance Wallet">
-                    </span>
-                    <div class="wallet-info">
-                        <div class="wallet-name">Binance Wallet</div>
                     </div>
                 </div>
 

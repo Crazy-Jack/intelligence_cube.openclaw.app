@@ -23,6 +23,7 @@ class WalletManager {
         this.sdk = null;
         this.ethereum = null;
         this.isConnecting = false;
+        this.lastConnectAttempt = 0; // Timestamp of last connection attempt
 
         this.walletType = null;
     	this.appKit = null;
@@ -37,21 +38,28 @@ class WalletManager {
 
 
 	    // 只锁定 MetaMask 的 provider，避免多个钱包并存时被劫持
-    getMetaMaskProvider() {
+    getMetaMaskProvider(preferredType = 'metamask') {
         const eth = window.ethereum;
         try {
             // 多注入场景（Chrome 会把所有 provider 放在 providers 数组里）
             if (eth && Array.isArray(eth.providers) && eth.providers.length) {
+                if (preferredType === 'coinbase') {
+                    const cb = eth.providers.find(p => p && p.isCoinbaseWallet);
+                    if (cb) return cb;
+                }
                 const mm = eth.providers.find(p => p && p.isMetaMask);
                 if (mm) return mm;
+                
+                // 找不到特定类型，但有 provider 列表，返回第一个
+                return eth.providers[0];
             }
             // MetaMask SDK provider（优先）
             if (this.sdk && typeof this.sdk.getProvider === 'function') {
                 const p = this.sdk.getProvider();
                 if (p && p.isMetaMask) return p;
             }
-            // 单 provider 场景：确认是 MetaMask 再用
-            if (eth && eth.isMetaMask) return eth;
+            // 单 provider 场景：兼容 MetaMask 和 Coinbase Wallet (及其他兼容 EIP-1193 的钱包)
+            if (eth && (eth.isMetaMask || eth.isCoinbaseWallet || eth.isTrust || eth.isTokenPocket)) return eth;
         } catch (_) {}
         return null;
     }
@@ -136,19 +144,43 @@ class WalletManager {
 	 */
 // 直接用这段替换你现在的 connectSolana()
 	async connectSolana(kind = 'phantom') {
-	  if (this.isConnecting) return { success: false, error: 'Connection already in progress' };
+	  // Auto-reset stuck connection state after 3 seconds
+	  if (this.isConnecting) {
+	      if (Date.now() - (this.lastConnectAttempt || 0) > 3000) {
+	          console.warn('Connection state stuck, forcing reset...');
+	          this.isConnecting = false;
+	      } else {
+	          return { success: false, error: 'Connection already in progress' };
+	      }
+	  }
 	  this.isConnecting = true;
+	  this.lastConnectAttempt = Date.now();
+	  
 	  try {
-	    // 仅当后面要读取链上数据时才需要 RPC；保留你的写法
+        // RPC 初始化：将“失败”改为“非致命警告”
+	    // 如果 RPC 加载失败，不阻止钱包连接，只是后续无法读取余额或上链
 	    if (!this.initSolanaConnection('devnet')) {
-	      throw new Error('Failed to initialize Solana connection');
+            console.warn('Solana RPC not initialized; skipping RPC, wallet can still connect.');
+            // throw new Error('Failed to initialize Solana connection'); // ← 移除硬性阻断
 	    }
 	    if (kind !== 'phantom') {
 	      throw new Error(`Unsupported Solana wallet: ${kind}`);
 	    }
 	    // ① 检测 Phantom 是否存在
-	    const provider = window.solana;
+	    // Phantom in-app browser usually injects window.phantom.solana or window.solana
+	    // On mobile in-app browser, window.phantom?.solana is preferred
+	    let provider = null;
+        if (window.phantom && window.phantom.solana) {
+            provider = window.phantom.solana;
+        } else if (window.solana) {
+            provider = window.solana;
+        }
+	    
+	    // Check if provider exists AND is Phantom
 	    if (!provider || !provider.isPhantom) {
+	      // Check specifically for Phantom in-app browser characteristics if standard injection fails?
+	      // Usually window.solana.isPhantom is reliable.
+	      
 	      // 更友好的提示 + 合理跳转
 	      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 	      if (typeof showNotification === 'function') {
@@ -170,55 +202,70 @@ class WalletManager {
 	      return { success: false, error: 'Phantom not installed. Download page opened.' };
 	    }
 	    // ② 授权连接（会弹 Phantom 授权）
-	    const res = await provider.connect();
-	    const pubkey = res?.publicKey || provider.publicKey;
-	    if (!pubkey) throw new Error('No public key returned from Phantom');
-	    // ③ 同步本地会话（沿用你的统一 UI / 事件 / Firestore 流）
-	    this.walletType = 'solana-phantom';
-	    this.solana = provider;
-	    this.solanaAddress = String(pubkey.toBase58());
-	    this.walletAddress = this.solanaAddress;
-	    this.isConnected = true;
-	    // ④ 监听断开/账户变化
+        // Handle potential connection errors specifically for mobile
 	    try {
-	      provider.on?.('disconnect', () => this.disconnectWallet());
-	      provider.on?.('accountChanged', (pk) => {
-	        if (!pk) return this.disconnectWallet();
-	        const next = String(pk.toBase58());
-	        if (next !== this.solanaAddress) {
-	          this.saveWalletSpecificData?.();
-	          this.solanaAddress = next;
-	          this.walletAddress = next;
-	          this.loadWalletSpecificData?.();
-	          this.saveToStorage?.();
-	          this.updateUI?.();
-			  try { window.setWalletTypeIcon && window.setWalletTypeIcon(null); } catch {}
-	          window.dispatchEvent(new CustomEvent('walletConnected', {
-	            detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData?.(this.walletAddress) }
-	          }));
-	          try { window.onWalletConnected?.(this.walletAddress, 'solana', 'devnet'); } catch {}
+            const res = await provider.connect();
+	        const pubkey = res?.publicKey || provider.publicKey;
+	        if (!pubkey) throw new Error('No public key returned from Phantom');
+            
+            // ③ 同步本地会话（沿用你的统一 UI / 事件 / Firestore 流）
+            this.walletType = 'solana-phantom';
+	        this.solana = provider;
+	        this.solanaAddress = String(pubkey.toBase58());
+	        this.walletAddress = this.solanaAddress;
+	        this.isConnected = true;
+            
+            // ④ 监听断开/账户变化
+	        try {
+	          provider.on?.('disconnect', () => this.disconnectWallet());
+	          provider.on?.('accountChanged', (pk) => {
+	            if (!pk) return this.disconnectWallet();
+	            const next = String(pk.toBase58());
+	            if (next !== this.solanaAddress) {
+	              this.saveWalletSpecificData?.();
+	              this.solanaAddress = next;
+	              this.walletAddress = next;
+	              this.loadWalletSpecificData?.();
+	              this.saveToStorage?.();
+	              this.updateUI?.();
+			      try { window.setWalletTypeIcon && window.setWalletTypeIcon(null); } catch {}
+	              window.dispatchEvent(new CustomEvent('walletConnected', {
+	                detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData?.(this.walletAddress) }
+	              }));
+	              try { window.onWalletConnected?.(this.walletAddress, 'solana', 'devnet'); } catch {}
+	            }
+	          });
+	        } catch {}
+
+            // ⑤ （可选）读取余额做校验
+	        try {
+	          const { PublicKey } = window.SOL || {};
+	          const lamports = await this.solanaConn.getBalance(new PublicKey(this.solanaAddress));
+	          console.log('SOL balance (lamports):', lamports);
+	        } catch (e) {
+	          console.warn('Failed to fetch SOL balance:', e);
 	        }
-	      });
-	    } catch {}
-	    // ⑤ （可选）读取余额做校验
-	    try {
-	      const { PublicKey } = window.SOL || {};
-	      const lamports = await this.solanaConn.getBalance(new PublicKey(this.solanaAddress));
-	      console.log('SOL balance (lamports):', lamports);
-	    } catch (e) {
-	      console.warn('Failed to fetch SOL balance:', e);
-	    }
-	    // ⑥ 与既有流程对齐
-	    await this.fetchRemoteWalletDataIfAvailable?.();
-	    this.loadWalletSpecificData?.();
-	    this.saveToStorage?.();
-	    this.updateUI?.();
-	    window.dispatchEvent(new CustomEvent('walletConnected', {
-	      detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData?.(this.walletAddress) }
-	    }));
-		renderNetworkBadge(mapChainIdToDisplay(null, 'solana-phantom', 'devnet'));
-	    try { window.onWalletConnected?.(this.walletAddress, 'solana', 'devnet'); } catch {}
-	    return { success: true, address: this.walletAddress, credits: this.credits };
+            
+            // ⑥ 与既有流程对齐
+	        await this.fetchRemoteWalletDataIfAvailable?.();
+	        this.loadWalletSpecificData?.();
+	        this.saveToStorage?.();
+	        this.updateUI?.();
+	        window.dispatchEvent(new CustomEvent('walletConnected', {
+	          detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData?.(this.walletAddress) }
+	        }));
+		    renderNetworkBadge(mapChainIdToDisplay(null, 'solana-phantom', 'devnet'));
+	        try { window.onWalletConnected?.(this.walletAddress, 'solana', 'devnet'); } catch {}
+	        return { success: true, address: this.walletAddress, credits: this.credits };
+
+        } catch (connErr) {
+            console.error('[Phantom] Connect failed:', connErr);
+            // Check for specific error codes if available (e.g. user rejected)
+            if (connErr?.code === 4001) {
+                 return { success: false, error: 'Connection cancelled by user' };
+            }
+            throw connErr;
+        }
 	  } catch (error) {
 	    console.error('Solana connect error:', error);
 	    return { success: false, error: error.message || String(error) };
@@ -406,9 +453,6 @@ class WalletManager {
 
 	// ========== 统一连接入口（MetaMask 默认） ==========
 	async connectWallet(walletType = 'metamask') {
-		if (walletType === 'coinbase') {
-    		return this.connectCoinbaseWallet();
-    	}
 		if (walletType === 'walletconnect') {
         	return this.connectWalletConnect();
     	}
@@ -419,7 +463,7 @@ class WalletManager {
 		try {
 			// Ensure provider (do not reset SDK unless missing)
             if (!this.ethereum) {
-                this.ethereum = this.getMetaMaskProvider();
+                this.ethereum = this.getMetaMaskProvider(walletType);
                 if (!this.ethereum) {
                     throw new Error('No MetaMask provider available. Please install/enable MetaMask.');
                 }
@@ -441,7 +485,15 @@ class WalletManager {
 			if (accounts && accounts.length > 0) {
 				this.walletAddress = accounts[0];
 				this.isConnected = true;
-				this.walletType = 'metamask';
+				
+				// Determine wallet type based on provider flags or fallback to argument
+				if (this.ethereum.isCoinbaseWallet) {
+					this.walletType = 'coinbase';
+				} else if (this.ethereum.isTrust) {
+					this.walletType = 'trust';
+				} else {
+					this.walletType = walletType; 
+				}
 
 				try {
 					if (typeof window.enforcePreferredEvmChain === 'function') {

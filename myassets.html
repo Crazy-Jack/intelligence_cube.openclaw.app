@@ -334,7 +334,7 @@
 		  opacity: 0;
 		  pointer-events: none;
 		  transition: opacity .25s ease;
-		  z-index: 9999;
+		  z-index: 10010;
 		}
 		.network-modal.show {
 		  opacity: 1;
@@ -426,9 +426,9 @@
 		.network-badge__icon{ width:20px; height:20px; object-fit:contain; display:block }
 		.network-badge__text{ font-size:14px; font-weight:600; letter-spacing:.2px }
 		.network-badge__caret{ width:16px; height:16px; opacity:.6 }
-		@media (max-width: 768px){
+		/* @media (max-width: 768px){
 		  .network-badge{ display:none !important; }
-		}
+		} */
 
         /* Token logo styling */
         .token-logo {
@@ -2016,10 +2016,10 @@
                 </div>
 
                 <!-- Binance Wallet 选项 -->
-                <div class="wallet-option available" onclick="connectBinanceWallet()">
+                <div class="wallet-option available" onclick="window.open('https://www.binance.com/en/web3wallet', '_blank')">
                     <span class="wallet-icon-wrap">
-                        <!-- 你自己的官方 SVG/PNG -->
-                        <img src="svg/binance.svg" alt="Binance Wallet">
+                        <!-- 使用 binance_wallet.jpeg 作为图标 -->
+                        <img src="png/binance_wallet.jpeg" alt="Binance Wallet">
                     </span>
                     <div class="wallet-info">
                         <div class="wallet-name">Binance Wallet</div>
