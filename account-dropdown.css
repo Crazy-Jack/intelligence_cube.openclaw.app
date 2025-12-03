@@ -84,6 +84,43 @@
   box-shadow:0 6px 16px rgba(124,58,237,.30);
 }
 
+/* Mobile: make the purple wallet pill smaller and truncatable */
+@media (max-width: 768px) {
+  .account-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 62vw;
+    white-space: nowrap;
+  }
+  #accountBtnText {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+  /* Hide token count on small screens to save space */
+  #creditsDisplay {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .account-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 10px;
+    max-width: 58vw;
+  }
+  #accountBtnText {
+    max-width: 36vw;
+  }
+}
+
 /* ==================== Social Tasks Styles ==================== */
 
 .tasks-section {

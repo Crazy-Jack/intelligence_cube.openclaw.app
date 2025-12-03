@@ -494,6 +494,22 @@ body:has(.modelverse-content.full-width) .main-layout,
     .mobile-models-list {
         padding: 12px;
     }
+    
+    /* Make top bar elements fit in one row on phones */
+    .header .network-badge {
+        padding: 4px 8px !important;
+        height: 28px !important;
+        gap: 6px !important;
+        white-space: nowrap !important;
+    }
+    .header .network-badge__text {
+        font-size: 12px !important;
+        font-weight: 600 !important;
+    }
+    .header .header-right {
+        min-width: 0;
+        gap: 6px;
+    }
 }
 
 /* Header Section */
