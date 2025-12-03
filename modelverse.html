@@ -622,6 +622,8 @@
     }
     </script>
     <script type="module">
+        import AppKit from "https://unpkg.com/@reown/appkit@1.8.4/dist/index.js?module";
+
         import googleAuthManager from './src/google-auth.js';
         window.googleAuthManager = googleAuthManager;
         window.handleGoogleSignIn = () => googleAuthManager.signIn();
