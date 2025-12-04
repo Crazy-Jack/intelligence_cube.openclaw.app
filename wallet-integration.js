@@ -176,7 +176,7 @@ function getBinanceProvider() {
 /**
  * 连接 MetaMask 钱包 - 从模态框调用
  */
-// 1) MetaMask —— 桌面走 extension，手机走 WalletConnect/AppKit
+// 1) MetaMask —— 桌面走 extension，手机走 deep link 到 MetaMask App
 async function connectMetaMaskWallet() {
   let preferred = getPreferredNetwork();
   // Auto-select Ethereum if no preference is set
@@ -192,17 +192,45 @@ async function connectMetaMaskWallet() {
   }
 
   const isMobileEnv = isMobileDevice() || isRealMobileDevice();
-  const hasInjectedProvider = window.ethereum && (window.ethereum.isMetaMask || window.ethereum.isTrust || window.ethereum.isTokenPocket);
-
-  // === 手机端：只有在没有注入钱包环境时，才走 WalletConnect / AppKit 管道 ===
-  // 如果是在 MetaMask App / Trust Wallet App 等内置浏览器中，直接走下面的直连逻辑
-  if (isMobileEnv && !hasInjectedProvider) {
-    console.log('[Connect][MetaMask] Mobile detected & No Injected Provider → using WalletConnect/AppKit');
-    await connectWalletConnect();
+  
+  // 检测是否真正在 MetaMask 的 in-app browser 中
+  // 最可靠的方法：检查是否已有账户连接（只有真正的 in-app browser 才会有）
+  let isInMetaMaskBrowser = false;
+  if (isMobileEnv && window.ethereum?.isMetaMask) {
+    try {
+      // 快速检查是否已有账户（不会弹窗，只读取已授权的账户）
+      const accounts = await Promise.race([
+        window.ethereum.request({ method: 'eth_accounts' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 500))
+      ]);
+      // 如果有账户，说明真的在 MetaMask browser 中
+      isInMetaMaskBrowser = Array.isArray(accounts) && accounts.length > 0;
+      console.log('[Connect][MetaMask] Mobile eth_accounts check:', accounts, 'isInMetaMaskBrowser:', isInMetaMaskBrowser);
+    } catch (e) {
+      console.log('[Connect][MetaMask] Mobile provider check failed/timeout:', e.message);
+      isInMetaMaskBrowser = false;
+    }
+  }
+  
+  // === 手机端：如果不在 MetaMask in-app browser 中，打开 deep link ===
+  if (isMobileEnv && !isInMetaMaskBrowser) {
+    console.log('[Connect][MetaMask] Mobile detected & NOT in MetaMask browser → opening deep link');
+    // 关闭钱包选择弹窗
+    try { closeWalletModal?.(); } catch (_) {}
+    
+    // 构建 MetaMask deep link - 在 MetaMask App 的内置浏览器中打开当前页面
+    const currentUrl = window.location.href;
+    const urlWithoutProtocol = currentUrl.replace(/^https?:\/\//, '');
+    const metamaskDeepLink = `https://metamask.app.link/dapp/${urlWithoutProtocol}`;
+    
+    console.log('[Connect][MetaMask] Deep link:', metamaskDeepLink);
+    
+    // 直接跳转到 MetaMask app（不打开新窗口）
+    window.location.href = metamaskDeepLink;
     return;
   }
 
-  // === 桌面端 或 移动端内置浏览器：保持原来的 MetaMask 直连逻辑 ===
+  // === 桌面端 或 移动端 MetaMask in-app browser：直连逻辑 ===
   console.log('[Connect][MetaMask] start (injected/desktop flow)');
   try {
     // ① 取得 provider（尽量用已注入的）
@@ -210,7 +238,8 @@ async function connectMetaMaskWallet() {
                   || window.walletManager?.ethereum
                   || window.ethereum;
     if (!provider || typeof provider.request !== 'function') {
-       if (window.bscGuide && typeof window.bscGuide.showInstallMetaMaskGuide === 'function') {
+       // 桌面端没有 MetaMask，显示安装指引
+       if (!isMobileEnv && window.bscGuide && typeof window.bscGuide.showInstallMetaMaskGuide === 'function') {
           window.bscGuide.showInstallMetaMaskGuide();
           return;
        }
@@ -219,7 +248,6 @@ async function connectMetaMaskWallet() {
 
     // ② 先确保切到"用户选的链"（必要时添加链）
     await enforcePreferredEvmChain(provider);
-
     // ③ 再请求账户授权 + 等到账户（一次完成授权，避免第二次点击）
     await provider.request({ method: 'eth_requestAccounts' });
     const address = await waitForAccounts(provider);
