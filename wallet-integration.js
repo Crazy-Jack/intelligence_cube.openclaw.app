@@ -193,41 +193,93 @@ async function connectMetaMaskWallet() {
 
   const isMobileEnv = isMobileDevice() || isRealMobileDevice();
   
-  // 检测是否真正在 MetaMask 的 in-app browser 中
-  // 最可靠的方法：检查是否已有账户连接（只有真正的 in-app browser 才会有）
-  let isInMetaMaskBrowser = false;
-  if (isMobileEnv && window.ethereum?.isMetaMask) {
-    try {
-      // 快速检查是否已有账户（不会弹窗，只读取已授权的账户）
-      const accounts = await Promise.race([
-        window.ethereum.request({ method: 'eth_accounts' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 500))
-      ]);
-      // 如果有账户，说明真的在 MetaMask browser 中
-      isInMetaMaskBrowser = Array.isArray(accounts) && accounts.length > 0;
-      console.log('[Connect][MetaMask] Mobile eth_accounts check:', accounts, 'isInMetaMaskBrowser:', isInMetaMaskBrowser);
-    } catch (e) {
-      console.log('[Connect][MetaMask] Mobile provider check failed/timeout:', e.message);
-      isInMetaMaskBrowser = false;
+  // === 手机端处理逻辑 ===
+  if (isMobileEnv) {
+    const provider = window.ethereum;
+    const hasMetaMaskProvider = provider && provider.isMetaMask === true;
+    
+    console.log('[Connect][MetaMask] Mobile env, hasMetaMaskProvider:', hasMetaMaskProvider);
+    
+    // 如果没有任何 MetaMask provider，直接打开 deep link
+    if (!hasMetaMaskProvider) {
+      console.log('[Connect][MetaMask] No MetaMask provider → opening deep link');
+      try { closeWalletModal?.(); } catch (_) {}
+      
+      const currentUrl = window.location.href;
+      const urlWithoutProtocol = currentUrl.replace(/^https?:\/\//, '');
+      const metamaskDeepLink = `https://metamask.app.link/dapp/${urlWithoutProtocol}`;
+      
+      window.location.href = metamaskDeepLink;
+      return;
     }
-  }
-  
-  // === 手机端：如果不在 MetaMask in-app browser 中，打开 deep link ===
-  if (isMobileEnv && !isInMetaMaskBrowser) {
-    console.log('[Connect][MetaMask] Mobile detected & NOT in MetaMask browser → opening deep link');
-    // 关闭钱包选择弹窗
-    try { closeWalletModal?.(); } catch (_) {}
     
-    // 构建 MetaMask deep link - 在 MetaMask App 的内置浏览器中打开当前页面
-    const currentUrl = window.location.href;
-    const urlWithoutProtocol = currentUrl.replace(/^https?:\/\//, '');
-    const metamaskDeepLink = `https://metamask.app.link/dapp/${urlWithoutProtocol}`;
-    
-    console.log('[Connect][MetaMask] Deep link:', metamaskDeepLink);
-    
-    // 直接跳转到 MetaMask app（不打开新窗口）
-    window.location.href = metamaskDeepLink;
-    return;
+    // 有 provider，尝试直接连接（带超时），如果失败则回退到 deep link
+    console.log('[Connect][MetaMask] Has provider, trying direct connection...');
+    try {
+      // 先确保切到正确的链
+      await enforcePreferredEvmChain(provider);
+      
+      // 尝试请求账户，设置超时（3秒）
+      const accountsPromise = provider.request({ method: 'eth_requestAccounts' });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout')), 1500)
+      );
+      
+      await Promise.race([accountsPromise, timeoutPromise]);
+      const address = await waitForAccounts(provider);
+      
+      // 连接成功！
+      const chainId = await provider.request({ method: 'eth_chainId' });
+      
+      if (window.walletManager) {
+        window.walletManager.walletType = 'metamask';
+        window.walletManager.walletAddress = address;
+        window.walletManager.isConnected = true;
+        window.walletManager.saveToStorage?.();
+        window.walletManager.updateUI?.();
+        window.dispatchEvent(new CustomEvent('walletConnected', {
+          detail: {
+            address,
+            credits: window.walletManager.credits || 0,
+            isNewUser: !window.walletManager.getWalletData?.(address)
+          }
+        }));
+      }
+      
+      // 关闭弹窗
+      const modal = document.getElementById('walletModal');
+      if (modal) {
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+      }
+      
+      if (window.bscGuide && typeof window.bscGuide.showSuccessMessage === 'function') {
+        window.bscGuide.showSuccessMessage(address, chainId);
+      } else {
+        showNotification('MetaMask connected.', 'success');
+      }
+      console.log('[Connect][MetaMask] Mobile direct connection success ->', address);
+      return;
+      
+    } catch (e) {
+      // 连接失败（超时或用户拒绝），回退到 deep link
+      console.log('[Connect][MetaMask] Direct connection failed:', e.message, '→ opening deep link');
+      
+      // 如果是用户主动拒绝，不要跳转 deep link
+      if (e.code === 4001 || e.message?.includes('User rejected') || e.message?.includes('user rejected')) {
+        showNotification('Connection cancelled by user', 'error');
+        return;
+      }
+      
+      try { closeWalletModal?.(); } catch (_) {}
+      
+      const currentUrl = window.location.href;
+      const urlWithoutProtocol = currentUrl.replace(/^https?:\/\//, '');
+      const metamaskDeepLink = `https://metamask.app.link/dapp/${urlWithoutProtocol}`;
+      
+      window.location.href = metamaskDeepLink;
+      return;
+    }
   }
 
   // === 桌面端 或 移动端 MetaMask in-app browser：直连逻辑 ===
