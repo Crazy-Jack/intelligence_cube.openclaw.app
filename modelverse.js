@@ -7,6 +7,44 @@
 //    robust button rebinding so every row opens its own card.
 // ================================
 
+let currentModelverseTab = window.currentModelverseTab || 'local';
+window.currentModelverseTab = currentModelverseTab;
+
+function getActiveModelsPanel() {
+  return document.querySelector(`.models-tab-panel[data-tab="${currentModelverseTab}"]`) || document.querySelector('.models-tab-panel');
+}
+
+function getVisibleRowCount(panel) {
+  if (!panel) return 0;
+  const rows = panel.querySelectorAll('.models-table tbody tr');
+  if (!rows.length) return 0;
+  let visible = 0;
+  rows.forEach(row => {
+    if (row.style.display !== 'none') visible++;
+  });
+  return visible || rows.length;
+}
+
+function refreshModelCounts() {
+  const panel = getActiveModelsPanel();
+  const totalRows = panel ? panel.querySelectorAll('.models-table tbody tr').length : 0;
+  const visible = getVisibleRowCount(panel) || totalRows;
+  updateSearchResultCount(visible);
+}
+
+function formatNumber(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  return num.toLocaleString();
+}
+
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return '-';
+  const dt = new Date(dateStr);
+  if (isNaN(dt.getTime())) return '-';
+  return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 // ---------- Search ----------
 function performSearch() {
   const input = document.getElementById('searchInput') || document.getElementById('mobileSearchInput');
@@ -17,8 +55,10 @@ function performSearch() {
     return;
   }
 
-  // 桌面端表格搜索
-  const rows = document.querySelectorAll('.models-table tbody tr');
+  const activePanel = getActiveModelsPanel();
+  const rows = activePanel
+    ? activePanel.querySelectorAll('.models-table tbody tr')
+    : document.querySelectorAll('#localModelsTable tbody tr');
   let visibleCount = 0;
 
   rows.forEach(row => {
@@ -48,7 +88,9 @@ function performSearch() {
   });
 
   // 手机端列表搜索
-  const mobileItems = document.querySelectorAll('.mobile-model-item');
+  const mobileItems = activePanel
+    ? activePanel.querySelectorAll('.mobile-model-item')
+    : document.querySelectorAll('#mobileModelsList .mobile-model-item');
   mobileItems.forEach(item => {
     const nameElement = item.querySelector('.mobile-model-name');
     if (!nameElement) return;
@@ -81,22 +123,20 @@ function clearSearch() {
   if (input) input.value = '';
   if (mobileInput) mobileInput.value = '';
   
-  const rows = document.querySelectorAll('.models-table tbody tr');
-  rows.forEach(row => {
+  document.querySelectorAll('.models-table tbody tr').forEach(row => {
     row.style.display = '';
     const nameCell = row.querySelector('.model-name');
     if (!nameCell) return;
     nameCell.innerHTML = nameCell.textContent;
   });
   
-  const mobileItems = document.querySelectorAll('.mobile-model-item');
-  mobileItems.forEach(item => {
+  document.querySelectorAll('.mobile-model-item').forEach(item => {
     item.style.display = '';
   });
   
-  // 更新搜索结果计数（包括手机端）
-  const total = rows.length > 0 ? rows.length : (mobileItems.length > 0 ? mobileItems.length : 0);
-  updateSearchResultCount(total);
+  const activePanel = getActiveModelsPanel();
+  const activeRows = activePanel ? activePanel.querySelectorAll('.models-table tbody tr').length : 0;
+  updateSearchResultCount(activeRows);
 }
 
 function highlightSearchTerms(cellEl, term) {
@@ -106,27 +146,57 @@ function highlightSearchTerms(cellEl, term) {
 }
 
 function updateSearchResultCount(count) {
-  const total = document.querySelectorAll('.models-table tbody tr').length;
+  const activePanel = getActiveModelsPanel();
+  const isLocal = !activePanel || activePanel.getAttribute('data-tab') === 'local';
+  const tableRows = activePanel
+    ? activePanel.querySelectorAll('.models-table tbody tr')
+    : document.querySelectorAll('#localModelsTable tbody tr');
+  const totalRows = tableRows.length;
+  const total = totalRows || count;
   const info = document.querySelector('.search-info') || document.getElementById('searchResults');
-  if (info) info.textContent = `Showing ${count} / ${total} models`;
+  if (info) info.textContent = `Showing ${Math.min(count, totalRows)} / ${total} models`;
   
-  // 更新手机端搜索结果
   const mobileInfo = document.getElementById('mobileSearchResults');
   if (mobileInfo) {
-    // 计算手机端实际显示的模型数量
-    const mobileItems = document.querySelectorAll('.mobile-model-item');
+    const mobileItems = activePanel ? activePanel.querySelectorAll('.mobile-model-item') : [];
     let visibleMobileCount = 0;
     mobileItems.forEach(item => {
-      if (item.style.display !== 'none') {
-        visibleMobileCount++;
-      }
+      if (item.style.display !== 'none') visibleMobileCount++;
     });
-    // 如果手机端有列表，使用手机端的计数，否则使用桌面端的计数
-    const displayCount = mobileItems.length > 0 ? visibleMobileCount : count;
-    // 使用和桌面端一致的硬编码总数 202
-    const displayTotal = 202;
-    mobileInfo.textContent = `${displayCount}/${displayTotal} models`;
+    const displayCount = mobileItems.length ? visibleMobileCount : Math.min(count, totalRows);
+    const rawTotal = mobileItems.length || totalRows || count;
+    const finalTotal = rawTotal || displayCount;
+    mobileInfo.textContent = `${displayCount}/${finalTotal} models`;
   }
+}
+
+function switchModelverseTab(tabName) {
+  if (!tabName || tabName === currentModelverseTab) return;
+  currentModelverseTab = tabName;
+  window.currentModelverseTab = currentModelverseTab;
+
+  document.querySelectorAll('.modelverse-tab-btn').forEach(btn => {
+    const isActive = btn.getAttribute('data-tab') === tabName;
+    btn.classList.toggle('active', isActive);
+  });
+
+  document.querySelectorAll('.models-tab-panel').forEach(panel => {
+    const isActive = panel.getAttribute('data-tab') === tabName;
+    panel.classList.toggle('active', isActive);
+    if (window.innerWidth <= 768) {
+      const list = panel.querySelector('.mobile-models-list');
+      if (list) list.style.display = isActive ? 'block' : 'none';
+    }
+  });
+
+  if (window.innerWidth <= 768) {
+    const detailView = document.getElementById('mobileModelDetail');
+    if (detailView) detailView.style.display = 'none';
+  }
+
+  performSearch();
+  refreshModelCounts();
+  requestAnimationFrame(refreshModelCounts);
 }
 
 window.performSearch = performSearch;
@@ -431,11 +501,12 @@ window.closeModal = closeModal;
 window.closeModelCart = closeModelCart;
 window.showModelCard = showModelCard;
 window.showModelCardForRow = showModelCardForRow;
+window.switchModelverseTab = switchModelverseTab;
 
 // ---------- Page init ----------
 document.addEventListener('DOMContentLoaded', function() {
   // Rebind Model Card buttons to use the row's model name
-  document.querySelectorAll('.model-card-btn').forEach(btn => {
+  document.querySelectorAll('#localModelsTable .model-card-btn').forEach(btn => {
     try { btn.removeAttribute('onclick'); } catch (e) {}
     btn.addEventListener('click', function(ev) {
       ev.preventDefault();
@@ -450,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Allow clicking model name to open card
-  document.querySelectorAll('.model-name').forEach(cell => {
+  document.querySelectorAll('#localModelsTable .model-name').forEach(cell => {
     cell.style.cursor = 'pointer';
     cell.style.color = '#3b82f6';
     cell.addEventListener('click', function() {
@@ -474,7 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  updateSearchResultCount(document.querySelectorAll('.models-table tbody tr').length);
+  updateSearchResultCount(document.querySelectorAll('#localModelsTable tbody tr').length);
 });
 
 // ---------- Try / Cart ----------
@@ -566,7 +637,7 @@ function getModelData(name) {
   document.addEventListener('DOMContentLoaded', injectActionColumn);
 
   function injectActionColumn() {
-    const table = document.querySelector('.models-table');
+    const table = document.querySelector('#localModelsTable');
     if (!table) return;
 
     // 1) 表头追加「Action」
@@ -738,6 +809,8 @@ async function fetchHuggingFaceModelCard(modelId) {
   const res = await fetch(apiUrl);
     if (!res.ok) throw new Error('HF model fetch failed: ' + res.status);
     const api = await res.json();
+    const card = api.card || {};
+    const cardData = api.cardData || {};
 
     // Try to fetch README.md from raw/main then raw/master
     let readme = null;
@@ -839,12 +912,25 @@ async function fetchHuggingFaceModelCard(modelId) {
     else if (api.pipeline_tags && api.pipeline_tags.length) pipeline = api.pipeline_tags[0];
     else if (api.tags && api.tags.length) pipeline = api.tags[0];
 
+    const pipelineTag = pipeline || cardData.pipeline_tag || card.pipeline_tag || null;
+    const baseModel = cardData.base_model || card.base_model || (api.config?.peft?.base_model_name_or_path) || pipelineTag || null;
+    const author = api.author || cardData.author || card.author || null;
+    const downloads = api.downloads ?? api.downloads_count ?? null;
+    const likes = api.likes ?? null;
+    const license = cardData.license || card.license || api.license || null;
+    const datasetsRaw = cardData.datasets || cardData.dataset || card.datasets || card.dataset;
+    const datasets = Array.isArray(datasetsRaw) ? datasetsRaw : (datasetsRaw ? [datasetsRaw] : []);
+    const languageRaw = cardData.language || card.language || api.language;
+    const languages = Array.isArray(languageRaw) ? languageRaw : (languageRaw ? [languageRaw] : []);
+    const lastModified = api.lastModified || api.last_modified || api.updatedAt || api.createdAt || null;
+    const tags = Array.isArray(api.tags) ? api.tags : [];
+
     // Normalized object to be used by showModelCard
     const normalized = {
-      purpose: readme || (api.card && api.card.description) || api.description || '-',
-      useCase: (api.card && (api.card.use_case || api.card.usecase)) || '-',
-      category: pipeline || '-',
-      industry: pipeline || '-',
+      purpose: readme || card.description || api.description || '-',
+      useCase: card.use_case || card.usecase || '-',
+      category: pipelineTag || '-',
+      industry: pipelineTag || '-',
       tokenPrice: '-',
       sharePrice: '-',
       change: '-',
@@ -852,7 +938,17 @@ async function fetchHuggingFaceModelCard(modelId) {
       ratingFormatted: '-',
       starsHtml: '—',
       purchasedPercent: 0,
-  paperLink: sanitizeUrl(paperLink) || sanitizeUrl(api.card && (api.card.paperLink || api.card.paper)) || '-',
+      paperLink: sanitizeUrl(paperLink) || sanitizeUrl(card.paperLink || card.paper) || '-',
+      baseModel: baseModel || '-',
+      pipelineTag: pipelineTag || '-',
+      license: license || '-',
+      datasets,
+      languages,
+      downloads: Number.isFinite(Number(downloads)) ? Number(downloads) : null,
+      likes: Number.isFinite(Number(likes)) ? Number(likes) : null,
+      author: author || '-',
+      lastModified,
+      tags,
       // include raw api/readme if caller wants
       _rawApi: api,
       _readme: readme
@@ -865,14 +961,22 @@ async function fetchHuggingFaceModelCard(modelId) {
   }
 }
 
-// Append simple HF model rows to the desktop table. Fields are placeholders and actions disabled.
+// Append HF model rows to the desktop table with metadata-focused columns and disabled actions.
 async function appendHuggingFaceModels(limit = 50) {
-  const tbody = document.querySelector('.models-table tbody');
+  const tbody = document.querySelector('#huggingfaceModelsTable tbody');
   if (!tbody) return;
   const models = await fetchHuggingFaceModels(limit);
   if (!models || !models.length) return;
-  // Eagerly fetch model cards (bounded concurrency) so we can show paperLink in desktop rows
-  const modelIds = models.map(m => m.modelId || m.id || m.model || (m.repository?.name)).filter(Boolean);
+  const listMetaMap = {};
+  const modelIds = [];
+  models.forEach(entry => {
+    const id = entry.modelId || entry.id || entry.model || (entry.repository?.name);
+    if (!id || listMetaMap[id]) return;
+    listMetaMap[id] = entry;
+    modelIds.push(id);
+  });
+  if (!modelIds.length) return;
+
   const hfMap = await fetchAllModelCards(modelIds, 8); // id -> {api, readme, normalized}
 
   modelIds.forEach(modelId => {
@@ -891,8 +995,28 @@ async function appendHuggingFaceModels(limit = 50) {
     const escModelId = escapeHtml(modelId);
     const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
     const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
-    const categoryHtml = escapeHtml((normalized && normalized.category) ? normalized.category : '-');
-    const industryHtml = escapeHtml((normalized && normalized.industry) ? normalized.industry : '-');
+    const listMeta = listMetaMap[modelId] || {};
+    const baseModel = normalized?.baseModel || listMeta.base_model || normalized?.category || '-';
+    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || (normalized?.category !== baseModel ? normalized?.category : null);
+    const author = normalized?.author || listMeta.author || '-';
+    const downloadsValue = Number.isFinite(Number(normalized?.downloads))
+      ? Number(normalized.downloads)
+      : (Number.isFinite(Number(listMeta.downloads)) ? Number(listMeta.downloads) : null);
+    const likesValue = Number.isFinite(Number(normalized?.likes))
+      ? Number(normalized.likes)
+      : (Number.isFinite(Number(listMeta.likes)) ? Number(listMeta.likes) : null);
+    const lastUpdated = normalized?.lastModified || listMeta.lastModified || listMeta.last_modified || listMeta.updatedAt || null;
+
+    const baseModelHtml = `
+      <div class="hf-meta-primary">${escapeHtml(baseModel || '-')}</div>
+      ${pipelineTag && pipelineTag !== baseModel ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
+    `;
+    const authorHtml = author ? escapeHtml(author) : '-';
+    const downloadsLikesHtml = `
+      <div class="hf-stat-line">${downloadsValue !== null ? `${formatNumber(downloadsValue)} downloads` : '-'}</div>
+      <div class="hf-stat-sub">${likesValue !== null ? `${formatNumber(likesValue)} likes` : '-'}</div>
+    `;
+    const lastUpdatedHtml = formatDateDisplay(lastUpdated);
 
     row.innerHTML = `
       <td class="model-name">${escModelId}</td>
@@ -900,10 +1024,10 @@ async function appendHuggingFaceModels(limit = 50) {
       <td class="model-details" data-label="Details">
         <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
       </td>
-      <td class="api-price" data-label="Price per 1K Tokens"><div class="price-value">-</div></td>
-      <td class="value" data-label="Price per Share"><div class="price-value">-</div></td>
-      <td class="daily-delta" data-label="Market Change"><span>-</span></td>
-      <td class="trend-chart" data-label="Trend Chart"><span>-</span></td>
+      <td class="hf-meta" data-label="Base Model">${baseModelHtml}</td>
+      <td class="hf-author" data-label="Author">${authorHtml || '-'}</td>
+      <td class="hf-downloads" data-label="Downloads / Likes">${downloadsLikesHtml}</td>
+      <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
       <td class="action-cell" data-label="Actions">
         <div class="invest">
           <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
@@ -914,23 +1038,32 @@ async function appendHuggingFaceModels(limit = 50) {
 
     tbody.appendChild(row);
   });
-  // Update counts
-  updateSearchResultCount(document.querySelectorAll('.models-table tbody tr').length);
+  if (currentModelverseTab === 'hf') {
+    refreshModelCounts();
+  }
 }
 
-// Append HF models to mobile list with placeholders and disabled actions
+// Append HF models to mobile list with richer metadata and disabled actions
 async function appendHuggingFaceModelsToMobile(limit = 50) {
-  const container = document.getElementById('mobileModelsList');
+  const container = document.getElementById('hfMobileModelsList');
   if (!container) return;
   const models = await fetchHuggingFaceModels(limit);
   if (!models || !models.length) return;
-  // Eagerly fetch HF model cards so we can render category/industry in the mobile list
-  const modelIds = models.map(m => m.modelId || m.id || m.model || (m.repository?.name)).filter(Boolean);
+
+  const listMetaMap = {};
+  const modelIds = [];
+  models.forEach(entry => {
+    const id = entry.modelId || entry.id || entry.model || (entry.repository?.name);
+    if (!id || listMetaMap[id]) return;
+    listMetaMap[id] = entry;
+    modelIds.push(id);
+  });
+  if (!modelIds.length) return;
+
   const hfMap = await fetchAllModelCards(modelIds, 8);
 
   modelIds.forEach(modelId => {
     if (!modelId) return;
-    // Skip existing
     if ([...container.querySelectorAll('.mobile-model-name')].some(el => el.textContent.trim() === modelId)) return;
 
     const hf = hfMap[modelId];
@@ -938,10 +1071,22 @@ async function appendHuggingFaceModelsToMobile(limit = 50) {
     if (normalized) normalized._hf = true;
     if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
 
+    const listMeta = listMetaMap[modelId] || {};
+    const baseModel = normalized?.baseModel || listMeta.base_model || normalized?.category || '-';
+    const author = normalized?.author || listMeta.author || '-';
+    const downloadsValue = Number.isFinite(Number(normalized?.downloads))
+      ? Number(normalized.downloads)
+      : (Number.isFinite(Number(listMeta.downloads)) ? Number(listMeta.downloads) : null);
+    const likesValue = Number.isFinite(Number(normalized?.likes))
+      ? Number(normalized.likes)
+      : (Number.isFinite(Number(listMeta.likes)) ? Number(listMeta.likes) : null);
+    const lastUpdated = normalized?.lastModified || listMeta.lastModified || listMeta.last_modified || listMeta.updatedAt || null;
+
     const icon = escapeHtml(modelId.charAt(0).toUpperCase());
     const escModelId = escapeHtml(modelId);
-    const category = escapeHtml((normalized && normalized.category) ? normalized.category : '-');
-    const industry = escapeHtml((normalized && normalized.industry) ? normalized.industry : '-');
+    const statsPrimary = downloadsValue !== null ? `${formatNumber(downloadsValue)} downloads` : 'Downloads -';
+    const statsSecondary = likesValue !== null ? `${formatNumber(likesValue)} likes` : 'Likes -';
+    const lastUpdatedText = lastUpdated ? `Updated ${formatDateDisplay(lastUpdated)}` : 'Updated -';
 
     const item = document.createElement('div');
     item.className = 'mobile-model-item hf-mobile-item';
@@ -955,12 +1100,20 @@ async function appendHuggingFaceModelsToMobile(limit = 50) {
       </div>
       <div class="mobile-model-info">
         <div class="mobile-model-info-row">
-          <span class="mobile-model-label">Category:</span>
-          <span class="mobile-model-value">${category}</span>
+          <span class="mobile-model-label">Base:</span>
+          <span class="mobile-model-value">${escapeHtml(baseModel || '-')}</span>
         </div>
         <div class="mobile-model-info-row">
-          <span class="mobile-model-label">Industry:</span>
-          <span class="mobile-model-value">${industry}</span>
+          <span class="mobile-model-label">Author:</span>
+          <span class="mobile-model-value">${escapeHtml(author || '-')}</span>
+        </div>
+        <div class="mobile-model-info-row">
+          <span class="mobile-model-label">Stats:</span>
+          <span class="mobile-model-value">${escapeHtml(statsPrimary)} / ${escapeHtml(statsSecondary)}</span>
+        </div>
+        <div class="mobile-model-info-row">
+          <span class="mobile-model-label">Last:</span>
+          <span class="mobile-model-value">${escapeHtml(lastUpdatedText)}</span>
         </div>
       </div>
     `;

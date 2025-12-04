@@ -80,6 +80,48 @@
     padding: 0 4px;
 }
 
+/* Tab Switcher */
+.modelverse-tab-switcher {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin: 10px auto 24px;
+    flex-wrap: wrap;
+}
+
+.modelverse-tab-btn {
+    padding: 10px 20px;
+    border-radius: 999px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    color: #4b5563;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 180px;
+}
+
+.modelverse-tab-btn:hover {
+    border-color: #8b7cf6;
+    color: #111827;
+}
+
+.modelverse-tab-btn.active {
+    background: #111827;
+    color: #fff;
+    border-color: #111827;
+    box-shadow: 0 6px 20px rgba(17, 24, 39, 0.15);
+}
+
+.models-tab-panel {
+    display: none;
+}
+
+.models-tab-panel.active {
+    display: block;
+}
+
 .mobile-filter-row {
     display: flex;
     gap: 8px;
@@ -704,6 +746,50 @@ body:has(.modelverse-content.full-width) .main-layout,
 
 .models-table td:first-child {
     text-align: left;
+}
+
+/* Hugging Face metadata cells */
+.hf-meta {
+    text-align: left;
+}
+
+.hf-meta-primary {
+    font-weight: 600;
+    color: #111827;
+    display: block;
+}
+
+.hf-meta-secondary {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+    display: block;
+}
+
+.hf-stat-line {
+    font-weight: 600;
+    color: #111827;
+}
+
+.hf-stat-sub {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+.hf-author,
+.hf-downloads,
+.hf-last-updated {
+    font-size: 13px;
+    color: #111827;
+}
+
+.hf-downloads {
+    text-align: left;
+}
+
+.hf-last-updated {
+    white-space: nowrap;
 }
 
 /* Model Name */
