@@ -453,11 +453,18 @@ async function displayHfSearchResults(query) {
       const item = document.createElement('div');
       item.className = 'mobile-model-item hf-mobile-item hf-search-result';
       item.setAttribute('data-hf', 'true');
+      item.setAttribute('data-model-id', modelId);
+      item.style.cursor = 'pointer';
       item.innerHTML = `
         <div class="mobile-model-item-header">
           <div class="mobile-model-icon">${icon}</div>
           <div style="flex: 1;">
             <div class="mobile-model-name">${highlightedName}</div>
+          </div>
+          <div style="color: #9ca3af; font-size: 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
           </div>
         </div>
         <div class="mobile-model-info">
@@ -470,7 +477,16 @@ async function displayHfSearchResults(query) {
             <span class="mobile-model-value">${statsPrimary} / ${statsSecondary}</span>
           </div>
         </div>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; text-align: center;">
+          <span style="color: #8b7cf6; font-size: 13px; font-weight: 500;">Tap to view details</span>
+        </div>
       `;
+      
+      // Add click handler to show model card
+      item.addEventListener('click', () => {
+        showModelCard(modelId);
+      });
+      
       mobileContainer.appendChild(item);
     }
   });
@@ -881,8 +897,9 @@ async function showModelCard(modelName, signOverride) {
     const renderedContent = renderMarkdown(displayText, modelName);
     
     purposeEl.innerHTML = `
-      <div class="purpose-content" style="max-height: 300px; overflow-y: auto; padding-right: 8px;">
+      <div class="purpose-content clickable-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="max-height: 300px; overflow-y: auto; padding-right: 8px; cursor: pointer; transition: background 0.2s;" title="Click to view full content">
         ${renderedContent}
+        ${isLong ? '<div style="color: #8b7cf6; font-size: 12px; margin-top: 8px; font-weight: 500;">Click to read more...</div>' : ''}
       </div>
       ${isLong ? `
       <div style="margin-top: 12px;">
@@ -1292,13 +1309,31 @@ function showFullContentModal(content, title = 'Content', modelId = null) {
 // 为模态框添加点击事件处理
 
 document.addEventListener('click', function(e) {
+  // Handle "View Full Content" link clicks
   if (e.target.classList.contains('view-full-content') || e.target.closest('.view-full-content')) {
     e.preventDefault();
     const link = e.target.closest('.view-full-content');
     const fullContent = decodeURIComponent(link.dataset.content);
-    const contentType = link.dataset.type || 'Content'; // 获取内容类型
-    const modelId = link.dataset.model ? decodeURIComponent(link.dataset.model) : null; // 获取模型ID用于解析相对路径
-    showFullContentModal(fullContent, contentType, modelId); // 传递标题和模型ID参数
+    const contentType = link.dataset.type || 'Content';
+    const modelId = link.dataset.model ? decodeURIComponent(link.dataset.model) : null;
+    showFullContentModal(fullContent, contentType, modelId);
+    return;
+  }
+  
+  // Handle clickable content area clicks (e.g., purpose text)
+  // But don't trigger if clicking on a link inside the content
+  if (e.target.classList.contains('clickable-content') || e.target.closest('.clickable-content')) {
+    // Don't trigger if clicking on an actual link inside
+    if (e.target.tagName === 'A' || e.target.closest('a')) return;
+    
+    const content = e.target.closest('.clickable-content');
+    if (content && content.dataset.content) {
+      e.preventDefault();
+      const fullContent = decodeURIComponent(content.dataset.content);
+      const contentType = content.dataset.type || 'Content';
+      const modelId = content.dataset.model ? decodeURIComponent(content.dataset.model) : null;
+      showFullContentModal(fullContent, contentType, modelId);
+    }
   }
 });
 
@@ -1444,7 +1479,62 @@ async function fetchHuggingFaceModels(page = 1, limit = HF_MODELS_PER_PAGE) {
   }
 }
 
+// Model card cache configuration
+const MODEL_CARD_CACHE_KEY = 'hf_model_cards_cache';
+const MODEL_CARD_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+// Get cached model card data
+function getCachedModelCard(modelId) {
+  try {
+    const cached = localStorage.getItem(MODEL_CARD_CACHE_KEY);
+    if (!cached) return null;
+    const cache = JSON.parse(cached);
+    const entry = cache[modelId];
+    if (!entry) return null;
+    // Check if cache is expired
+    if (Date.now() - entry.timestamp > MODEL_CARD_CACHE_EXPIRY) {
+      // Remove expired entry
+      delete cache[modelId];
+      localStorage.setItem(MODEL_CARD_CACHE_KEY, JSON.stringify(cache));
+      return null;
+    }
+    console.log(`Using cached model card for: ${modelId}`);
+    return entry.data;
+  } catch (e) {
+    console.warn('Error reading model card cache:', e);
+    return null;
+  }
+}
+
+// Save model card data to cache
+function setCachedModelCard(modelId, data) {
+  try {
+    const cached = localStorage.getItem(MODEL_CARD_CACHE_KEY);
+    const cache = cached ? JSON.parse(cached) : {};
+    cache[modelId] = {
+      data: data,
+      timestamp: Date.now()
+    };
+    // Limit cache size - keep only last 50 model cards
+    const keys = Object.keys(cache);
+    if (keys.length > 50) {
+      // Remove oldest entries
+      const sorted = keys.sort((a, b) => cache[a].timestamp - cache[b].timestamp);
+      for (let i = 0; i < keys.length - 50; i++) {
+        delete cache[sorted[i]];
+      }
+    }
+    localStorage.setItem(MODEL_CARD_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('Error saving model card to cache:', e);
+  }
+}
+
 async function fetchHuggingFaceModelCard(modelId) {
+  // Check cache first
+  const cached = getCachedModelCard(modelId);
+  if (cached) return cached;
+  
   // Fetch model metadata from HF API and attempt to fetch README.raw for purpose and paper link.
   try {
   const safeId = encodeURIComponent(modelId).replace(/%2F/g, '/');
@@ -1597,7 +1687,10 @@ async function fetchHuggingFaceModelCard(modelId) {
       _readme: readme
     };
 
-    return { api, readme, normalized };
+    const result = { api, readme, normalized };
+    // Cache the result for future use
+    setCachedModelCard(modelId, result);
+    return result;
   } catch (err) {
     console.error('fetchHuggingFaceModelCard error for', modelId, err);
     return null;
@@ -1924,11 +2017,18 @@ async function appendHuggingFaceModelsToMobile(page = 1, clearExisting = true) {
     const item = document.createElement('div');
     item.className = 'mobile-model-item hf-mobile-item';
     item.setAttribute('data-hf', 'true');
+    item.setAttribute('data-model-id', modelId);
+    item.style.cursor = 'pointer';
     item.innerHTML = `
       <div class="mobile-model-item-header">
         <div class="mobile-model-icon">${icon}</div>
         <div style="flex: 1;">
           <div class="mobile-model-name">${escModelId}</div>
+        </div>
+        <div style="color: #9ca3af; font-size: 12px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
         </div>
       </div>
       <div class="mobile-model-info">
@@ -1949,7 +2049,15 @@ async function appendHuggingFaceModelsToMobile(page = 1, clearExisting = true) {
           <span class="mobile-model-value">${escapeHtml(lastUpdatedText)}</span>
         </div>
       </div>
+      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; text-align: center;">
+        <span style="color: #8b7cf6; font-size: 13px; font-weight: 500;">Tap to view details</span>
+      </div>
     `;
+    
+    // Add click handler to show model card
+    item.addEventListener('click', () => {
+      showModelCard(modelId);
+    });
 
     container.appendChild(item);
   });
@@ -2024,9 +2132,22 @@ async function fetchAllModelCards(modelIds, concurrency = 4) {
   return results;
 }
 
+// Function to clear model card cache
+function clearModelCardCache() {
+  try {
+    localStorage.removeItem(MODEL_CARD_CACHE_KEY);
+    console.log('Model card cache cleared');
+  } catch (e) {
+    console.warn('Error clearing model card cache:', e);
+  }
+}
+
 // expose
 window.fetchHuggingFaceModels = fetchHuggingFaceModels;
 window.fetchHuggingFaceModelCard = fetchHuggingFaceModelCard;
+window.getCachedModelCard = getCachedModelCard;
+window.setCachedModelCard = setCachedModelCard;
+window.clearModelCardCache = clearModelCardCache;
 window.appendHuggingFaceModels = appendHuggingFaceModels;
 window.appendHuggingFaceModelsToMobile = appendHuggingFaceModelsToMobile;
 window.loadHfPage = loadHfPage;
