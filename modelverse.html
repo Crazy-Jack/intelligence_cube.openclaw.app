@@ -868,7 +868,7 @@
                 <!-- Tab Switcher -->
                 <div class="modelverse-tab-switcher">
                     <button class="modelverse-tab-btn active" data-tab="local" onclick="switchModelverseTab('local')">Intelligence Cubed Models</button>
-                    <button class="modelverse-tab-btn" data-tab="hf" onclick="switchModelverseTab('hf')">Hugging Face Models</button>
+                    <button class="modelverse-tab-btn" data-tab="hf" onclick="switchModelverseTab('hf')">Public Owned Models</button>
                 </div>
 
                 <!-- Local Models Panel -->
@@ -915,14 +915,14 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- HF models appended via JS -->
+                                <!-- HF models appended via JS with pagination -->
                             </tbody>
                         </table>
                     </div>
 
                     <!-- Mobile Model List View (HF) -->
                     <div class="mobile-models-list" id="hfMobileModelsList">
-                        <!-- HF 模型列表将通过JS动态生成 -->
+                        <!-- HF models list with pagination generated via JS -->
                     </div>
                 </div>
 
@@ -1359,7 +1359,7 @@
           if (modelData && modelData._hf) {
             const baseModel = safeText(modelData.baseModel || modelData.category || '-');
             const author = safeText(modelData.author || '-');
-            const downloads = formatStat(modelData.downloads);
+            const downloads = modelData.downloads === 0 || !Number.isFinite(Number(modelData.downloads)) ? 'N/A' : formatStat(modelData.downloads);
             const likes = formatStat(modelData.likes);
             const lastUpdated = formatDateInline(modelData.lastModified);
             metricsSection = `
@@ -1514,10 +1514,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             generateModelTable();
             generateMobileModelList(); // 同时生成手机端列表
-                        // Append Hugging Face models (metadata view + disabled actions)
+                        // Append Hugging Face models (metadata view + disabled actions) - Page 1
             try {
-              if (window.appendHuggingFaceModels) window.appendHuggingFaceModels(100);
-              if (window.appendHuggingFaceModelsToMobile) window.appendHuggingFaceModelsToMobile(100);
+              if (window.appendHuggingFaceModels) window.appendHuggingFaceModels(1, true);
+              if (window.appendHuggingFaceModelsToMobile) window.appendHuggingFaceModelsToMobile(1, true);
             } catch (e) {
               console.warn('Appending HF models failed', e);
             }
@@ -1689,6 +1689,12 @@
           border:1px solid #e5e7eb;
           border-radius: 12px; padding: 20px;
           display:flex; flex-direction:column; align-items:center; justify-content:center;
+          min-width: 220px;
+        }
+        .mvpro-chart canvas{
+          width: 180px !important;
+          height: 180px !important;
+          aspect-ratio: 1 / 1;
         }
         .mvpro-chart-title{ font-weight: 700; margin-bottom: 16px; color: #1f2937; }
         .mvpro-legend{ display:flex; gap: 18px; margin-top: 12px; color: #6b7280; font-size: 13px; }
@@ -1953,7 +1959,7 @@
 
                 <aside class="mvpro-chart">
                     <div class="mvpro-chart-title">Public Share Purchased</div>
-                    <canvas id="shareChart" width="220" height="220"></canvas>
+                    <canvas id="shareChart" width="180" height="180" style="width:180px;height:180px;aspect-ratio:1/1;"></canvas>
                     <div class="mvpro-legend">
                         <div class="item"><span class="mvpro-dot p"></span>Purchased (%)</div>
                         <div class="item"><span class="mvpro-dot r"></span>Remaining (%)</div>
