@@ -21,6 +21,41 @@ const PAGINATION_CONFIG = {
     }
 };
 
+// Quick HTML-escape helper to avoid breaking inline templates when inserting model IDs or URLs
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// sanitizeUrl: decode and strip trailing encoded fragments or surrounding punctuation
+function sanitizeUrl(u) {
+    if (!u) return null;
+    let s = String(u).trim();
+    try { if (/%[0-9A-Fa-f]{2}/.test(s)) s = decodeURIComponent(s); } catch (e) { /* ignore */ }
+    s = s.replace(/^["'\(<\[]+/, '').replace(/[\)\]>"'}]+$/, '');
+    const m = s.match(/(https?:\/\/[^\s\)\]\}\<\>"']+)/i);
+    if (m && m[1]) s = m[1];
+    s = s.replace(/[.,;:]+$/,'');
+    return s || null;
+}
+
+// HF benchmark settings & caches
+const HF_BENCHMARK_LIMIT = 50; // number of HF benchmark items to account for
+let hfBenchmarkListCache = null; // cached list from HF (array)
+let hfBenchmarkDetailsCache = {}; // id -> {api, readme, normalized}
+
+function safeText(v) {
+    if (v === null || v === undefined) return '-';
+    if (typeof v === 'number') return v.toString();
+    if (typeof v === 'string' && v.trim() === '') return '-';
+    return escapeHtml(String(v));
+}
+
 // 添加加载状态指示器
 function showLoadingState() {
     const tableBody = document.getElementById('benchmarkTableBody');
@@ -68,11 +103,12 @@ function loadModelBenchmark() {
     }
     
     const allModels = getTopModelsByScore(100);
-    PAGINATION_CONFIG.modelBenchmark.totalItems = allModels.length;
-    PAGINATION_CONFIG.modelBenchmark.totalPages = Math.ceil(allModels.length / PAGINATION_CONFIG.modelBenchmark.itemsPerPage);
-    
-    console.log(`🏆 模型基准测试：共 ${allModels.length} 个模型，${PAGINATION_CONFIG.modelBenchmark.totalPages} 页`);
-    
+    // Compute total items/pages including the HF retrieval limit without fetching immediately
+    PAGINATION_CONFIG.modelBenchmark.totalItems = allModels.length + HF_BENCHMARK_LIMIT;
+    PAGINATION_CONFIG.modelBenchmark.totalPages = Math.ceil(PAGINATION_CONFIG.modelBenchmark.totalItems / PAGINATION_CONFIG.modelBenchmark.itemsPerPage);
+
+    console.log(`🏆 模型基准测试：本地 ${allModels.length} 个模型，预估 HF 附加 ${HF_BENCHMARK_LIMIT} 个，总计 ${PAGINATION_CONFIG.modelBenchmark.totalItems} 个，${PAGINATION_CONFIG.modelBenchmark.totalPages} 页`);
+
     displayModelBenchmarkPage(1);
     setupTooltips();
     
@@ -89,14 +125,66 @@ function loadModelBenchmark() {
 }
 
 // 显示模型基准测试指定页面
-function displayModelBenchmarkPage(page) {
+async function displayModelBenchmarkPage(page) {
     PAGINATION_CONFIG.modelBenchmark.currentPage = page;
-    
+
     const allModels = getTopModelsByScore(100);
+    const originalCount = allModels.length;
     const startIndex = (page - 1) * PAGINATION_CONFIG.modelBenchmark.itemsPerPage;
     const endIndex = startIndex + PAGINATION_CONFIG.modelBenchmark.itemsPerPage;
-    const pageModels = allModels.slice(startIndex, endIndex);
-    
+
+    // If the requested page falls entirely within local models
+    if (endIndex <= originalCount) {
+        const pageModels = allModels.slice(startIndex, endIndex);
+        populateBenchmarkTable(pageModels);
+        addPagination('modelBenchmark');
+        return;
+    }
+
+    // Otherwise, we need to include HF benchmark entries for the overflow region
+    const pageModels = [];
+    // include any remaining local models on this page
+    if (startIndex < originalCount) {
+        pageModels.push(...allModels.slice(startIndex, originalCount));
+    }
+
+    // Determine HF slice indexes (relative to HF list)
+    const hfStart = Math.max(0, startIndex - originalCount);
+    const hfEnd = endIndex - originalCount; // exclusive
+
+    // Fetch HF list lazily if not cached
+    if (!hfBenchmarkListCache) {
+        hfBenchmarkListCache = await fetchHuggingFaceModelsBenchmark(HF_BENCHMARK_LIMIT);
+    }
+    const hfIds = hfBenchmarkListCache.map(m => m.modelId || m.id || m.model || (m.repository && m.repository.name)).filter(Boolean);
+
+    // Slice the HF ids for this page
+    const pageHfIds = hfIds.slice(hfStart, hfEnd);
+
+    // Fetch detailed normalized cards for these HF ids
+    const hfDetails = await fetchAllModelCardsBenchmark(pageHfIds, 6);
+
+    // Convert HF details to model-like objects and append
+    for (const id of pageHfIds) {
+        const hf = hfDetails[id];
+        const normalized = hf && hf.normalized ? hf.normalized : null;
+        if (normalized) MODEL_DATA[id] = normalized; // cache for modal
+        const modelObj = {
+            name: id,
+            category: normalized ? normalized.category : '-',
+            industry: normalized ? normalized.industry : '-',
+            tokenPrice: '-',
+            sharePrice: '-',
+            change: '-',
+            // ensure numeric 0 default when downloads/usage not available
+            usage: (normalized && typeof normalized.usage !== 'undefined') ? normalized.usage : 0,
+            compatibility: '-',
+            totalScore: '-',
+            _hf: true
+        };
+        pageModels.push(modelObj);
+    }
+
     populateBenchmarkTable(pageModels);
     addPagination('modelBenchmark');
 }
@@ -592,6 +680,29 @@ function showModelCard(modelName, signOverride) {
     setTimeout(() => {
         drawDonutChart(purchased);
     }, 200);
+
+    // Disable Try/Add in modal for HF models (mirror modelverse behavior)
+    try {
+        const tryBtnModal = modal.querySelector('.mvpro-actions .mvpro-btn.primary');
+        const addBtnModal = modal.querySelector('.mvpro-actions .mvpro-btn.success');
+        if (data && data._hf) {
+            if (tryBtnModal) {
+                tryBtnModal.disabled = true;
+                tryBtnModal.style.opacity = '0.5';
+                tryBtnModal.style.cursor = 'not-allowed';
+                tryBtnModal.title = 'Not available for external Hugging Face models';
+            }
+            if (addBtnModal) {
+                addBtnModal.disabled = true;
+                addBtnModal.style.opacity = '0.5';
+                addBtnModal.style.cursor = 'not-allowed';
+                addBtnModal.title = 'Not available for external Hugging Face models';
+            }
+        } else {
+            if (tryBtnModal) { tryBtnModal.disabled = false; tryBtnModal.style.opacity = ''; tryBtnModal.style.cursor = ''; tryBtnModal.title = ''; }
+            if (addBtnModal) { addBtnModal.disabled = false; addBtnModal.style.opacity = ''; addBtnModal.style.cursor = ''; addBtnModal.title = ''; }
+        }
+    } catch (e) { console.warn('Failed to set modal Try/Add disabled state', e); }
 }
 
 // 关闭 Modal 函数
@@ -654,24 +765,42 @@ function populateBenchmarkTable(models) {
             }
             
             const row = document.createElement('tr');
-            
+
+            // Prepare safe cell values
+            const nameEsc = escapeHtml(model.name || '');
+            const categoryEsc = safeText(model.category);
+            const industryEsc = safeText(model.industry);
+            const tokenPriceHtml = (model.tokenPrice && model.tokenPrice !== '-') ? `${escapeHtml(model.tokenPrice)}<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3">` : '-';
+            const sharePriceHtml = (model.sharePrice && model.sharePrice !== '-') ? `${escapeHtml(model.sharePrice)}K<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3">` : '-';
+            let changeText = '-';
+            let changeClass = '';
+            const changeNum = Number(model.change);
+            if (Number.isFinite(changeNum)) {
+                changeClass = changeNum >= 0 ? 'positive' : 'negative';
+                const sign = changeNum > 0 ? '+' : (changeNum < 0 ? '' : '');
+                changeText = `${sign}${Math.abs(changeNum).toFixed(2)}%`;
+            }
+            const usageText = (model.usage || model.usage === 0) ? (Number(model.usage).toLocaleString()) : '-';
+            const compatibilityText = safeText(model.compatibility);
+            const totalScoreText = (model.totalScore || model.totalScore === 0) ? `${escapeHtml(String(model.totalScore))}%` : '-';
+
             // MODEL, CATEGORY, INDUSTRY, PRICE PER 1K TOKENS, PRICE PER SHARE, MARKET CHANGE, USAGE, COMPATIBILITY, TOTAL SCORE, ACTION十列
             const cells = [
-                `<td class="model-name model-name-clickable" onclick="showModelCard('${model.name}')" style="cursor: pointer; color: #8b5cf6;">${model.name}</td>`,
-                `<td class="category" data-label="Category">${model.category}</td>`,
-                `<td class="industry" data-label="Industry">${model.industry}</td>`,
-                `<td class="api-price" data-label="API Price">${model.tokenPrice}<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3"></td>`,
-                `<td class="api-price" data-label="Price per Share">${model.sharePrice}K<img src="svg/i3-token-logo.svg" class="token-icon" alt="i3"></td>`,
-                `<td class="daily-delta ${model.change >= 0 ? 'positive' : 'negative'}" data-label="Market Change">${model.change >= 0 ? '+' : ''}${model.change.toFixed(2)}%</td>`,
-                `<td class="usage-score" data-label="Usage Score">${model.usage.toLocaleString()}</td>`,
-                `<td class="compatibility-score" data-label="Compatibility">${model.compatibility}</td>`,
-                `<td class="total-score" data-label="Total Score">${model.totalScore}%</td>`,
+                `<td class="model-name model-name-clickable" style="cursor: pointer; color: #8b5cf6;"><span class="model-id-text">${nameEsc}</span></td>`,
+                `<td class="category" data-label="Category">${categoryEsc}</td>`,
+                `<td class="industry" data-label="Industry">${industryEsc}</td>`,
+                `<td class="api-price" data-label="API Price">${tokenPriceHtml}</td>`,
+                `<td class="api-price" data-label="Price per Share">${sharePriceHtml}</td>`,
+                `<td class="daily-delta ${changeClass}" data-label="Market Change">${changeText}</td>`,
+                `<td class="usage-score" data-label="Usage Score">${usageText}</td>`,
+                `<td class="compatibility-score" data-label="Compatibility">${compatibilityText}</td>`,
+                `<td class="total-score" data-label="Total Score">${totalScoreText}</td>`,
                 `<td class="action-cell" data-label="Actions">
-                    <button class="try-btn" onclick="tryModel('${model.name}')">Try</button>
-                    <button class="add-cart-btn" onclick="addToCart('${model.name}')">Add to Cart</button>
-                </td>`   // 10. ACTION
+                    <button class="try-btn">Try</button>
+                    <button class="add-cart-btn">Add to Cart</button>
+                </td>`
             ];
-            
+
             row.innerHTML = cells.join('');
             
             // 调试：输出前3个模型的HTML结构
@@ -685,6 +814,20 @@ function populateBenchmarkTable(models) {
             }
             
             tableBody.appendChild(row);
+            // attach safe handlers: name click opens modal, try/add wired unless HF
+            const nameCell = row.querySelector('.model-name');
+            if (nameCell) {
+                nameCell.addEventListener('click', () => showModelCard(model.name));
+            }
+            const tryBtn = row.querySelector('.try-btn');
+            const addBtn = row.querySelector('.add-cart-btn');
+            if (model._hf) {
+                if (tryBtn) { tryBtn.disabled = true; tryBtn.style.opacity = '0.5'; tryBtn.style.cursor = 'not-allowed'; }
+                if (addBtn) { addBtn.disabled = true; addBtn.style.opacity = '0.5'; addBtn.style.cursor = 'not-allowed'; }
+            } else {
+                if (tryBtn) tryBtn.addEventListener('click', () => tryModel(model.name));
+                if (addBtn) addBtn.addEventListener('click', () => addToCart(model.name));
+            }
         }
         
         currentIndex = endIndex;
@@ -702,6 +845,182 @@ function populateBenchmarkTable(models) {
     // 开始渲染
     renderBatch();
 }
+
+// ---------- Hugging Face benchmark integration ----------
+async function fetchHuggingFaceModelsBenchmark(limit = 50) {
+    try {
+        const url = `https://huggingface.co/api/models?search=benchmark&limit=${encodeURIComponent(limit)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HF models request failed: ' + res.status);
+        const data = await res.json();
+        return data;
+    } catch (err) {
+        console.error('fetchHuggingFaceModelsBenchmark error:', err);
+        return [];
+    }
+}
+
+async function fetchHuggingFaceModelCardBenchmark(modelId) {
+    try {
+        const safeId = encodeURIComponent(modelId).replace(/%2F/g, '/');
+        const apiUrl = `https://huggingface.co/api/models/${safeId}`;
+        const res = await fetch(apiUrl);
+        if (!res.ok) throw new Error('HF model fetch failed: ' + res.status);
+        const api = await res.json();
+
+        // Try to fetch README
+        let readme = null;
+        const tryUrls = [
+            `https://huggingface.co/${safeId}/raw/main/README.md`,
+            `https://huggingface.co/${safeId}/raw/master/README.md`
+        ];
+        for (const u of tryUrls) {
+            try {
+                const r = await fetch(u);
+                if (r.ok) { readme = await r.text(); break; }
+            } catch (e) { /* ignore */ }
+        }
+
+        // Extract paper link (stricter)
+        let paperLink = null;
+        if (readme) {
+            const mdLinkRegex = /\[([^\]]*paper[^\]]*)\]\((https?:\/\/[^)\s]+)\)/i;
+            const mmd = readme.match(mdLinkRegex);
+            if (mmd && mmd[2]) paperLink = mmd[2];
+            if (!paperLink) {
+                const arxivIdMatch = readme.match(/arXiv[:\s]*([0-9]{4}\.[0-9]{4,5}(v\d+)?)/i);
+                if (arxivIdMatch && arxivIdMatch[1]) paperLink = `https://arxiv.org/abs/${arxivIdMatch[1]}`;
+            }
+            if (!paperLink) {
+                const kwRegex = /(?:paper|Paper|paper_link|paper-link|arxiv|ArXiv)[:\s\-–—]{0,40}(https?:\/\/[^\s\)\]]+)/m;
+                const m1 = readme.match(kwRegex);
+                if (m1 && m1[1]) paperLink = m1[1];
+            }
+            if (!paperLink) {
+                const urlRegex = /(https?:\/\/[^\s\)\]]+)/g;
+                let match; const candidates = [];
+                while ((match = urlRegex.exec(readme)) !== null) candidates.push(match[1]);
+                if (candidates.length) {
+                    const academicHosts = ['arxiv.org','doi.org','openreview.net','ieeexplore.ieee.org','paperswithcode.com','acm.org','semanticscholar.org','nature.com','science.org','springer.com'];
+                    const academic = candidates.map(sanitizeUrl).find(u => u && academicHosts.some(h=>u.toLowerCase().includes(h)));
+                    if (academic) paperLink = academic;
+                    else {
+                        const pdf = candidates.map(sanitizeUrl).find(u => u && u.toLowerCase().endsWith('.pdf'));
+                        if (pdf) paperLink = pdf;
+                        else paperLink = candidates.map(sanitizeUrl).find(Boolean) || null;
+                    }
+                }
+            }
+        }
+
+        // Normalize
+        const tags = Array.isArray(api.tags) ? api.tags : (api.pipeline_tags || []);
+        const downloads = api.downloads || api.downloads_count || api.downloads_count_total || 0;
+        const normalized = {
+            purpose: readme || (api.card && api.card.description) || api.description || '-',
+            useCase: (api.card && (api.card.use_case || api.card.usecase)) || '-',
+            category: tags[0] || '-',
+            industry: tags[1] || tags[0] || '-',
+            tokenPrice: '-',
+            sharePrice: '-',
+            change: '-',
+            rating: '-',
+            ratingFormatted: '-',
+            starsHtml: '—',
+            purchasedPercent: 0,
+            paperLink: sanitizeUrl(paperLink) || sanitizeUrl(api.card && (api.card.paperLink || api.card.paper)) || '-',
+            usage: downloads || 0,
+            compatibility: '-',
+            totalScore: '-',
+            _rawApi: api,
+            _readme: readme,
+            _hf: true
+        };
+
+        return { api, readme, normalized };
+    } catch (err) {
+        console.error('fetchHuggingFaceModelCardBenchmark error for', modelId, err);
+        return null;
+    }
+}
+
+async function fetchAllModelCardsBenchmark(modelIds, concurrency = 4) {
+    const results = {};
+    let i = 0;
+    const runners = new Array(concurrency).fill(null).map(async () => {
+        while (i < modelIds.length) {
+            const idx = i++;
+            const id = modelIds[idx];
+            try {
+                const hf = await fetchHuggingFaceModelCardBenchmark(id);
+                if (hf) results[id] = hf;
+            } catch (e) { console.warn('fetchAllModelCardsBenchmark error for', id, e); }
+        }
+    });
+    await Promise.all(runners);
+    return results;
+}
+
+// Append HF benchmark rows into the benchmark table (desktop)
+async function appendHuggingFaceBenchmarks(limit = 50) {
+    const tbody = document.getElementById('benchmarkTableBody');
+    if (!tbody) return;
+    const models = await fetchHuggingFaceModelsBenchmark(limit);
+    if (!models || !models.length) return;
+
+    const modelIds = models.map(m => m.modelId || m.id || m.model || (m.repository && m.repository.name)).filter(Boolean);
+    const hfMap = await fetchAllModelCardsBenchmark(modelIds, 6);
+
+    modelIds.forEach(modelId => {
+        if (!modelId) return;
+        // skip duplicates by name
+        if ([...tbody.querySelectorAll('.model-name')].some(el => el.textContent.trim() === modelId)) return;
+
+        const hf = hfMap[modelId];
+        const normalized = hf && hf.normalized ? hf.normalized : null;
+        if (normalized) MODEL_DATA[modelId] = normalized;
+
+        const escId = escapeHtml(modelId);
+        const category = escapeHtml(normalized ? normalized.category : '-');
+        const industry = escapeHtml(normalized ? normalized.industry : '-');
+        const usage = normalized && normalized.usage ? Number(normalized.usage).toLocaleString() : '0';
+
+        const row = document.createElement('tr');
+        row.className = 'hf-benchmark-row';
+
+        row.innerHTML = `
+            <td class="model-name model-name-clickable" style="cursor: pointer; color: #8b5cf6;"><span class="model-id-text">${escId}</span></td>
+            <td class="category" data-label="Category">${category}</td>
+            <td class="industry" data-label="Industry">${industry}</td>
+            <td class="api-price" data-label="API Price">-</td>
+            <td class="api-price" data-label="Price per Share">-</td>
+            <td class="daily-delta" data-label="Market Change">-</td>
+            <td class="usage-score" data-label="Usage Score">${usage}</td>
+            <td class="compatibility-score" data-label="Compatibility">-</td>
+            <td class="total-score" data-label="Total Score">-</td>
+            <td class="action-cell" data-label="Actions">
+                <button class="action-btn try" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
+                <button class="action-btn add-to-cart" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
+            </td>
+        `;
+
+        // attach safe click handler using original modelId (avoid inline onclick injection)
+        tbody.appendChild(row);
+        const nameCell = row.querySelector('.model-name');
+        if (nameCell) {
+            nameCell.addEventListener('click', function() { showModelCard(modelId); });
+        }
+    });
+
+    // regenerate mobile list after append
+    // collect current displayed models into an array for mobile generation
+    const rows = [...tbody.querySelectorAll('tr')];
+    const modelsForMobile = rows.map(r => ({ name: r.querySelector('.model-name')?.textContent || '', category: r.querySelector('.category')?.textContent || '-', industry: r.querySelector('.industry')?.textContent || '-' }));
+    generateMobileBenchmarkList(modelsForMobile);
+}
+
+// Expose
+window.appendHuggingFaceBenchmarks = appendHuggingFaceBenchmarks;
 
 // 生成手机端模型列表
 function generateMobileBenchmarkList(models) {
@@ -782,19 +1101,22 @@ function showMobileBenchmarkDetail(model) {
     const changeIcon = isUp ? '↑' : '↓';
     const changeColor = isUp ? '#10b981' : '#ef4444';
     
+    const escCategory = escapeHtml(model.category || 'N/A');
+    const escIndustry = escapeHtml(model.industry || 'N/A');
+    const escTokenPrice = escapeHtml(model.tokenPrice || '-');
     content.innerHTML = `
-      <div class="mobile-detail-section">
+    <div class="mobile-detail-section">
         <div class="mobile-detail-row">
-          <span class="mobile-detail-label">CATEGORY</span>
-          <span class="mobile-detail-value">${model.category || 'N/A'}</span>
+            <span class="mobile-detail-label">CATEGORY</span>
+            <span class="mobile-detail-value">${escCategory}</span>
         </div>
         <div class="mobile-detail-row">
-          <span class="mobile-detail-label">INDUSTRY</span>
-          <span class="mobile-detail-value">${model.industry || 'N/A'}</span>
+            <span class="mobile-detail-label">INDUSTRY</span>
+            <span class="mobile-detail-value">${escIndustry}</span>
         </div>
         <div class="mobile-detail-row">
-          <span class="mobile-detail-label">API PRICE</span>
-          <span class="mobile-detail-value mobile-detail-price">${model.tokenPrice || 0} <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+            <span class="mobile-detail-label">API PRICE</span>
+            <span class="mobile-detail-value mobile-detail-price">${escTokenPrice} <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
         </div>
         <div class="mobile-detail-row">
           <span class="mobile-detail-label">PRICE PER SHARE</span>

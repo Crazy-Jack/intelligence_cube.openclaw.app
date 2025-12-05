@@ -864,28 +864,66 @@
                     
 
                 </div>
-                <!-- Models Table (Desktop) -->
-                <div class="models-table-container desktop-table">
-                    <table class="models-table">
-                        <thead>
-                            <tr>
-                                <th>Model</th>
-                                <th>Paper</th>
-                                <th>Details</th>
-                                <th>Price per 1K Tokens</th>
-                                <th>Price per Share</th>
-                                <th>Market Change</th>
-                                <th>Trend Chart</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                    </table>
+
+                <!-- Tab Switcher -->
+                <div class="modelverse-tab-switcher">
+                    <button class="modelverse-tab-btn active" data-tab="local" onclick="switchModelverseTab('local')">Intelligence Cubed Models</button>
+                    <button class="modelverse-tab-btn" data-tab="hf" onclick="switchModelverseTab('hf')">Hugging Face Models</button>
                 </div>
 
-                <!-- Mobile Model List View -->
-                <div class="mobile-models-list" id="mobileModelsList">
-                    <!-- 模型列表将通过JS动态生成 -->
+                <!-- Local Models Panel -->
+                <div class="models-tab-panel active" id="localModelsPanel" data-tab="local">
+                    <div class="models-table-container desktop-table">
+                        <table class="models-table" id="localModelsTable">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Paper</th>
+                                    <th>Details</th>
+                                    <th>Base Model</th>
+                                    <th>Author</th>
+                                    <th>Downloads / Likes</th>
+                                    <th>Last Updated</th>
+                                    <th class="action-col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Mobile Model List View (Local) -->
+                    <div class="mobile-models-list" id="mobileModelsList">
+                        <!-- 模型列表将通过JS动态生成 -->
+                    </div>
+                </div>
+
+                <!-- Hugging Face Models Panel -->
+                <div class="models-tab-panel" id="hfModelsPanel" data-tab="hf">
+                    <div class="models-table-container desktop-table">
+                        <table class="models-table" id="huggingfaceModelsTable">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Paper</th>
+                                    <th>Details</th>
+                                    <th>Base Model</th>
+                                    <th>Author</th>
+                                    <th>Downloads / Likes</th>
+                                    <th>Last Updated</th>
+                                    <th class="action-col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- HF models appended via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Mobile Model List View (HF) -->
+                    <div class="mobile-models-list" id="hfMobileModelsList">
+                        <!-- HF 模型列表将通过JS动态生成 -->
+                    </div>
                 </div>
 
                 <!-- Mobile Model Detail View -->
@@ -1034,45 +1072,24 @@
         
         // ??????? modelverse.js ??
         
-        // Search Functions
-        function performSearch() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const tableRows = document.querySelectorAll('.models-table tbody tr');
-            const resultsDiv = document.getElementById('searchResults');
-            
-            let matchCount = 0;
-            const totalCount = tableRows.length;
-            
-            tableRows.forEach(row => {
-                const modelName = row.querySelector('.model-name').textContent.toLowerCase();
-                if (modelName.includes(searchTerm)) {
-                    row.style.display = '';
-                    matchCount++;
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-            
-            if (searchTerm.length > 0) {
-                resultsDiv.textContent = `Showing ${matchCount} / ${totalCount} models`;
-            } else {
-                resultsDiv.textContent = `Showing ${totalCount} / ${totalCount} models`;
+        // Search Functions (delegate to modelverse.js logic)
+        const originalPerformSearch = window.performSearch;
+        const originalClearSearch = window.clearSearch;
+
+        function delegatedPerformSearch() {
+            if (typeof originalPerformSearch === 'function' && originalPerformSearch !== delegatedPerformSearch) {
+                originalPerformSearch();
             }
         }
 
-        
-        function clearSearch() {
-            document.getElementById('searchInput').value = '';
-            const tableRows = document.querySelectorAll('.models-table tbody tr');
-            const resultsDiv = document.getElementById('searchResults');
-            
-            tableRows.forEach(row => {
-                row.style.display = '';
-            });
-            
-            const totalCount = tableRows.length;
-            resultsDiv.textContent = `Showing ${totalCount} / ${totalCount} models`;
+        function delegatedClearSearch() {
+            if (typeof originalClearSearch === 'function' && originalClearSearch !== delegatedClearSearch) {
+                originalClearSearch();
+            }
         }
+
+        window.performSearch = delegatedPerformSearch;
+        window.clearSearch = delegatedClearSearch;
 
 
 // —— 新增1：稳定的字符串哈希（用于给每行生成稳定的"随机"抖动）——
@@ -1127,7 +1144,7 @@
 		}
 
         function generateModelTable() {
-		  const tbody = document.querySelector('.models-table tbody');
+          const tbody = document.querySelector('#localModelsTable tbody');
 		  if (!tbody) { console.error('Table tbody not found'); return; }
 
 		  tbody.innerHTML = '';
@@ -1218,12 +1235,11 @@
 		  });
 
 		  // —— 维持你原先的统计展示 —— 
-		  const forcedTotal = 202;
-		  const totalCount = 202;
-		  const resultsDiv = document.getElementById('searchResults');
-		  if (resultsDiv) {
-		    resultsDiv.textContent = `Showing ${totalCount} / ${forcedTotal} models`;
-		  }
+          const rowCount = tbody.querySelectorAll('tr').length;
+          const resultsDiv = document.getElementById('searchResults');
+          if (resultsDiv) {
+            resultsDiv.textContent = `Showing ${rowCount} / ${rowCount} models`;
+          }
 		}
 
 		  // 生成手机端模型列表
@@ -1269,14 +1285,37 @@
 		}
 		
 		// 显示手机端模型详情
-		function showMobileModelDetail(modelName) {
-		  const modelData = MODEL_DATA[modelName];
-		  if (!modelData) return;
+        async function showMobileModelDetail(modelName) {
+          let modelData = MODEL_DATA[modelName];
+          // If not in local data, check if this is a HF item and lazy-load its README/metadata
+          if (!modelData) {
+            try {
+              const listItem = [...document.querySelectorAll('.mobile-model-item')].find(it => it.querySelector('.mobile-model-name') && it.querySelector('.mobile-model-name').textContent.trim() === modelName);
+              const isHF = listItem && (listItem.getAttribute('data-hf') === 'true' || listItem.classList.contains('hf-mobile-item'));
+              if (isHF && typeof fetchHuggingFaceModelCard === 'function') {
+                const hf = await fetchHuggingFaceModelCard(modelName);
+                if (hf && hf.normalized) {
+                  hf.normalized._hf = true;
+                  MODEL_DATA[modelName] = hf.normalized;
+                  modelData = hf.normalized;
+                } else if (hf && hf.readme) {
+                  const normalized = { purpose: hf.readme, category: hf.api?.pipeline_tag||hf.api?.pipeline_tags?.[0]||'-', industry: hf.api?.pipeline_tag||'-', tokenPrice:'-', sharePrice:'-', change:'-', rating:'-', ratingFormatted:'-', starsHtml:'—', purchasedPercent:0, paperLink: hf.normalized?.paperLink || '-', _hf:true };
+                  MODEL_DATA[modelName] = normalized;
+                  modelData = normalized;
+                }
+              }
+            } catch (e) {
+              console.warn('HF lazy load for mobile detail failed', e);
+            }
+          }
+          if (!modelData) return;
 		  
-		  // 隐藏列表视图，显示详情视图
-		  document.getElementById('mobileModelsList').style.display = 'none';
-		  const detailView = document.getElementById('mobileModelDetail');
-		  detailView.style.display = 'block';
+          const sourceListId = modelData && modelData._hf ? 'hfMobileModelsList' : 'mobileModelsList';
+          const sourceList = document.getElementById(sourceListId);
+          if (sourceList) sourceList.style.display = 'none';
+          const detailView = document.getElementById('mobileModelDetail');
+          detailView.style.display = 'block';
+          detailView.setAttribute('data-last-list', sourceListId);
 		  
 		  // 设置标题
 		  document.getElementById('mobileDetailTitle').textContent = modelName;
@@ -1284,51 +1323,107 @@
 		  // 生成详情内容
 		  const content = document.getElementById('mobileDetailContent');
 		  
-		  // 计算价格和变化
-		  const pToken = Number(modelData.tokenPrice) || 0;
-		  const pShare = Number(modelData.sharePrice) || 0;
-		  const change = Number(modelData.change) || 0;
-		  const changeAbs = Math.abs(change);
-		  const isUp = change >= 0;
-		  
-		  // 生成趋势图SVG
-		  const style = trendStyleFor(modelName, isUp);
-		  
-		  content.innerHTML = `
-		    <div class="mobile-detail-section">
-		      <div class="mobile-detail-row">
-		        <span class="mobile-detail-label">PAPER</span>
-		        <span class="mobile-detail-value">
-		          ${modelData.paperLink ? `<a href="${modelData.paperLink}" target="_blank" style="color: #3b82f6;">Link</a>` : 'No Link'}
-		        </span>
-		      </div>
-		      <div class="mobile-detail-row">
-		        <span class="mobile-detail-label">DETAILS</span>
-		        <span class="mobile-detail-value">
-		          <button class="mobile-detail-btn" style="padding: 6px 12px; font-size: 12px; background: #8b7cf6; color: white; border: none; border-radius: 6px; cursor: pointer;" onclick="showModelCard('${modelName}')">Model Card</button>
-		        </span>
-		      </div>
-		      <div class="mobile-detail-row">
-		        <span class="mobile-detail-label">PRICE PER 1K</span>
-		        <span class="mobile-detail-value mobile-detail-price">${pToken.toFixed(1)} <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
-		      </div>
-		      <div class="mobile-detail-row">
-		        <span class="mobile-detail-label">PRICE PER SHARE</span>
-		        <span class="mobile-detail-value mobile-detail-price">${pShare.toFixed(1)}K <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
-		      </div>
-		      <div class="mobile-detail-row">
-		        <span class="mobile-detail-label">MARKET CHANGE</span>
-		        <span class="mobile-detail-value mobile-detail-change ${isUp ? 'positive' : 'negative'}">
-		          ${isUp ? '↑' : '↓'} ${changeAbs.toFixed(2)}%
-		        </span>
-		      </div>
-		    </div>
-		    
-		    <div class="mobile-detail-actions">
-		      <button class="mobile-detail-btn primary" onclick="tryModelFromModelverseByName('${modelName}')">Try</button>
-		      <button class="mobile-detail-btn success" onclick="addToCartFromModelverseByName('${modelName}')">Add to Cart</button>
-		    </div>
-		  `;
+          const formatStat = (value) => {
+            const num = Number(value);
+            return Number.isFinite(num) ? num.toLocaleString() : '-';
+          };
+          const safeText = (value) => {
+            const text = (value === undefined || value === null || value === '') ? '-' : String(value);
+            return typeof escapeHtml === 'function' ? escapeHtml(text) : text;
+          };
+          const formatDateInline = (value) => {
+            if (typeof formatDateDisplay === 'function') return formatDateDisplay(value);
+            if (!value) return '-';
+            const dt = new Date(value);
+            if (isNaN(dt.getTime())) return '-';
+            return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+          };
+          const infoSection = `
+            <div class="mobile-detail-section">
+              <div class="mobile-detail-row">
+                <span class="mobile-detail-label">PAPER</span>
+                <span class="mobile-detail-value">
+                  ${modelData.paperLink ? `<a href="${modelData.paperLink}" target="_blank" style="color: #3b82f6;">Link</a>` : 'No Link'}
+                </span>
+              </div>
+              <div class="mobile-detail-row">
+                <span class="mobile-detail-label">DETAILS</span>
+                <span class="mobile-detail-value">
+                  <button class="mobile-detail-btn" style="padding: 6px 12px; font-size: 12px; background: #8b7cf6; color: white; border: none; border-radius: 6px; cursor: pointer;" onclick="showModelCard('${modelName}')">Model Card</button>
+                </span>
+              </div>
+            </div>
+          `;
+
+          let metricsSection = '';
+          if (modelData && modelData._hf) {
+            const baseModel = safeText(modelData.baseModel || modelData.category || '-');
+            const author = safeText(modelData.author || '-');
+            const downloads = formatStat(modelData.downloads);
+            const likes = formatStat(modelData.likes);
+            const lastUpdated = formatDateInline(modelData.lastModified);
+            metricsSection = `
+              <div class="mobile-detail-section">
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">BASE MODEL</span>
+                  <span class="mobile-detail-value">${baseModel}</span>
+                </div>
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">AUTHOR</span>
+                  <span class="mobile-detail-value">${author}</span>
+                </div>
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">DOWNLOADS</span>
+                  <span class="mobile-detail-value">${downloads}</span>
+                </div>
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">LIKES</span>
+                  <span class="mobile-detail-value">${likes}</span>
+                </div>
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">LAST UPDATED</span>
+                  <span class="mobile-detail-value">${lastUpdated}</span>
+                </div>
+              </div>
+            `;
+          } else {
+            const pToken = Number(modelData.tokenPrice) || 0;
+            const pShare = Number(modelData.sharePrice) || 0;
+            const change = Number(modelData.change) || 0;
+            const changeAbs = Math.abs(change);
+            const isUp = change >= 0;
+            metricsSection = `
+              <div class="mobile-detail-section">
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">PRICE PER 1K</span>
+                  <span class="mobile-detail-value mobile-detail-price">${pToken.toFixed(1)} <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+                </div>
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">PRICE PER SHARE</span>
+                  <span class="mobile-detail-value mobile-detail-price">${pShare.toFixed(1)}K <img src="svg/i3-token-logo.svg" alt="i3" style="width: 16px; height: 16px; vertical-align: middle; margin-left: 4px;"></span>
+                </div>
+                <div class="mobile-detail-row">
+                  <span class="mobile-detail-label">MARKET CHANGE</span>
+                  <span class="mobile-detail-value mobile-detail-change ${isUp ? 'positive' : 'negative'}">
+                    ${isUp ? '↑' : '↓'} ${changeAbs.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            `;
+          }
+
+          const actionsSection = `
+                <div class="mobile-detail-actions">
+                    ${modelData && modelData._hf ?
+                        `<button class="mobile-detail-btn primary" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
+                         <button class="mobile-detail-btn success" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>`
+                        :
+                        `<button class="mobile-detail-btn primary" onclick="tryModelFromModelverseByName('${modelName}')">Try</button>
+                         <button class="mobile-detail-btn success" onclick="addToCartFromModelverseByName('${modelName}')">Add to Cart</button>`
+                    }
+                </div>`;
+
+          content.innerHTML = infoSection + metricsSection + actionsSection;
 		  
 		  // 滚动到顶部
 		  window.scrollTo(0, 0);
@@ -1336,17 +1431,24 @@
 		
 		// 显示手机端列表视图
 		function showMobileListView() {
-		  document.getElementById('mobileModelDetail').style.display = 'none';
-		  document.getElementById('mobileModelsList').style.display = 'block';
+          const detailView = document.getElementById('mobileModelDetail');
+          if (detailView) {
+            detailView.style.display = 'none';
+            const fallbackList = currentModelverseTab === 'hf' ? 'hfMobileModelsList' : 'mobileModelsList';
+            const listId = detailView.getAttribute('data-last-list') || fallbackList;
+            const targetList = document.getElementById(listId);
+            if (targetList) targetList.style.display = 'block';
+          }
 		}
 		
 		// 初始化手机端搜索结果显示
 		function initMobileSearchResults() {
 		  const mobileInfo = document.getElementById('mobileSearchResults');
 		  if (mobileInfo) {
-		    // 使用和桌面端一致的硬编码总数 202
-		    const forcedTotal = 202;
-		    mobileInfo.textContent = `${forcedTotal}/${forcedTotal} models`;
+            const activePanel = document.querySelector('.models-tab-panel.active') || document.getElementById('localModelsPanel');
+            const items = activePanel ? activePanel.querySelectorAll('.mobile-model-item') : [];
+            const total = items.length || document.querySelectorAll('#localModelsTable tbody tr').length;
+            mobileInfo.textContent = `${total}/${total || 0} models`;
 		  }
 		}
 		
@@ -1370,7 +1472,7 @@
 		// 从模型名称执行操作
 		function tryModelFromModelverseByName(modelName) {
 		  // 找到对应的按钮并触发点击
-		  const rows = document.querySelectorAll('.models-table tbody tr');
+          const rows = document.querySelectorAll('#localModelsTable tbody tr');
 		  rows.forEach(row => {
 		    const nameCell = row.querySelector('.model-name');
 		    if (nameCell && nameCell.textContent.trim() === modelName) {
@@ -1382,7 +1484,7 @@
 		
 		function addToCartFromModelverseByName(modelName) {
 		  // 找到对应的按钮并触发点击
-		  const rows = document.querySelectorAll('.models-table tbody tr');
+          const rows = document.querySelectorAll('#localModelsTable tbody tr');
 		  rows.forEach(row => {
 		    const nameCell = row.querySelector('.model-name');
 		    if (nameCell && nameCell.textContent.trim() === modelName) {
@@ -1409,11 +1511,18 @@
 		});
 
 		  // 页面加载后生成
-		document.addEventListener('DOMContentLoaded', function() {
-		    generateModelTable();
-		    generateMobileModelList(); // 同时生成手机端列表
-		    initMobileSearchResults(); // 初始化手机端搜索结果显示
-		  });
+        document.addEventListener('DOMContentLoaded', function() {
+            generateModelTable();
+            generateMobileModelList(); // 同时生成手机端列表
+                        // Append Hugging Face models (metadata view + disabled actions)
+            try {
+              if (window.appendHuggingFaceModels) window.appendHuggingFaceModels(100);
+              if (window.appendHuggingFaceModelsToMobile) window.appendHuggingFaceModelsToMobile(100);
+            } catch (e) {
+              console.warn('Appending HF models failed', e);
+            }
+            initMobileSearchResults(); // 初始化手机端搜索结果显示
+          });
 
         window.addToCartFromModelverse = addToCartFromModelverse;
         window.tryModelFromModelverse = tryModelFromModelverse;
@@ -1421,8 +1530,8 @@
         window.closeModelCart = closeModelCart;
         window.tryModel = tryModel;
         window.addToCart = addToCart;
-        window.performSearch = performSearch;
-        window.clearSearch = clearSearch;
+        window.performSearch = delegatedPerformSearch;
+        window.clearSearch = delegatedClearSearch;
         window.showMobileModelDetail = showMobileModelDetail;
         window.showMobileListView = showMobileListView;
         window.tryModelFromModelverseByName = tryModelFromModelverseByName;
