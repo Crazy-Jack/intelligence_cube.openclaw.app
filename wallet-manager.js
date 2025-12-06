@@ -246,9 +246,9 @@ class WalletManager {
 	          console.warn('Failed to fetch SOL balance:', e);
 	        }
             
-            // ⑥ 与既有流程对齐
-	        await this.fetchRemoteWalletDataIfAvailable?.();
+            // ⑥ 与既有流程对齐 - Load local first, then hydrate from remote
 	        this.loadWalletSpecificData?.();
+	        await this.fetchRemoteWalletDataIfAvailable?.();
 	        this.saveToStorage?.();
 	        this.updateUI?.();
 	        window.dispatchEvent(new CustomEvent('walletConnected', {
@@ -382,9 +382,9 @@ class WalletManager {
 	    try { modal?.close?.(); } catch {}
 	    try { window.closeWalletModal?.(); } catch {}
 
-	    // 6) 同步远端 & 刷新 UI
-	    await this.fetchRemoteWalletDataIfAvailable?.();
+	    // 6) 同步远端 & 刷新 UI - Load local first, then hydrate from remote
 	    this.loadWalletSpecificData?.();
+	    await this.fetchRemoteWalletDataIfAvailable?.();
 	    this.saveToStorage?.();
 	    this.updateUI?.();
 
@@ -503,9 +503,9 @@ class WalletManager {
 					console.warn('[MM] enforcePreferredEvmChain failed:', e);
 				}
 
-				// Always try to hydrate from Firestore so server-side credit changes are reflected
-				await this.fetchRemoteWalletDataIfAvailable();
+				// Load local data first, then hydrate from Firestore if remote has more credits
 				this.loadWalletSpecificData();
+				await this.fetchRemoteWalletDataIfAvailable();
 				this.saveToStorage();
 				this.updateUI();
 
@@ -537,8 +537,8 @@ class WalletManager {
 					if (accounts && accounts.length > 0) {
 						this.walletAddress = accounts[0];
 						this.isConnected = true;
-						await this.fetchRemoteWalletDataIfAvailable();
 						this.loadWalletSpecificData();
+						await this.fetchRemoteWalletDataIfAvailable();
 						this.saveToStorage();
 						this.updateUI();
 						window.dispatchEvent(new CustomEvent('walletConnected', {
@@ -557,10 +557,10 @@ class WalletManager {
 						this.walletAddress = accounts[0];
 						this.isConnected = true;
 						const hadLocalArchive = !!this.getWalletData(this.walletAddress);
+						this.loadWalletSpecificData();
 						if (!hadLocalArchive) {
 							await this.fetchRemoteWalletDataIfAvailable();
 						}
-						this.loadWalletSpecificData();
 						this.saveToStorage();
 						this.updateUI();
 						window.dispatchEvent(new CustomEvent('walletConnected', {
