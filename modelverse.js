@@ -696,6 +696,16 @@ function switchModelverseTab(tabName) {
     if (detailView) detailView.style.display = 'none';
   }
 
+  // Refresh user agents table when switching to that tab (in case new ones were created)
+  if (tabName === 'userAgents') {
+    if (typeof generateUserAgentsTable === 'function') {
+      generateUserAgentsTable();
+    }
+    if (typeof generateUserAgentsMobileList === 'function') {
+      generateUserAgentsMobileList();
+    }
+  }
+
   performSearch();
   refreshModelCounts();
   requestAnimationFrame(refreshModelCounts);
@@ -1217,8 +1227,30 @@ function getModelData(name) {
     });
   }
 
+  // ====== Helper: Check if model is a user-created agent ======
+  function isUserAgent(modelName) {
+    if (!modelName) return false;
+    
+    // Check if model exists in user agents storage
+    try {
+      const userAgents = JSON.parse(localStorage.getItem('userAgents') || '{}');
+      if (userAgents[modelName]) return true;
+    } catch (e) {
+      console.warn('Error reading user agents:', e);
+    }
+    
+    // Check if model has a flag indicating it's a user agent
+    const modelData = (typeof getModelData === 'function') ? getModelData(modelName) : null;
+    if (modelData && modelData.isUserAgent === true) return true;
+    
+    // Check if model name starts with user prefix (optional convention)
+    if (modelName.startsWith('user-') || modelName.startsWith('agent-')) return true;
+    
+    return false;
+  }
+
   // ====== 与 Benchmark 一致的 Try / Add to Cart 行为 ======
-  // Try：关掉 Auto Router、写入 running 状态并跳到 index.html
+  // Try：关掉 Auto Router、写入 running 状态并跳到 index.html 或 agent-chat.html
   window.tryModel = function (modelName) {
     const modelData = (typeof getModelData === 'function') ? getModelData(modelName) : null;
 
@@ -1228,7 +1260,8 @@ function getModelData(name) {
       category: modelData?.category,
       industry: modelData?.industry,
       purpose: modelData?.purpose,
-      useCase: modelData?.useCase
+      useCase: modelData?.useCase,
+      isUserAgent: isUserAgent(modelName)
     }));
 
     // 与 Benchmark 页相同的工作流约定：running + 关闭 Auto Router
@@ -1240,9 +1273,14 @@ function getModelData(name) {
       startedAt: new Date().toISOString()
     }));
 
-    // 去聊天页，首页会读取 running 状态并显示"Running …"
-    // （index.html 的这套展示逻辑你已具备）
-    window.location.href = 'index.html?tryModel=' + encodeURIComponent(modelName);
+    // Check if this is a user-created agent - route to agent-chat.html
+    if (isUserAgent(modelName)) {
+      // Route to agent chat page for user-created agents
+      window.location.href = 'agent-chat.html?agent=' + encodeURIComponent(modelName);
+    } else {
+      // Route to regular chat page for standard models
+      window.location.href = 'index.html?tryModel=' + encodeURIComponent(modelName);
+    }
   };
 
   // Add to Cart：与 Benchmark 一致的功能

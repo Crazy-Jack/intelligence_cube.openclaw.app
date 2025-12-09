@@ -151,6 +151,32 @@ body {
     gap: 12px;
 }
 
+/* Test Mode Toggle */
+.test-mode-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 8px;
+}
+
+.test-mode-label-text {
+    font-weight: 500;
+    white-space: nowrap;
+    font-size: 13px;
+    color: #6b7280;
+    user-select: none;
+}
+
+@media (max-width: 768px) {
+    .test-mode-toggle-container {
+        margin-right: 4px;
+    }
+    
+    .test-mode-label-text {
+        display: none;
+    }
+}
+
 .discover-btn, .create-btn {
     display: flex;
     align-items: center;

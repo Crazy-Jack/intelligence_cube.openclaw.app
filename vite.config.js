@@ -5,8 +5,15 @@ import { copyFileSync, mkdirSync, readdirSync, statSync } from 'fs'
 export default defineConfig({
   server: {
     host: '0.0.0.0', // Allow external access
-    port: 3001,
-    strictPort: true,
+    port: 3002, // Changed from 3001 to avoid conflict with Express server
+    strictPort: false, // Allow fallback to other port if 3002 is taken
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001', // Express server runs on 3001
+        changeOrigin: true,
+        secure: false
+      }
+    }
   },
   build: {
     outDir: 'dist',
@@ -20,7 +27,8 @@ export default defineConfig({
         workflow: resolve(__dirname, 'workflow.html'),
         myassets: resolve(__dirname, 'myassets.html'),
         mycart: resolve(__dirname, 'mycart.html'),
-        interactive: resolve(__dirname, 'interactive.html')
+        interactive: resolve(__dirname, 'interactive.html'),
+        'agent-chat': resolve(__dirname, 'agent-chat.html')
       }
     }
   },
@@ -55,7 +63,8 @@ export default defineConfig({
           'canvas.js',
           'workflow.js',
           'myassets.js',
-          'mycart.js'
+          'mycart.js',
+          'agent-chat.js'
         ]
         
         // Copy CSS files as-is to dist root

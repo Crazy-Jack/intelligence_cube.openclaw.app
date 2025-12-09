@@ -624,10 +624,22 @@
     <script type="module">
         import AppKit from "https://unpkg.com/@reown/appkit@1.8.4/dist/index.js?module";
 
-        import googleAuthManager from './src/google-auth.js';
-        window.googleAuthManager = googleAuthManager;
-        window.handleGoogleSignIn = () => googleAuthManager.signIn();
-        window.handleDailyCheckin = () => googleAuthManager.handleDailyCheckin();
+        // Try to load module-based Google Auth, but don't override if inline version exists
+        import('./src/google-auth.js').then(googleAuthManager => {
+            if (googleAuthManager && googleAuthManager.default) {
+                window.googleAuthManager = googleAuthManager.default;
+                // Only set handleGoogleSignIn if it's not already set by inline script
+                if (!window.handleGoogleSignIn || typeof window.handleGoogleSignIn !== 'function') {
+                    window.handleGoogleSignIn = () => googleAuthManager.default.signIn();
+                }
+                if (!window.handleDailyCheckin) {
+                    window.handleDailyCheckin = () => googleAuthManager.default.handleDailyCheckin();
+                }
+                console.log('✅ Module-based Google Auth loaded');
+            }
+        }).catch(error => {
+            console.warn('⚠️ Module-based Google Auth not available, using inline version:', error.message);
+        });
     </script>
     <script src="modelverse.js"></script>
 </body>
@@ -869,6 +881,7 @@
                 <div class="modelverse-tab-switcher">
                     <button class="modelverse-tab-btn active" data-tab="local" onclick="switchModelverseTab('local')">Intelligence Cubed Models</button>
                     <button class="modelverse-tab-btn" data-tab="hf" onclick="switchModelverseTab('hf')">Public Owned Models</button>
+                    <button class="modelverse-tab-btn" data-tab="userAgents" onclick="switchModelverseTab('userAgents')">User Agents</button>
                 </div>
 
                 <!-- Local Models Panel -->
@@ -923,6 +936,34 @@
                     <!-- Mobile Model List View (HF) -->
                     <div class="mobile-models-list" id="hfMobileModelsList">
                         <!-- HF models list with pagination generated via JS -->
+                    </div>
+                </div>
+
+                <!-- User Agents Panel -->
+                <div class="models-tab-panel" id="userAgentsPanel" data-tab="userAgents">
+                    <div class="models-table-container desktop-table">
+                        <table class="models-table" id="userAgentsTable">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Paper</th>
+                                    <th>Details</th>
+                                    <th>Base Model</th>
+                                    <th>Author</th>
+                                    <th>Downloads / Likes</th>
+                                    <th>Last Updated</th>
+                                    <th class="action-col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- User agents will be generated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Mobile Model List View (User Agents) -->
+                    <div class="mobile-models-list" id="userAgentsMobileList">
+                        <!-- User agents mobile list generated via JS -->
                     </div>
                 </div>
 
@@ -1149,6 +1190,9 @@
 
 		  tbody.innerHTML = '';
 
+		  // —— Only show regular I³ models (no user agents) ——
+		  let mergedModelData = { ...MODEL_DATA };
+
 		  // —— 预计算中位数（用于中心化，避免 sharePrice 一家独大）——
 		  function median(arr) {
 		    if (!arr.length) return 0;
@@ -1156,12 +1200,12 @@
 		    const m = Math.floor(s.length/2);
 		    return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
 		  }
-		  const all = Object.values(MODEL_DATA);
+		  const all = Object.values(mergedModelData);
 		  const medRating = median(all.map(x => Number(x.rating ?? x.ratingFormatted) || 0));
 		  const medToken  = median(all.map(x => Number(x.tokenPrice) || 0));
 		  const medShare  = median(all.map(x => Number(x.sharePrice) || 0));
 
-		  Object.entries(MODEL_DATA).forEach(([modelName, modelData]) => {
+		  Object.entries(mergedModelData).forEach(([modelName, modelData]) => {
 		    const row = document.createElement('tr');
 		    row.className = 'model-row';
 
@@ -1242,6 +1286,208 @@
           }
 		}
 
+		  // 生成用户代理表格
+		function generateUserAgentsTable() {
+		  const tbody = document.querySelector('#userAgentsTable tbody');
+		  if (!tbody) { console.error('User agents table tbody not found'); return; }
+
+		  tbody.innerHTML = '';
+
+		  // —— Load user agents from localStorage ——
+		  let userAgents = {};
+		  try {
+		    userAgents = JSON.parse(localStorage.getItem('userAgents') || '{}');
+		  } catch (error) {
+		    console.warn('⚠️ Error loading user agents:', error);
+		    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#6b7280;">No user agents found. Create one to get started!</td></tr>';
+		    return;
+		  }
+
+		  if (Object.keys(userAgents).length === 0) {
+		    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#6b7280;">No user agents found. Create one to get started!</td></tr>';
+		    return;
+		  }
+
+		  // —— 预计算中位数（用于中心化）——
+		  function median(arr) {
+		    if (!arr.length) return 0;
+		    const s = [...arr].sort((a,b)=>a-b);
+		    const m = Math.floor(s.length/2);
+		    return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+		  }
+		  
+		  // Get all models including user agents for median calculation
+		  const allModels = [...Object.values(MODEL_DATA), ...Object.values(userAgents)];
+		  const medRating = median(allModels.map(x => Number(x.rating ?? x.ratingFormatted) || 0));
+		  const medToken  = median(allModels.map(x => Number(x.tokenPrice) || 0));
+		  const medShare  = median(allModels.map(x => Number(x.sharePrice) || 0));
+
+		  Object.entries(userAgents).forEach(([agentName, agentData]) => {
+		    // Merge user agent with default values and update global MODEL_DATA
+		    const mergedAgent = {
+		      ...agentData,
+		      isUserAgent: true,
+		      tokenPrice: agentData.tokenPrice || 'Free',
+		      sharePrice: agentData.sharePrice || '-',
+		      change: agentData.change || '0',
+		      rating: agentData.rating || '5',
+		      ratingFormatted: agentData.ratingFormatted || '5.0',
+		      starsHtml: agentData.starsHtml || '★★★★★',
+		      paperLink: agentData.paperLink || '-',
+		      category: agentData.category || 'User Agent',
+		      industry: agentData.industry || 'Custom'
+		    };
+		    
+		    // Update global MODEL_DATA so getModelData() can find it
+		    if (typeof MODEL_DATA !== 'undefined') {
+		      MODEL_DATA[agentName] = mergedAgent;
+		    }
+
+		    const row = document.createElement('tr');
+		    row.className = 'model-row user-agent-row';
+
+		    const paperLinkHtml = mergedAgent.paperLink && mergedAgent.paperLink !== '-'
+		      ? `<a href="${mergedAgent.paperLink}" target="_blank">Link</a>`
+		      : '<span>-</span>';
+
+		    // —— 字段取值 —— 
+		    const ratingRaw = (mergedAgent.rating !== undefined ? mergedAgent.rating : mergedAgent.ratingFormatted);
+		    const rating   = Number.parseFloat(ratingRaw) || 0;
+		    const pToken   = Number(mergedAgent.tokenPrice) || 0;
+		    const pShare   = Number(mergedAgent.sharePrice) || 0;
+		    const changeAbs = Math.abs(Number(mergedAgent.change) || 0);
+
+		    // —— 中位数中心化 + 稳健权重 ——
+		    const rDev = rating - medRating;
+		    const tDev = pToken - medToken;
+		    const sDev = pShare - medShare;
+
+		    const wr = 1.8;
+		    const wt = 0.35;
+		    const ws = 0.02;
+
+		    const score = wr * rDev + wt * tDev + ws * sDev;
+		    const isUp  = score >= 0;
+
+		    // —— Market Change 外观 ——
+		    const changeClass = isUp ? 'positive' : 'negative';
+		    const changeIcon  = isUp
+		      ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 14L12 9L17 14" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+		      : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 10L12 15L17 10" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+		    const signText = isUp ? '+' : '−';
+		    const color    = isUp ? '#22c55e' : '#ef4444';
+
+		    // —— Trend Chart ——
+		    const style = trendStyleFor(agentName, isUp);
+
+		    // —— 行渲染 —— 
+		    row.innerHTML = `
+		      <td class="model-name">${agentName}</td>
+		      <td class="paper-link" data-label="Paper">${paperLinkHtml}</td>
+		      <td class="model-details" data-label="Details">
+		        <button class="model-card-btn" onclick="showModelCard('${agentName}')">Model Card</button>
+		      </td>
+		      <td class="api-price" data-label="Price per 1K Tokens"><div class="price-value">${pToken} <img src="svg/i3-token-logo.svg" alt="i3" class="token-logo"></div></td>
+		      <td class="value" data-label="Price per Share"><div class="price-value">${pShare}K <img src="svg/i3-token-logo.svg" alt="i3" class="token-logo"></div></td>
+		      <td class="daily-delta ${changeClass}" data-label="Market Change">
+		        ${changeIcon}
+		        <span style="color:${color};">${signText}${changeAbs}%</span>
+		      </td>
+		      <td class="trend-chart" data-label="Trend Chart">
+		        <svg width="60" height="20" viewBox="0 0 60 20">
+		          <polyline
+		            points="${style.points}"
+		            stroke="${style.color}"
+		            stroke-width="${style.strokeWidth}"
+		            stroke-opacity="${style.opacity}"
+		            fill="none"
+		          />
+		        </svg>
+		      </td>
+		      <td class="action-cell" data-label="Actions">
+		        <div class="invest">
+		          <button class="try-btn" onclick="tryModelFromModelverse(this)">Try</button>
+		          <button class="add-cart-btn" onclick="addToCartFromModelverse(this)">Add to Cart</button>
+		        </div>
+		      </td>
+		    `;
+
+		    tbody.appendChild(row);
+		  });
+
+		  // —— 更新统计展示 —— 
+		  const rowCount = tbody.querySelectorAll('tr').length;
+		  const resultsDiv = document.getElementById('searchResults');
+		  if (resultsDiv) {
+		    resultsDiv.textContent = `Showing ${rowCount} / ${rowCount} user agents`;
+		  }
+		}
+
+		// 生成用户代理手机端列表
+		function generateUserAgentsMobileList() {
+		  const container = document.getElementById('userAgentsMobileList');
+		  if (!container) return;
+		  
+		  container.innerHTML = '';
+		  
+		  // —— Load user agents from localStorage ——
+		  let userAgents = {};
+		  try {
+		    userAgents = JSON.parse(localStorage.getItem('userAgents') || '{}');
+		  } catch (error) {
+		    console.warn('⚠️ Error loading user agents for mobile:', error);
+		    container.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">No user agents found.</div>';
+		    return;
+		  }
+
+		  if (Object.keys(userAgents).length === 0) {
+		    container.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">No user agents found. Create one to get started!</div>';
+		    return;
+		  }
+		  
+		  Object.entries(userAgents).forEach(([agentName, agentData]) => {
+		    // Update global MODEL_DATA
+		    const mergedAgent = {
+		      ...agentData,
+		      isUserAgent: true,
+		      category: agentData.category || 'User Agent',
+		      industry: agentData.industry || 'Custom'
+		    };
+		    if (typeof MODEL_DATA !== 'undefined') {
+		      MODEL_DATA[agentName] = mergedAgent;
+		    }
+
+		    const item = document.createElement('div');
+		    item.className = 'mobile-model-item user-agent-item';
+		    item.onclick = () => showMobileModelDetail(agentName);
+		    
+		    const icon = agentName.charAt(0).toUpperCase();
+		    const category = mergedAgent.category || 'User Agent';
+		    const industry = mergedAgent.industry || 'Custom';
+		    
+		    item.innerHTML = `
+		      <div class="mobile-model-item-header">
+		        <div class="mobile-model-icon">${icon}</div>
+		        <div style="flex: 1;">
+		          <div class="mobile-model-name">${agentName}</div>
+		        </div>
+		      </div>
+		      <div class="mobile-model-info">
+		        <div class="mobile-model-info-row">
+		          <span class="mobile-model-label">Category:</span>
+		          <span class="mobile-model-value">${category}</span>
+		        </div>
+		        <div class="mobile-model-info-row">
+		          <span class="mobile-model-label">Industry:</span>
+		          <span class="mobile-model-value">${industry}</span>
+		        </div>
+		      </div>
+		    `;
+		    
+		    container.appendChild(item);
+		  });
+		}
+
 		  // 生成手机端模型列表
 		function generateMobileModelList() {
 		  const container = document.getElementById('mobileModelsList');
@@ -1249,7 +1495,10 @@
 		  
 		  container.innerHTML = '';
 		  
-		  Object.entries(MODEL_DATA).forEach(([modelName, modelData]) => {
+		  // —— Only show regular I³ models (no user agents) ——
+		  let mergedModelData = { ...MODEL_DATA };
+		  
+		  Object.entries(mergedModelData).forEach(([modelName, modelData]) => {
 		    const item = document.createElement('div');
 		    item.className = 'mobile-model-item';
 		    item.onclick = () => showMobileModelDetail(modelName);
@@ -1514,6 +1763,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             generateModelTable();
             generateMobileModelList(); // 同时生成手机端列表
+            generateUserAgentsTable(); // 生成用户代理表格
+            generateUserAgentsMobileList(); // 生成用户代理手机端列表
                         // Append Hugging Face models (metadata view + disabled actions) - Page 1
             try {
               if (window.appendHuggingFaceModels) window.appendHuggingFaceModels(1, true);
@@ -1540,6 +1791,8 @@
         window.toggleInferenceFilter = toggleInferenceFilter;
         window.showAddFilters = showAddFilters;
         window.showSortOptions = showSortOptions;
+        window.generateUserAgentsTable = generateUserAgentsTable;
+        window.generateUserAgentsMobileList = generateUserAgentsMobileList;
         // ?????????
         function showWalletSelectionModal() {
             // ??????
@@ -2097,6 +2350,32 @@
     <script src="contract-config.js"></script>
     <script src="config.js"></script>
     <script src="api-manager.js"></script>
+    <script src="user-agents-helper.js"></script>
+    <script>
+        // Auto-create a test agent on page load (if helper is loaded)
+        (function() {
+            // Wait a bit for user-agents-helper to load
+            setTimeout(() => {
+                if (typeof createUserAgent === 'function') {
+                    const testAgentName = 'Test-Agent';
+                    const existingAgents = getAllUserAgents();
+                    
+                    // Only create if it doesn't exist
+                    if (!existingAgents[testAgentName]) {
+                        createUserAgent(testAgentName, {
+                            purpose: 'A test agent for testing the Gemini integration',
+                            useCase: 'Testing chat functionality and streaming responses',
+                            category: 'Test Agent',
+                            industry: 'Testing'
+                        });
+                        console.log('✅ Test agent created automatically:', testAgentName);
+                    } else {
+                        console.log('ℹ️ Test agent already exists:', testAgentName);
+                    }
+                }
+            }, 100);
+        })();
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="script.js"></script>
     <script type="module" src="chains.js"></script>
@@ -2316,11 +2595,27 @@
                     if (el) el.textContent = 'Logging in...';
                 })();
                 
+                // Try to use the module-based implementation first if available
+                if (window.googleAuthManager && typeof window.googleAuthManager.signIn === 'function') {
+                    try {
+                        await window.googleAuthManager.signIn();
+                        console.log('✅ 登录成功 (via module)');
+                        (function(){
+                            const el = document.getElementById('googleSignInStatus');
+                            if (el) el.textContent = 'Log in successful！';
+                        })();
+                        return;
+                    } catch (moduleErr) {
+                        console.warn('Module-based auth failed, falling back to inline:', moduleErr);
+                    }
+                }
+                
+                // Fallback to inline Firebase auth
                 const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js');
                 const provider = new GoogleAuthProvider();
                 // 强制每次登录时都要求用户重新选择账户或输入密码
                 provider.setCustomParameters({
-                    prompt: 'login'
+                    prompt: 'select_account'
                 });
                 
                 // 当由钱包连接自动触发时，优先尝试弹窗，若被拦截则回退到重定向
@@ -2334,7 +2629,8 @@
                         })();
                     } catch (popupErr) {
                         const code = popupErr && popupErr.code;
-                        if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+                        console.error('Popup error:', code, popupErr);
+                        if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request' || code === 'auth/popup-closed-by-user') {
                             console.warn('Popup blocked or cancelled; falling back to redirect login');
                             await signInWithRedirect(firebaseAuth, provider);
                             // 页面将跳转进行登录
@@ -2343,22 +2639,88 @@
                         throw popupErr;
                     }
                 } else {
-                    const result = await signInWithPopup(firebaseAuth, provider);
-                    console.log('✅ 登录成功:', result.user.email);
-                    (function(){
-                        const el = document.getElementById('googleSignInStatus');
-                        if (el) el.textContent = 'Log in successful！';
-                    })();
+                    // For manual clicks, try popup first, but immediately fall back to redirect if blocked
+                    try {
+                        const result = await signInWithPopup(firebaseAuth, provider);
+                        console.log('✅ 登录成功:', result.user.email);
+                        (function(){
+                            const el = document.getElementById('googleSignInStatus');
+                            if (el) el.textContent = 'Log in successful！';
+                        })();
+                    } catch (popupErr) {
+                        const code = popupErr && popupErr.code;
+                        console.error('Popup error:', code, popupErr);
+                        
+                        // If popup is blocked, immediately use redirect (no error shown)
+                        if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+                            console.warn('Popup blocked; switching to redirect login');
+                            (function(){
+                                const el = document.getElementById('googleSignInStatus');
+                                if (el) el.textContent = 'Redirecting to Google sign-in...';
+                            })();
+                            
+                            // Use redirect - this will navigate away from the page
+                            try {
+                                await signInWithRedirect(firebaseAuth, provider);
+                                // Page will redirect, so we won't reach here
+                                return;
+                            } catch (redirectErr) {
+                                console.error('Redirect also failed:', redirectErr);
+                                throw redirectErr;
+                            }
+                        }
+                        
+                        // For other errors (like user closing popup), show error
+                        if (code === 'auth/popup-closed-by-user') {
+                            (function(){
+                                const el = document.getElementById('googleSignInStatus');
+                                if (el) el.textContent = 'Sign-in cancelled. Please try again.';
+                            })();
+                            return; // Don't throw, just return
+                        }
+                        
+                        // For other errors, throw to be caught by outer catch
+                        throw popupErr;
+                    }
                 }
                 
             } catch (error) {
+                // Don't show error if we already handled popup-blocked by switching to redirect
+                // (redirect will navigate away, so we won't reach here in that case)
+                
                 console.error('❌ Log in failed:', error);
-                if (error.code === 'auth/unauthorized-domain') {
-                    const el = document.getElementById('googleSignInStatus');
-                    if (el) el.textContent = '域名未授权，请在 Firebase 控制台添加当前域名';
-                } else {
-                    const el = document.getElementById('googleSignInStatus');
-                    if (el) el.textContent = 'Log in failed: ' + error.message;
+                console.error('Error details:', {
+                    code: error.code,
+                    message: error.message,
+                    email: error.email,
+                    credential: error.credential
+                });
+                
+                let errorMessage = 'Log in failed: ' + (error.message || 'Unknown error');
+                
+                if (error.code === 'auth/unauthorized-domain' || error.message.includes('requests-from-referer') || error.message.includes('are-blocked')) {
+                    const hostname = window.location.hostname;
+                    const port = window.location.port ? ':' + window.location.port : '';
+                    errorMessage = `Domain not authorized. Please add "${hostname}${port}" and "localhost" to Firebase authorized domains:\n\n1. Go to Firebase Console (https://console.firebase.google.com)\n2. Select project: i3-testnet\n3. Go to Authentication → Settings → Authorized domains\n4. Click "Add domain" and add:\n   - localhost\n   - ${hostname}${port}\n5. Save and try again`;
+                } else if (error.code === 'auth/popup-blocked') {
+                    // This shouldn't happen if redirect fallback worked, but just in case
+                    errorMessage = 'Popup was blocked and redirect failed. Please allow popups for this site or try again.';
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    errorMessage = 'Sign-in popup was closed. Please try again.';
+                } else if (error.code === 'auth/cancelled-popup-request') {
+                    errorMessage = 'Sign-in was cancelled. Please try again.';
+                } else if (error.code === 'auth/network-request-failed') {
+                    errorMessage = 'Network error. Please check your internet connection and try again.';
+                } else if (error.code === 'auth/internal-error') {
+                    errorMessage = 'Internal error. Please try again or contact support.';
+                }
+                
+                const el = document.getElementById('googleSignInStatus');
+                if (el) el.textContent = errorMessage;
+                
+                // Only show alert for non-popup-blocked errors (popup-blocked should have redirected)
+                if (error.code !== 'auth/popup-blocked' && error.code !== 'auth/cancelled-popup-request') {
+                    alert(errorMessage);
                 }
             }
         }

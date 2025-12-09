@@ -1542,6 +1542,13 @@
 
             <!-- Right Section -->
             <div class="header-right">
+                <!-- Test Mode Toggle -->
+                <div class="test-mode-toggle-container" title="Toggle test mode (free i3 tokens)">
+                    <span class="test-mode-label-text">Test Mode</span>
+                    <div class="toggle-switch" id="testModeToggle" onclick="toggleTestModeSwitch()">
+                        <div class="toggle-slider"></div>
+                    </div>
+                </div>
                 <!-- Current Network badge (shows only after wallet connected) -->
                 <button id="networkBadge" class="network-badge" type="button" style="display:none" onclick="openNetworkPickerModal()">
 				  <img class="network-badge__icon" src="" alt="">
@@ -2153,6 +2160,9 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize test mode toggle
+            initTestModeToggle();
+            
             // 读取已保存的开关状态(防止刷新后状态丢失)
             const saved = localStorage.getItem('autoRouter');
             if (saved === 'off') autoRouterOn = false;
@@ -2779,6 +2789,34 @@
         }
 
         function getModelTokenPrice(modelName) {
+            // Check localStorage toggle first (user preference - highest priority)
+            try {
+                const testModeValue = localStorage.getItem('i3TestMode');
+                // Only return 0 if explicitly set to 'true' in localStorage
+                if (testModeValue === 'true') {
+                    return 0.0;
+                }
+                // If explicitly set to 'false', use normal pricing (skip config check)
+                if (testModeValue === 'false') {
+                    // Use normal pricing
+                } else {
+                    // If not set in localStorage, check config as fallback
+                    try {
+                        if (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.gemini && window.APP_CONFIG.gemini.testMode === true) {
+                            return 0.0;
+                        }
+                    } catch (_) {}
+                }
+            } catch (_) {
+                // If localStorage fails, check config
+                try {
+                    if (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.gemini && window.APP_CONFIG.gemini.testMode === true) {
+                        return 0.0;
+                    }
+                } catch (_) {}
+            }
+            
+            // Original pricing logic: get price from MODEL_DATA
             try {
                 if (typeof MODEL_DATA !== 'undefined' && MODEL_DATA[modelName] && typeof MODEL_DATA[modelName].tokenPrice === 'number') {
                     return Number(MODEL_DATA[modelName].tokenPrice);
@@ -2786,6 +2824,68 @@
             } catch (_) {}
             // Fallback default price per 1K tokens in i3
             return 1.0;
+        }
+        
+        // Toggle test mode function (matches existing toggle pattern)
+        function toggleTestModeSwitch() {
+            try {
+                const toggle = document.getElementById('testModeToggle');
+                if (!toggle) return;
+                
+                // Toggle the 'off' class (off = disabled, no class = enabled)
+                const isCurrentlyOff = toggle.classList.contains('off');
+                const willBeEnabled = isCurrentlyOff;
+                
+                if (willBeEnabled) {
+                    toggle.classList.remove('off');
+                } else {
+                    toggle.classList.add('off');
+                }
+                
+                // Update localStorage
+                localStorage.setItem('i3TestMode', willBeEnabled ? 'true' : 'false');
+                console.log('🧪 Test mode', willBeEnabled ? 'enabled' : 'disabled', '- i3 tokens are now', willBeEnabled ? 'FREE' : 'CHARGED');
+                console.log('💰 Current token price check:', getModelTokenPrice('test-model'));
+                
+                // Show a brief notification
+                if (typeof showNotification === 'function') {
+                    showNotification(`Test mode ${willBeEnabled ? 'enabled' : 'disabled'}. i3 tokens are now ${willBeEnabled ? 'free' : 'charged normally'}.`);
+                }
+            } catch (e) {
+                console.error('Error toggling test mode:', e);
+            }
+        }
+        
+        // Initialize test mode toggle on page load
+        function initTestModeToggle() {
+            try {
+                const toggle = document.getElementById('testModeToggle');
+                if (toggle) {
+                    // Check localStorage first, then config
+                    const localStorageValue = localStorage.getItem('i3TestMode');
+                    let isEnabled = false;
+                    
+                    if (localStorageValue !== null) {
+                        isEnabled = localStorageValue === 'true';
+                    } else {
+                        // Fallback to config if localStorage not set
+                        try {
+                            if (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.gemini) {
+                                isEnabled = window.APP_CONFIG.gemini.testMode === true;
+                            }
+                        } catch (_) {}
+                    }
+                    
+                    // Set the toggle state (off class means disabled)
+                    if (!isEnabled) {
+                        toggle.classList.add('off');
+                    } else {
+                        toggle.classList.remove('off');
+                    }
+                }
+            } catch (e) {
+                console.error('Error initializing test mode toggle:', e);
+            }
         }
 
         function recordUsageLog(entry) {

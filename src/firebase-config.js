@@ -1,6 +1,6 @@
 // Firebase configuration
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 
 // Your Firebase configuration object
@@ -37,6 +37,15 @@ export const signInWithGoogle = async () => {
     return user;
   } catch (error) {
     console.error('Error signing in with Google:', error);
+    
+    // If popup is blocked, fall back to redirect
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+      console.warn('Popup blocked, falling back to redirect');
+      await signInWithRedirect(auth, provider);
+      // Page will redirect, so we won't return
+      return null;
+    }
+    
     throw error;
   }
 };

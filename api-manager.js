@@ -95,11 +95,15 @@ class APIManager {
             console.log('🚀 Making API request to local proxy: /api/chat/completions');
             console.log('📝 Request body:', requestBody);
             
+            // Get test mode state from localStorage
+            const testModeEnabled = localStorage.getItem('i3TestMode') === 'true';
+            
             const response = await fetch('/api/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'I3-API-Key': apiKey
+                    'I3-API-Key': apiKey,
+                    'X-Test-Mode': testModeEnabled ? 'true' : 'false'
                 },
                 body: JSON.stringify(requestBody)
             });
