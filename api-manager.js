@@ -146,9 +146,13 @@ class APIManager {
                         const json = JSON.parse(data);
                         // Handle proxy API response structure for streaming
                         const responseData = json.data || json;
-                        const delta = responseData.choices?.[0]?.delta?.content;
+                        let delta = responseData.choices?.[0]?.delta?.content;
                         if (delta) {
+                            // State reconciliation: Accumulate in local fullText for validation
+                            // but pass delta as-is to client (client does its own state reconciliation)
+                            // Removed spacing logic - let Gemini's natural spacing be preserved
                             fullText += delta;
+                            // Pass delta to client - client will accumulate in its own state
                             onDelta && onDelta(delta);
                         }
                     } catch (_) {

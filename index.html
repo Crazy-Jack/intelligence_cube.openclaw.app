@@ -730,9 +730,9 @@
             background:rgba(0,0,0,0.5); 
             z-index:998; 
         }
-        .chat-messages { flex:1; padding:16px; overflow-y:auto; overflow-x:hidden; background:#ffffff; scroll-behavior:smooth; }
-        .message { max-width:100%; margin:0 auto 14px; line-height:1.6; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; white-space:pre-wrap; padding:8px 12px; box-sizing:border-box; }
-        .message, .message *, .message a, .message code, .message strong { word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:pre-wrap !important; max-width:100%; }
+        .chat-messages { flex:1; padding:16px; overflow-y:auto; overflow-x:visible; background:#ffffff; scroll-behavior:smooth; width:100%; }
+        .message { max-width:100%; width:100%; margin:0 auto 14px; line-height:1.6; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; white-space:pre-wrap; padding:8px 12px; box-sizing:border-box; overflow:visible; display:block; }
+        .message, .message *, .message a, .message code, .message strong, .message p, .message div, .message span { word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:pre-wrap !important; max-width:100% !important; overflow:visible !important; display:block; }
         .message.user { background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.15); color:#1f2937; border-radius:12px; }
         .message.assistant { background:#ffffff; border:1px solid rgba(16,185,129,.28); color:#0f172a; border-radius:12px; }
         .message.system { background:linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); border:1px solid rgba(59,130,246,.25); color:#1e3a8a; border-radius:12px; padding:8px 12px; }
@@ -2984,7 +2984,7 @@
                     }
                 }
 
-                // Always log result; if balance now <= 0, show top-up modal
+                // Always log result; if balance now <= 0, show top-up modal (skip in test mode)
                 if (spend && spend.success === false && spend.error) {
                     console.warn('I3 deduction failed:', spend.error);
                 } else {
@@ -2993,7 +2993,8 @@
                         const cur = getAvailableCredits();
                         // Immediately sync new balance to Firestore
                         try { firebasePersistCredits(cur); } catch (_) {}
-                        if (cur <= 0) {
+                        const isTestMode = localStorage.getItem('i3TestMode') === 'true';
+                        if (cur <= 0 && !isTestMode) {
                             showInsufficientCreditsModal(Math.max(0.001, amount), cur);
                         }
                     } catch (_) {}
@@ -3066,6 +3067,13 @@
             // Estimate conservative output tokens: mirror user tokens x1.5 with floor 300
             const outGuess = expectedOutTokens != null ? expectedOutTokens : Math.max(300, Math.floor(estimateTokenCount(userText || '') * 1.5));
             const need = estimateCostI3(modelName, systemPrompt, userText, outGuess);
+            // Check if test mode is enabled - skip credit check in test mode
+            const isTestMode = localStorage.getItem('i3TestMode') === 'true';
+            if (isTestMode) {
+                console.log('🧪 TEST MODE: Skipping credit preflight check');
+                return true;
+            }
+            
             const have = getAvailableCredits();
             if (have < need) {
                 console.warn('I3 preflight gating: insufficient credits', { modelName, need, have, outGuess });
@@ -3540,8 +3548,25 @@
             });
         }
 
-        function renderMarkdownSafe(text) {
+        function renderMarkdownSafe(text, isStreaming = false) {
             let s = escapeHtml(text || '');
+            
+            // Process complete markdown first (complete pairs)
+            // Bold: **text** (complete pairs)
+            s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+            
+            // During streaming, handle incomplete markdown gracefully
+            if (isStreaming) {
+                // Handle remaining ** that didn't match (incomplete bold markers)
+                // This prevents showing raw ** during streaming
+                // Match **text where closing ** hasn't arrived yet
+                s = s.replace(/\*\*([^*\n]+?)(?=\s|$|\.|,|!|\?|;|:|<)/g, '<strong>$1</strong>');
+                // Handle ** at the very end (definitely incomplete)
+                s = s.replace(/\*\*([^*\n]+)$/g, '<strong>$1</strong>');
+                // Clean up any remaining standalone ** (shouldn't happen but be safe)
+                s = s.replace(/(?<!\*)\*\*(?!\*)/g, '');
+            }
+            
             // Links: [text](https://...)
             s = s.replace(/\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)/g, function(_, label, url) {
                 const safeLabel = label;
@@ -3550,8 +3575,6 @@
             });
             // Inline code: `code`
             s = s.replace(/`([^`]+?)`/g, '<code>$1</code>');
-            // Bold: **text**
-            s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
             // Newlines -> <br>
             s = s.replace(/\n/g, '<br>');
             return s;
@@ -3951,7 +3974,14 @@
                 }
             }
             const q = (baseText + attachmentNote).trim();
-            if (!q) return;
+            if (!q) {
+                // Clear input even if query is empty
+                if (input) input.value = '';
+                return;
+            }
+
+            // Clear input immediately after capturing the query
+            if (input) input.value = '';
 
             // 检查是否为第一次聊天且用户未登录
             const isFirstMessage = !currentChatId;
@@ -3988,7 +4018,6 @@
             }
             // 保存用户消息到历史记录
             addMessageToCurrentChat("user", q);
-            input.value = '';
             // (do not clear attachment yet; needed for image base64 flow)
 
             try {
@@ -4072,12 +4101,39 @@
                 // Suppress verbose "Input to ..." preview to keep chat clean for both
                 // Auto Router and single-model workflows
 
-                // Streaming response
+                // Streaming response with state reconciliation
                 const assistantEl = appendMessageDark('assistant', '');
                 assistantEl.innerHTML = '<span style="opacity:0.6;">Generating...</span>';
-                let full = '';
+                let full = ''; // Canonical source of truth - full accumulated text
                 let chargeTimer = null;
                 let loggedQuietDone = false;
+                let renderScheduled = false; // Debounce flag
+                
+                // Debounced render function - always renders from full accumulated state
+                function renderFromFullState() {
+                    if (assistantEl && full) {
+                        // Always render from the full accumulated text (state reconciliation)
+                        assistantEl.innerHTML = renderMarkdownSafe(full, true);
+                        const box = document.getElementById('chatMessages');
+                        if (box) {
+                            const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
+                            if (nearBottom) {
+                                requestAnimationFrame(() => {
+                                    box.scrollTop = box.scrollHeight;
+                                });
+                            }
+                        }
+                    }
+                    renderScheduled = false;
+                }
+                
+                // Schedule render (debounced)
+                function scheduleRender() {
+                    if (!renderScheduled) {
+                        renderScheduled = true;
+                        requestAnimationFrame(renderFromFullState);
+                    }
+                }
                 let chargedOnce = false;
                 // Preflight credit check (block if insufficient)
                 try {
@@ -4146,31 +4202,29 @@
                             { systemPrompt: systemPrompt },
                             {
                                 model: selectedModel.name,
-                                onStart() {},
+                                onStart() {
+                                    // Ensure input is cleared when API call starts
+                                    const input = document.getElementById("chatInput");
+                                    if (input) input.value = '';
+                                },
                                 onDelta(token) {
+                                    // State reconciliation: accumulate in canonical source
                                     full += token;
-                                    if (assistantEl) {
-                                        assistantEl.innerHTML = renderMarkdownSafe(full);
-                                        const box = document.getElementById('chatMessages');
-                                        if (box) {
-                                            const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
-                                            if (nearBottom) {
-                                                requestAnimationFrame(() => {
-                                                    box.scrollTop = box.scrollHeight;
-                                                });
-                                            }
-                                        }
-                                    }
+                                    // Schedule debounced render from full state
+                                    scheduleRender();
                                     scheduleChargeDebounced();
                                 },
                                 onDone(finalText) {
                                     try { if (chargeTimer) { clearTimeout(chargeTimer); chargeTimer = null; } } catch (_) {}
-                                    if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(finalText);
-                                    addMessageToCurrentChat('assistant', finalText);
-                                    try { console.log('[Model Done][onDone]', { model: selectedModel.name, length: (finalText || '').length }); } catch (_) {}
+                                    // State reconciliation: use finalText as canonical source, ensure full matches
+                                    full = finalText || full;
+                                    // Final render from complete state (no streaming flag)
+                                    if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(full, false);
+                                    addMessageToCurrentChat('assistant', full);
+                                    try { console.log('[Model Done][onDone]', { model: selectedModel.name, length: (full || '').length }); } catch (_) {}
                                     try {
                                         if (!chargedOnce) {
-                                            chargeModelUsage(selectedModel.name, systemPrompt, q, finalText, { reason: 'single_chat' });
+                                            chargeModelUsage(selectedModel.name, systemPrompt, q, full, { reason: 'single_chat' });
                                             chargedOnce = true;
                                         }
                                     } catch (_) {}
@@ -4191,27 +4245,25 @@
                         { systemPrompt: systemPrompt },
                         {
                             model: selectedModel.name,
-                            onStart() {},
+                            onStart() {
+                                // Ensure input is cleared when API call starts
+                                const input = document.getElementById("chatInput");
+                                if (input) input.value = '';
+                            },
                             onDelta(token) {
+                                // State reconciliation: accumulate in canonical source
                                 full += token;
-                                if (assistantEl) {
-                                    assistantEl.innerHTML = renderMarkdownSafe(full);
-                                    const box = document.getElementById('chatMessages');
-                                    if (box) {
-                                        const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
-                                        if (nearBottom) {
-                                            requestAnimationFrame(() => {
-                                                box.scrollTop = box.scrollHeight;
-                                            });
-                                        }
-                                    }
-                                }
+                                // Schedule debounced render from full state
+                                scheduleRender();
                                 scheduleChargeDebounced();
                             },
                             onDone(finalText) {
                                 try { if (chargeTimer) { clearTimeout(chargeTimer); chargeTimer = null; } } catch (_) {}
-                                if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(finalText);
-                                addMessageToCurrentChat('assistant', finalText);
+                                // State reconciliation: use finalText as canonical source, ensure full matches
+                                full = finalText || full;
+                                // Final render from complete state (no streaming flag)
+                                if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(full, false);
+                                addMessageToCurrentChat('assistant', full);
                                 try { console.log('[Model Done][onDone]', { model: selectedModel.name, length: (finalText || '').length }); } catch (_) {}
                                 try {
                                     if (!chargedOnce) {
@@ -4240,29 +4292,23 @@
                             {
                                 onStart() {},
                                 onDelta(token) {
+                                    // State reconciliation: accumulate in canonical source
                                     full += token;
-                                    if (assistantEl) {
-                                        assistantEl.innerHTML = renderMarkdownSafe(full);
-                                        const box = document.getElementById('chatMessages');
-                                        if (box) {
-                                            const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
-                                            if (nearBottom) {
-                                                requestAnimationFrame(() => {
-                                                    box.scrollTop = box.scrollHeight;
-                                                });
-                                            }
-                                        }
-                                    }
+                                    // Schedule debounced render from full state
+                                    scheduleRender();
                                     scheduleChargeDebounced();
                                 },
                                 onDone(finalText) {
                                     try { if (chargeTimer) { clearTimeout(chargeTimer); chargeTimer = null; } } catch (_) {}
-                                    if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(finalText);
-                                    addMessageToCurrentChat('assistant', finalText);
-                                    try { console.log('[Model Done][onDone]', { model: selectedModel.name, length: (finalText || '').length }); } catch (_) {}
+                                    // State reconciliation: use finalText as canonical source, ensure full matches
+                                    full = finalText || full;
+                                    // Final render from complete state (no streaming flag)
+                                    if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(full, false);
+                                    addMessageToCurrentChat('assistant', full);
+                                    try { console.log('[Model Done][onDone]', { model: selectedModel.name, length: (full || '').length }); } catch (_) {}
                                     try {
                                         if (!chargedOnce) {
-                                            chargeModelUsage(selectedModel.name, systemPrompt, q, finalText, { reason: 'single_chat' });
+                                            chargeModelUsage(selectedModel.name, systemPrompt, q, full, { reason: 'single_chat' });
                                             chargedOnce = true;
                                         }
                                     } catch (_) {}
@@ -4373,7 +4419,7 @@
                         onStart() {},
                         onDelta(token) {
                             full += token;
-                            anchorEl.innerHTML = renderMarkdownSafe(full);
+                            anchorEl.innerHTML = renderMarkdownSafe(full, true);
                         },
                         onDone(finalText) {
                             anchorEl.innerHTML = renderMarkdownSafe(finalText);
@@ -4392,7 +4438,7 @@
                         const fallback = await ensureAPIManager().sendModelRequest(modelName, currentInput, { systemPrompt });
                         if (fallback && fallback.success) {
                             full = fallback.content || '';
-                            anchorEl.innerHTML = renderMarkdownSafe(full);
+                            anchorEl.innerHTML = renderMarkdownSafe(full, true);
                             addMessageToCurrentChat('assistant', full);
                         } else {
                             console.warn(' error:', ((fallback && fallback.error) || (res && res.error) || 'Unknown error'));
@@ -4701,7 +4747,7 @@
                                         onStart() {},
                                         onDelta(token) {
                                             full += token;
-                                            assistantEl.innerHTML = renderMarkdownSafe(full);
+                                            assistantEl.innerHTML = renderMarkdownSafe(full, true);
                                             const box = document.getElementById('chatMessages');
                                             if (box) {
                                                 const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
@@ -4735,7 +4781,7 @@
                                         onStart() {},
                                         onDelta(token) {
                                             full += token;
-                                            assistantEl.innerHTML = renderMarkdownSafe(full);
+                                            assistantEl.innerHTML = renderMarkdownSafe(full, true);
                                             const box = document.getElementById('chatMessages');
                                             if (box) {
                                                 const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
@@ -4768,7 +4814,7 @@
                                 onStart() {},
                                 onDelta(token) {
                                     full += token;
-                                    assistantEl.innerHTML = renderMarkdownSafe(full);
+                                    assistantEl.innerHTML = renderMarkdownSafe(full, true);
                                     const box = document.getElementById('chatMessages');
                                     if (box) box.scrollTop = box.scrollHeight;
                                 },
@@ -4925,7 +4971,7 @@
                                     onStart() {},
                                     onDelta(token) {
                                         full += token;
-                                        anchorEl.innerHTML = renderMarkdownSafe(full);
+                                        anchorEl.innerHTML = renderMarkdownSafe(full, true);
                                         scheduleChargeDebounced();
                                     },
                                     onDone(finalText) {
@@ -4957,7 +5003,7 @@
                                     onStart() {},
                                     onDelta(token) {
                                         full += token;
-                                        anchorEl.innerHTML = renderMarkdownSafe(full);
+                                        anchorEl.innerHTML = renderMarkdownSafe(full, true);
                                         scheduleChargeDebounced();
                                     },
                                     onDone(finalText) {
@@ -4988,7 +5034,7 @@
                             onStart() {},
                             onDelta(token) {
                                 full += token;
-                                anchorEl.innerHTML = renderMarkdownSafe(full);
+                                anchorEl.innerHTML = renderMarkdownSafe(full, true);
                                 scheduleChargeDebounced();
                             },
                             onDone(finalText) {
@@ -5016,7 +5062,7 @@
                     const fallback = await ensureAPIManager().sendModelRequest(modelName, currentInput, { systemPrompt });
                     if (fallback && fallback.success) {
                         full = fallback.content || '';
-                        anchorEl.innerHTML = renderMarkdownSafe(full);
+                                        anchorEl.innerHTML = renderMarkdownSafe(full, true);
                         addMessageToCurrentChat('assistant', full);
                         // Fallback path: ensure we still deduct once
                         try {
@@ -5105,7 +5151,7 @@
                         onStart() {},
                         onDelta(token) {
                             full += token;
-                            anchorEl.innerHTML = renderMarkdownSafe(full);
+                            anchorEl.innerHTML = renderMarkdownSafe(full, true);
                         },
                         onDone(finalText) {
                             anchorEl.innerHTML = renderMarkdownSafe(finalText);
@@ -5126,7 +5172,7 @@
                         const fallback = await ensureAPIManager().sendModelRequest(modelName, currentInput, { systemPrompt });
                         if (fallback && fallback.success) {
                             full = fallback.content || '';
-                            anchorEl.innerHTML = renderMarkdownSafe(full);
+                            anchorEl.innerHTML = renderMarkdownSafe(full, true);
                             addMessageToCurrentChat('assistant', full);
                         } else {
                             const errorMsg = ' error: ' + ((fallback && fallback.error) || (res && res.error) || 'Unknown error');

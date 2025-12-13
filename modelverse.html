@@ -2352,15 +2352,36 @@
     <script src="api-manager.js"></script>
     <script src="user-agents-helper.js"></script>
     <script>
-        // Auto-create a test agent on page load (if helper is loaded)
+        // Auto-create agents on page load (if helper is loaded) - FOR TESTING
         (function() {
             // Wait a bit for user-agents-helper to load
             setTimeout(() => {
                 if (typeof createUserAgent === 'function') {
-                    const testAgentName = 'Test-Agent';
                     const existingAgents = getAllUserAgents();
                     
-                    // Only create if it doesn't exist
+                    // Create Code Help Agent if it doesn't exist
+                    const codeHelpAgentName = 'Code-Help-Assistant';
+                    if (!existingAgents[codeHelpAgentName]) {
+                        createUserAgent(codeHelpAgentName, {
+                            purpose: 'I am a specialized coding assistant that helps developers with programming questions, code debugging, code review, explaining code concepts, and providing coding best practices. I can help with multiple programming languages including JavaScript, Python, Java, C++, Go, Rust, and more.',
+                            useCase: 'Get help with coding questions, debug code issues, review code for best practices, understand code snippets, get programming explanations, and receive coding guidance.',
+                            category: 'Code Assistant',
+                            industry: 'Software Development',
+                            tokenPrice: 0,
+                            sharePrice: 0,
+                            rating: 5,
+                            ratingFormatted: '5.0',
+                            starsHtml: '★★★★★',
+                            change: '0',
+                            paperLink: '-'
+                        });
+                        console.log('✅ Code Help Agent created automatically:', codeHelpAgentName);
+                    } else {
+                        console.log('ℹ️ Code Help Agent already exists:', codeHelpAgentName);
+                    }
+                    
+                    // Create Test Agent if it doesn't exist
+                    const testAgentName = 'Test-Agent';
                     if (!existingAgents[testAgentName]) {
                         createUserAgent(testAgentName, {
                             purpose: 'A test agent for testing the Gemini integration',

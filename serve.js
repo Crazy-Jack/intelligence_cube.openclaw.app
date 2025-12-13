@@ -614,15 +614,55 @@ app.post('/api/chat/completions', async (req, res) => {
                 
                 if (candidate.content && candidate.content.parts) {
                   const parts = candidate.content.parts || [];
+                  // Join parts - Gemini should already include proper spacing in text
                   const newText = parts.filter(p => p.text).map(p => p.text).join('');
                   
-                  if (newText && newText.length > fullText.length) {
-                    // Only send the new delta
-                    const delta = newText.slice(fullText.length);
-                    fullText = newText;
+                  // State reconciliation: Extract delta safely, with defensive checks
+                  if (newText && newText !== fullText) {
+                    let delta = '';
                     
-                    if (delta) {
-                      // Transform to OpenAI SSE format
+                    // Defensive delta extraction: ensure we never skip characters
+                    if (newText.length >= fullText.length) {
+                      // Normal case: newText extends fullText
+                      // Verify that newText starts with fullText (safety check)
+                      if (newText.startsWith(fullText)) {
+                        delta = newText.slice(fullText.length);
+                      } else {
+                        // Text doesn't match - this shouldn't happen, but handle gracefully
+                        // Find the longest common prefix to avoid losing characters
+                        let commonPrefixLength = 0;
+                        const minLen = Math.min(fullText.length, newText.length);
+                        for (let i = 0; i < minLen; i++) {
+                          if (fullText[i] === newText[i]) {
+                            commonPrefixLength++;
+                          } else {
+                            break;
+                          }
+                        }
+                        // Send everything after the common prefix
+                        delta = newText.slice(commonPrefixLength);
+                        console.warn('⚠️ Text mismatch detected, using common prefix', {
+                          fullTextLen: fullText.length,
+                          newTextLen: newText.length,
+                          commonPrefixLen: commonPrefixLength,
+                          fullTextEnd: fullText.substring(Math.max(0, fullText.length - 20)),
+                          newTextStart: newText.substring(0, 20)
+                        });
+                      }
+                      fullText = newText;
+                    } else {
+                      // Text decreased - Gemini reset the response
+                      // Send the full new text as delta
+                      delta = newText;
+                      fullText = newText;
+                      console.warn('⚠️ Gemini text length decreased, resetting fullText', {
+                        oldLength: fullText.length,
+                        newLength: newText.length
+                      });
+                    }
+                    
+                    // Send delta if non-empty
+                    if (delta && delta.length > 0) {
                       const openAIChunk = {
                         id: `chatcmpl-${Date.now()}`,
                         object: 'chat.completion.chunk',
