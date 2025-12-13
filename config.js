@@ -32,11 +32,11 @@ const config = {
     
     // Gemini API Configuration (for user-created agents)
     gemini: {
-        apiKey: "AIzaSyD_PG1NJN2lJRn_pSjVVATIp7FOfhr8P18", // Set your Gemini API key here or via localStorage.setItem('geminiApiKey', 'YOUR_KEY')
+        apiKey: "AIzaSyCpYiHyivyPgqEAj9PARY-pVNfTLphWsbw", // Set your Gemini API key here or via localStorage.setItem('geminiApiKey', 'YOUR_KEY')
         model: 'gemini-2.0-flash', // Available: gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash, etc.
         apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        // TESTING: Set to true to bypass Gemini API and use mock responses (no quota limits)
-        testMode: true
+        // TESTING: Set to true to bypass coin/payment constraints (still calls real Gemini API)
+        testMode: false
     }
 };
 

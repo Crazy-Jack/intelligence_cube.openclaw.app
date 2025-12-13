@@ -730,10 +730,11 @@
             background:rgba(0,0,0,0.5); 
             z-index:998; 
         }
-        .chat-messages { flex:1; padding:16px; overflow:auto; background:#ffffff; }
-        .message { max-width:900px; margin:0 auto 14px; line-height:1.6; }
-        .message.user { background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.15); color:#1f2937; border-radius:12px; padding:8px 12px; }
-        .message.assistant { background:#ffffff; border:1px solid rgba(16,185,129,.28); color:#0f172a; border-radius:12px; padding:8px 12px; }
+        .chat-messages { flex:1; padding:16px; overflow-y:auto; overflow-x:hidden; background:#ffffff; scroll-behavior:smooth; }
+        .message { max-width:100%; margin:0 auto 14px; line-height:1.6; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; white-space:pre-wrap; padding:8px 12px; box-sizing:border-box; }
+        .message, .message *, .message a, .message code, .message strong { word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:pre-wrap !important; max-width:100%; }
+        .message.user { background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.15); color:#1f2937; border-radius:12px; }
+        .message.assistant { background:#ffffff; border:1px solid rgba(16,185,129,.28); color:#0f172a; border-radius:12px; }
         .message.system { background:linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); border:1px solid rgba(59,130,246,.25); color:#1e3a8a; border-radius:12px; padding:8px 12px; }
         .message.system.needs-rerun { background:linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%); border-color:#fca5a5; }
         .chat-composer { padding:12px 16px; border-top:1px solid #e5e7eb; display:flex; gap:10px; background:#f9fafb; }
@@ -1542,13 +1543,6 @@
 
             <!-- Right Section -->
             <div class="header-right">
-                <!-- Test Mode Toggle -->
-                <div class="test-mode-toggle-container" title="Toggle test mode (free i3 tokens)">
-                    <span class="test-mode-label-text">Test Mode</span>
-                    <div class="toggle-switch" id="testModeToggle" onclick="toggleTestModeSwitch()">
-                        <div class="toggle-slider"></div>
-                    </div>
-                </div>
                 <!-- Current Network badge (shows only after wallet connected) -->
                 <button id="networkBadge" class="network-badge" type="button" style="display:none" onclick="openNetworkPickerModal()">
 				  <img class="network-badge__icon" src="" alt="">
@@ -2924,6 +2918,10 @@
                 const amount = Number(cost.toFixed(3)); // 3-decimal precision
 
                 let spend = { success: false, error: 'walletManager not available' };
+                
+                // Check if test mode is enabled - skip payment in test mode
+                const testModeEnabled = localStorage.getItem('i3TestMode') === 'true';
+                
                 console.log('[I3 Charge] Preparing to charge model usage', {
                     model: modelName,
                     inTokens,
@@ -2931,13 +2929,19 @@
                     totalTokens,
                     pricePerK,
                     amount,
+                    testMode: testModeEnabled,
                     reason: runMeta.reason || 'chat',
                     step: runMeta.step || null,
                     runId: runMeta.runId || null,
                     walletConnected: !!(window.walletManager && window.walletManager.isConnected),
                     currentCredits: window.walletManager && typeof window.walletManager.getUserInfo === 'function' ? window.walletManager.getUserInfo().credits : 'unknown'
                 });
-                if (window.walletManager && typeof window.walletManager.spendCredits === 'function') {
+                
+                if (testModeEnabled) {
+                    // Test mode: skip payment but log as if it succeeded
+                    console.log('🧪 TEST MODE: Skipping coin deduction (free for developers)');
+                    spend = { success: true, skipped: true, testMode: true };
+                } else if (window.walletManager && typeof window.walletManager.spendCredits === 'function') {
                     spend = window.walletManager.spendCredits(amount, `model_usage:${modelName}`);
                 }
 
@@ -4070,7 +4074,7 @@
 
                 // Streaming response
                 const assistantEl = appendMessageDark('assistant', '');
-                assistantEl.textContent = 'Generating...';
+                assistantEl.innerHTML = '<span style="opacity:0.6;">Generating...</span>';
                 let full = '';
                 let chargeTimer = null;
                 let loggedQuietDone = false;
@@ -4148,7 +4152,14 @@
                                     if (assistantEl) {
                                         assistantEl.innerHTML = renderMarkdownSafe(full);
                                         const box = document.getElementById('chatMessages');
-                                        if (box) box.scrollTop = box.scrollHeight;
+                                        if (box) {
+                                            const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
+                                            if (nearBottom) {
+                                                requestAnimationFrame(() => {
+                                                    box.scrollTop = box.scrollHeight;
+                                                });
+                                            }
+                                        }
                                     }
                                     scheduleChargeDebounced();
                                 },
@@ -4186,7 +4197,14 @@
                                 if (assistantEl) {
                                     assistantEl.innerHTML = renderMarkdownSafe(full);
                                     const box = document.getElementById('chatMessages');
-                                    if (box) box.scrollTop = box.scrollHeight;
+                                    if (box) {
+                                        const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
+                                        if (nearBottom) {
+                                            requestAnimationFrame(() => {
+                                                box.scrollTop = box.scrollHeight;
+                                            });
+                                        }
+                                    }
                                 }
                                 scheduleChargeDebounced();
                             },
@@ -4205,7 +4223,7 @@
                             onError(err) {
                                 try { if (chargeTimer) { clearTimeout(chargeTimer); chargeTimer = null; } } catch (_) {}
                                 const msg = 'error: ' + (err?.message || 'Unknown error');
-                                if (assistantEl) assistantEl.textContent = msg;
+                                if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(msg);
                                 addMessageToCurrentChat('assistant', msg);
                             }
                         }
@@ -4226,7 +4244,14 @@
                                     if (assistantEl) {
                                         assistantEl.innerHTML = renderMarkdownSafe(full);
                                         const box = document.getElementById('chatMessages');
-                                        if (box) box.scrollTop = box.scrollHeight;
+                                        if (box) {
+                                            const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
+                                            if (nearBottom) {
+                                                requestAnimationFrame(() => {
+                                                    box.scrollTop = box.scrollHeight;
+                                                });
+                                            }
+                                        }
                                     }
                                     scheduleChargeDebounced();
                                 },
@@ -4264,7 +4289,7 @@
                 // If the stream failed before callbacks ran
                 if (res && res.success === false) {
                     const errorMsg = 'error: ' + (res?.error || 'Unknown error');
-                    if (assistantEl) assistantEl.textContent = errorMsg;
+                    if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(errorMsg);
                     addMessageToCurrentChat('assistant', errorMsg);
                 }
             } catch (err) {
@@ -4678,7 +4703,14 @@
                                             full += token;
                                             assistantEl.innerHTML = renderMarkdownSafe(full);
                                             const box = document.getElementById('chatMessages');
-                                            if (box) box.scrollTop = box.scrollHeight;
+                                            if (box) {
+                                                const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
+                                                if (nearBottom) {
+                                                    requestAnimationFrame(() => {
+                                                        box.scrollTop = box.scrollHeight;
+                                                    });
+                                                }
+                                            }
                                         },
                                         onDone(finalText) {
                                             assistantEl.innerHTML = renderMarkdownSafe(finalText);
@@ -4688,7 +4720,7 @@
                                         },
                                         onError(err) {
                                             const msg = ' error: ' + (err?.message || 'Unknown error');
-                                            assistantEl.textContent = msg;
+                                            assistantEl.innerHTML = renderMarkdownSafe(msg);
                                             addMessageToCurrentChat('assistant', msg);
                                         }
                                     }
@@ -4705,7 +4737,14 @@
                                             full += token;
                                             assistantEl.innerHTML = renderMarkdownSafe(full);
                                             const box = document.getElementById('chatMessages');
-                                            if (box) box.scrollTop = box.scrollHeight;
+                                            if (box) {
+                                                const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
+                                                if (nearBottom) {
+                                                    requestAnimationFrame(() => {
+                                                        box.scrollTop = box.scrollHeight;
+                                                    });
+                                                }
+                                            }
                                         },
                                         onDone(finalText) {
                                             assistantEl.innerHTML = renderMarkdownSafe(finalText);
@@ -4715,7 +4754,7 @@
                                         },
                                         onError(err) {
                                             const msg = ' error: ' + (err?.message || 'Unknown error');
-                                            assistantEl.textContent = msg;
+                                            assistantEl.innerHTML = renderMarkdownSafe(msg);
                                             addMessageToCurrentChat('assistant', msg);
                                         }
                                     }
@@ -4741,7 +4780,7 @@
                                 },
                                 onError(err) {
                                     const msg = ' error: ' + (err?.message || 'Unknown error');
-                                    assistantEl.textContent = msg;
+                                    assistantEl.innerHTML = renderMarkdownSafe(msg);
                                     addMessageToCurrentChat('assistant', msg);
                                 }
                             }
@@ -4749,7 +4788,7 @@
                 );
                 if (res && res.success === false) {
                     const errorMsg = ' error: ' + (res?.error || 'Unknown error');
-                    if (assistantEl) assistantEl.textContent = errorMsg;
+                    if (assistantEl) assistantEl.innerHTML = renderMarkdownSafe(errorMsg);
                     addMessageToCurrentChat('assistant', errorMsg);
                 }
 
@@ -6435,6 +6474,13 @@
     #executeCheckInBtn:disabled { background: #d1d5db; cursor: not-allowed; }
     </style>
 
+    <!-- Test Mode Toggle - Bottom Left -->
+    <div class="test-mode-toggle-container-bottom" title="Toggle test mode (free i3 tokens)">
+        <span class="test-mode-label-text">Test Mode</span>
+        <div class="toggle-switch" id="testModeToggle" onclick="toggleTestModeSwitch()">
+            <div class="toggle-slider"></div>
+        </div>
+    </div>
 
 </body>
 </html> 

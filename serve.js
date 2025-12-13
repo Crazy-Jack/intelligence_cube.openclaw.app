@@ -377,92 +377,21 @@ app.post('/api/chat/completions', async (req, res) => {
     const apiKey = req.headers['i3-api-key'] || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
     
     // Check test mode from header (frontend toggle) first, then config
-    const testModeHeader = req.headers['x-test-mode'];
+    // Express normalizes headers to lowercase
+    const testModeHeader = req.headers['x-test-mode'] || req.headers['X-Test-Mode'];
     const testModeFromHeader = testModeHeader === 'true';
     const testModeFromConfig = isGeminiTestMode();
     const isTestMode = testModeFromHeader || testModeFromConfig;
     
-    console.log('🚀 Processing chat completions request for model:', model);
+    console.log('🚀 Processing chat completions request for model:', model, '| Test mode:', { header: testModeHeader, fromHeader: testModeFromHeader, fromConfig: testModeFromConfig, isTestMode });
     
     // Check if this is a user agent - route to Gemini
     if (isUserAgent(model)) {
       console.log('🤖 Detected user agent, routing to Gemini API');
       
-      // Check if test mode is enabled (from header or config)
+      // Log test mode status (but still call real Gemini API)
       if (isTestMode) {
-        console.log('🧪 TEST MODE: Using mock Gemini responses (bypassing API to avoid quota limits)');
-        
-        // Extract user message for mock response
-        const userMessages = messages.filter(m => m.role === 'user');
-        const lastUserMessage = userMessages[userMessages.length - 1];
-        const userText = typeof lastUserMessage?.content === 'string' 
-          ? lastUserMessage.content 
-          : (Array.isArray(lastUserMessage?.content) 
-              ? lastUserMessage.content.find(p => p.type === 'text')?.text || 'Hello'
-              : 'Hello');
-        
-        if (stream) {
-          // Mock streaming response
-          res.setHeader('Content-Type', 'text/event-stream');
-          res.setHeader('Cache-Control', 'no-cache');
-          res.setHeader('Connection', 'keep-alive');
-          
-          const mockResponse = `🧪 [TEST MODE] This is a mock response. You said: "${userText}". In test mode, we bypass the real Gemini API to avoid quota limits. The agent is working correctly!`;
-          
-          // Simulate streaming by sending chunks
-          const chunks = mockResponse.match(/.{1,15}/g) || [mockResponse];
-          for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            const isLast = i === chunks.length - 1;
-            
-            const openAIChunk = {
-              id: `chatcmpl-${Date.now()}`,
-              object: 'chat.completion.chunk',
-              created: Math.floor(Date.now() / 1000),
-              model: model,
-              choices: [{
-                index: 0,
-                delta: { content: chunk },
-                finish_reason: isLast ? 'stop' : null
-              }]
-            };
-            
-            res.write(`data: ${JSON.stringify(openAIChunk)}\n\n`);
-            
-            // Small delay to simulate streaming
-            if (!isLast) {
-              await new Promise(resolve => setTimeout(resolve, 50));
-            }
-          }
-          
-          res.write('data: [DONE]\n\n');
-          return res.end();
-        } else {
-          // Mock non-streaming response
-          const mockResponse = `🧪 [TEST MODE] This is a mock response. You said: "${userText}". In test mode, we bypass the real Gemini API to avoid quota limits. The agent is working correctly!`;
-          
-          const openAIResponse = {
-            id: `chatcmpl-${Date.now()}`,
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model: model,
-            choices: [{
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: mockResponse
-              },
-              finish_reason: 'stop'
-            }],
-            usage: {
-              prompt_tokens: 10,
-              completion_tokens: 20,
-              total_tokens: 30
-            }
-          };
-          
-          return res.json(openAIResponse);
-        }
+        console.log('🧪 TEST MODE: Calling real Gemini API (coin/payment constraints bypassed on frontend)');
       }
       
       const geminiApiKey = getGeminiApiKey();
