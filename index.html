@@ -4109,11 +4109,12 @@
                 let loggedQuietDone = false;
                 let renderScheduled = false; // Debounce flag
                 
-                // Debounced render function - always renders from full accumulated state
+                // Render function - always renders from full accumulated state (immediate for better responsiveness)
                 function renderFromFullState() {
-                    if (assistantEl && full) {
+                    if (assistantEl) {
                         // Always render from the full accumulated text (state reconciliation)
-                        assistantEl.innerHTML = renderMarkdownSafe(full, true);
+                        // Render even if full is empty string (to clear "Generating..." message)
+                        assistantEl.innerHTML = renderMarkdownSafe(full || '', true);
                         const box = document.getElementById('chatMessages');
                         if (box) {
                             const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 100;
@@ -4127,11 +4128,14 @@
                     renderScheduled = false;
                 }
                 
-                // Schedule render (debounced)
+                // Schedule render (debounced but more responsive)
                 function scheduleRender() {
                     if (!renderScheduled) {
                         renderScheduled = true;
-                        requestAnimationFrame(renderFromFullState);
+                        // Use immediate render for better responsiveness, but still debounce rapid updates
+                        requestAnimationFrame(() => {
+                            renderFromFullState();
+                        });
                     }
                 }
                 let chargedOnce = false;

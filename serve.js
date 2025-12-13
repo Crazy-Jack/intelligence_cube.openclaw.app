@@ -619,6 +619,7 @@ app.post('/api/chat/completions', async (req, res) => {
                   
                   // State reconciliation: Extract delta safely, with defensive checks
                   if (newText && newText !== fullText) {
+                    const oldFullText = fullText; // Save for logging
                     let delta = '';
                     
                     // Defensive delta extraction: ensure we never skip characters
@@ -642,24 +643,66 @@ app.post('/api/chat/completions', async (req, res) => {
                         // Send everything after the common prefix
                         delta = newText.slice(commonPrefixLength);
                         console.warn('⚠️ Text mismatch detected, using common prefix', {
-                          fullTextLen: fullText.length,
+                          oldFullTextLen: oldFullText.length,
                           newTextLen: newText.length,
                           commonPrefixLen: commonPrefixLength,
-                          fullTextEnd: fullText.substring(Math.max(0, fullText.length - 20)),
-                          newTextStart: newText.substring(0, 20)
+                          oldFullTextEnd: oldFullText.substring(Math.max(0, oldFullText.length - 30)),
+                          newTextStart: newText.substring(0, 30),
+                          delta: delta.substring(0, 50)
                         });
                       }
-                      fullText = newText;
                     } else {
                       // Text decreased - Gemini reset the response
                       // Send the full new text as delta
                       delta = newText;
-                      fullText = newText;
+                      const oldLength = oldFullText.length;
                       console.warn('⚠️ Gemini text length decreased, resetting fullText', {
-                        oldLength: fullText.length,
-                        newLength: newText.length
+                        oldLength: oldLength,
+                        newLength: newText.length,
+                        oldTextEnd: oldFullText.substring(Math.max(0, oldLength - 30)),
+                        newTextStart: newText.substring(0, 30)
                       });
                     }
+                    
+                    // Validate delta BEFORE updating fullText (only if text increased)
+                    if (delta && delta.length > 0 && newText.length >= oldFullText.length) {
+                      const expectedNewText = oldFullText + delta;
+                      if (expectedNewText !== newText) {
+                        console.warn('⚠️ Delta validation failed - oldFullText + delta != newText', {
+                          oldFullTextLen: oldFullText.length,
+                          deltaLen: delta.length,
+                          newTextLen: newText.length,
+                          expectedLen: expectedNewText.length,
+                          oldFullTextEnd: oldFullText.substring(Math.max(0, oldFullText.length - 20)),
+                          deltaStart: delta.substring(0, 20),
+                          newTextStart: newText.substring(0, 40),
+                          expectedStart: expectedNewText.substring(0, 40)
+                        });
+                        // Fix: recalculate delta correctly
+                        if (newText.startsWith(oldFullText)) {
+                          delta = newText.slice(oldFullText.length);
+                        } else {
+                          // Fallback: find common prefix and send remainder
+                          let commonPrefixLength = 0;
+                          const minLen = Math.min(oldFullText.length, newText.length);
+                          for (let i = 0; i < minLen; i++) {
+                            if (oldFullText[i] === newText[i]) {
+                              commonPrefixLength++;
+                            } else {
+                              break;
+                            }
+                          }
+                          delta = newText.slice(commonPrefixLength);
+                          console.warn('⚠️ Recalculated delta using common prefix', {
+                            commonPrefixLen: commonPrefixLength,
+                            newDelta: delta.substring(0, 30)
+                          });
+                        }
+                      }
+                    }
+                    
+                    // Update fullText after validation/fixing
+                    fullText = newText;
                     
                     // Send delta if non-empty
                     if (delta && delta.length > 0) {
@@ -677,6 +720,14 @@ app.post('/api/chat/completions', async (req, res) => {
                       
                       res.write(`data: ${JSON.stringify(openAIChunk)}\n\n`);
                       hasSentData = true;
+                    } else if (newText !== fullText) {
+                      // Log if we have newText but no delta (shouldn't happen)
+                      console.warn('⚠️ newText differs from fullText but delta is empty', {
+                        fullTextLen: fullText.length,
+                        newTextLen: newText.length,
+                        fullTextEnd: fullText.substring(Math.max(0, fullText.length - 30)),
+                        newTextStart: newText.substring(0, 30)
+                      });
                     }
                   }
                 }
