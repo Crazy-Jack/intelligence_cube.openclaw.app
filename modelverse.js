@@ -45,7 +45,465 @@ function formatDateDisplay(dateStr) {
   return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// ---------- Markdown Renderer ----------
+// modelId is optional - used to convert relative paths to HuggingFace URLs
+function renderMarkdown(text, modelId) {
+  if (!text) return '';
+  let s = String(text);
+  
+  // Helper to convert relative paths to HuggingFace URLs
+  function toHfUrl(path) {
+    if (!path) return path;
+    // Already absolute URL
+    if (/^https?:\/\//i.test(path)) return path;
+    // Already a data URL
+    if (/^data:/i.test(path)) return path;
+    // Anchor links
+    if (path.startsWith('#')) return path;
+    // Convert relative path to HuggingFace URL
+    if (modelId) {
+      // Remove leading ./ if present
+      const cleanPath = path.replace(/^\.\//, '');
+      return `https://huggingface.co/${modelId}/resolve/main/${cleanPath}`;
+    }
+    return path;
+  }
+  
+  // Remove YAML frontmatter (--- delimited metadata at the start of file)
+  s = s.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/m, '');
+  
+  // Remove HTML comments (<!-- ... -->)
+  s = s.replace(/<!--[\s\S]*?-->/g, '');
+  
+  // Store placeholders for preserved content
+  const placeholders = [];
+  
+  // FIRST: Process code blocks before anything else (to preserve their content)
+  // Handle fenced code blocks: ```lang\ncode\n```
+  s = s.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
+    const idx = placeholders.length;
+    const escapedCode = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .trim();
+    const html = `<pre style="background:#1e1e2e;color:#cdd6f4;padding:12px;border-radius:8px;overflow-x:auto;font-size:13px;margin:12px 0;"><code>${escapedCode}</code></pre>`;
+    placeholders.push(html);
+    return `\x00PLACEHOLDER${idx}\x00`;
+  });
+  
+  // Preserve safe HTML tags commonly used in READMEs
+  // Safe tags: structural, text formatting, media
+  const safeTagPattern = /<(\/?)(\s*)(h[1-6]|div|span|p|br|hr|img|a|strong|b|em|i|u|s|sub|sup|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|details|summary|center|figure|figcaption)(\s+[^>]*)?(\s*\/?\s*)>/gi;
+  
+  s = s.replace(safeTagPattern, function(match) {
+    const idx = placeholders.length;
+    placeholders.push(match);
+    return `\x00PLACEHOLDER${idx}\x00`;
+  });
+  
+  // Also preserve common HTML entities
+  s = s.replace(/&(nbsp|amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, function(match) {
+    const idx = placeholders.length;
+    placeholders.push(match);
+    return `\x00PLACEHOLDER${idx}\x00`;
+  });
+  
+  // Escape remaining HTML for safety
+  s = s.replace(/&/g, '&amp;')
+       .replace(/</g, '&lt;')
+       .replace(/>/g, '&gt;');
+  
+  // Inline code: `code`
+  s = s.replace(/`([^`]+?)`/g, '<code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
+  
+  // Tables: Parse markdown tables
+  s = s.replace(/(\|[^\n]+\|\n)(\|[\s:\-|]+\|\n)((?:\|[^\n]+\|\n?)+)/g, function(match, headerRow, separatorRow, bodyRows) {
+    // Parse header
+    const headers = headerRow.trim().split('|').filter(cell => cell.trim() !== '');
+    
+    // Parse alignment from separator row
+    const alignments = separatorRow.trim().split('|').filter(cell => cell.trim() !== '').map(cell => {
+      const trimmed = cell.trim();
+      if (trimmed.startsWith(':') && trimmed.endsWith(':')) return 'center';
+      if (trimmed.endsWith(':')) return 'right';
+      return 'left';
+    });
+    
+    // Parse body rows
+    const rows = bodyRows.trim().split('\n').map(row => 
+      row.split('|').filter(cell => cell !== '').map(cell => cell.trim())
+    );
+    
+    // Build HTML table
+    let tableHtml = '<table style="border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;">';
+    
+    // Header
+    tableHtml += '<thead><tr style="background:#f3f4f6;">';
+    headers.forEach((header, i) => {
+      const align = alignments[i] || 'left';
+      tableHtml += `<th style="border:1px solid #e5e7eb;padding:10px 12px;text-align:${align};font-weight:600;color:#374151;">${header.trim()}</th>`;
+    });
+    tableHtml += '</tr></thead>';
+    
+    // Body
+    tableHtml += '<tbody>';
+    rows.forEach((row, rowIndex) => {
+      const bgColor = rowIndex % 2 === 0 ? 'white' : '#f9fafb';
+      tableHtml += `<tr style="background:${bgColor};">`;
+      row.forEach((cell, i) => {
+        const align = alignments[i] || 'left';
+        tableHtml += `<td style="border:1px solid #e5e7eb;padding:10px 12px;text-align:${align};color:#4b5563;">${cell}</td>`;
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table>';
+    
+    return tableHtml;
+  });
+  
+  // Images: ![alt](src) - render as actual images (convert relative paths to HuggingFace URLs)
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(_, alt, src) {
+    const resolvedSrc = toHfUrl(src.trim());
+    return `<img src="${resolvedSrc}" alt="${alt}" style="max-width:100%;height:auto;border-radius:8px;margin:8px 0;">`;
+  });
+  
+  // Links: [text](url) - handle both absolute and relative URLs
+  s = s.replace(/\[([^\]]+?)\]\(([^)]+)\)/g, function(_, label, url) {
+    const resolvedUrl = toHfUrl(url.trim());
+    // Determine if it's a downloadable file (PDF, zip, etc.)
+    const isDownload = /\.(pdf|zip|tar|gz|rar|7z|doc|docx|xls|xlsx|ppt|pptx)$/i.test(resolvedUrl);
+    const downloadAttr = isDownload ? ' download' : '';
+    return `<a href="${resolvedUrl}" target="_blank" rel="noopener noreferrer"${downloadAttr} style="color:#8b7cf6;text-decoration:none;">${label}</a>`;
+  });
+  
+  // Badge images (common in READMEs): [![name](img)](url)
+  s = s.replace(/\[(&lt;img[^&]*&gt;)\]\((https?:\/\/[^\s)]+)\)/g, function(_, img, url) {
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${img}</a>`;
+  });
+  
+  // Headers: # ## ### #### (at start of line)
+  s = s.replace(/^#### (.+)$/gm, '<h4 style="font-size:16px;font-weight:600;margin:16px 0 8px;color:#1f2937;">$1</h4>');
+  s = s.replace(/^### (.+)$/gm, '<h3 style="font-size:18px;font-weight:600;margin:16px 0 8px;color:#1f2937;">$1</h3>');
+  s = s.replace(/^## (.+)$/gm, '<h2 style="font-size:20px;font-weight:600;margin:20px 0 10px;color:#1f2937;">$1</h2>');
+  s = s.replace(/^# (.+)$/gm, '<h1 style="font-size:24px;font-weight:700;margin:24px 0 12px;color:#1f2937;">$1</h1>');
+  
+  // Bold: **text** or __text__
+  s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^_]+?)__/g, '<strong>$1</strong>');
+  
+  // Italic: *text* or _text_ (but not inside URLs or already processed)
+  s = s.replace(/(?<![\/\w])\*([^*]+?)\*(?![\/\w])/g, '<em>$1</em>');
+  s = s.replace(/(?<![\/\w])_([^_]+?)_(?![\/\w])/g, '<em>$1</em>');
+  
+  // Blockquotes: > text
+  s = s.replace(/^&gt; (.+)$/gm, '<blockquote style="border-left:4px solid #8b7cf6;padding-left:12px;margin:12px 0;color:#6b7280;font-style:italic;">$1</blockquote>');
+  
+  // Unordered lists: - item or * item
+  s = s.replace(/^[-*] (.+)$/gm, '<li style="margin-left:20px;margin-bottom:4px;">$1</li>');
+  
+  // Ordered lists: 1. item
+  s = s.replace(/^\d+\. (.+)$/gm, '<li style="margin-left:20px;margin-bottom:4px;">$1</li>');
+  
+  // Horizontal rule: --- or ***
+  s = s.replace(/^(---|\*\*\*)$/gm, '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">');
+  
+  // Double newlines to paragraphs, single newlines to <br>
+  s = s.replace(/\n\n+/g, '</p><p style="margin:12px 0;">');
+  s = s.replace(/\n/g, '<br>');
+  
+  // Wrap in paragraph
+  s = '<p style="margin:12px 0;">' + s + '</p>';
+  
+  // Clean up empty paragraphs and fix table wrapping
+  s = s.replace(/<p style="margin:12px 0;"><\/p>/g, '');
+  s = s.replace(/<p style="margin:12px 0;">(<h[1-4])/g, '$1');
+  s = s.replace(/(<\/h[1-4]>)<\/p>/g, '$1');
+  s = s.replace(/<p style="margin:12px 0;">(<table)/g, '$1');
+  s = s.replace(/(<\/table>)<\/p>/g, '$1');
+  s = s.replace(/<br>(<table)/g, '$1');
+  s = s.replace(/(<\/table>)<br>/g, '$1');
+  
+  // Restore all preserved content (code blocks, HTML tags, entities)
+  s = s.replace(/\x00PLACEHOLDER(\d+)\x00/g, function(_, idx) {
+    return placeholders[parseInt(idx, 10)] || '';
+  });
+  
+  // Clean up any artifacts around preserved HTML
+  s = s.replace(/<p style="margin:12px 0;">(<div|<h[1-6]|<center|<table|<figure)/gi, '$1');
+  s = s.replace(/(<\/div>|<\/h[1-6]>|<\/center>|<\/table>|<\/figure>)<\/p>/gi, '$1');
+  s = s.replace(/<br>(<div|<h[1-6]|<center|<table)/gi, '$1');
+  s = s.replace(/(<\/div>|<\/h[1-6]>|<\/center>|<\/table>)<br>/gi, '$1');
+  
+  return s;
+}
+
 // ---------- Search ----------
+let hfSearchDebounceTimer = null;
+let lastHfSearchQuery = '';
+
+// Search HuggingFace models via API (searches entire catalog)
+async function searchHuggingFaceModels(query, limit = 20) {
+  if (!query || query.length < 2) return null;
+  
+  try {
+    let results = [];
+    
+    // If query looks like a model ID (contains /), try direct lookup first
+    if (query.includes('/')) {
+      try {
+        const directUrl = `https://huggingface.co/api/models/${encodeURIComponent(query).replace(/%2F/g, '/')}`;
+        const directRes = await fetch(directUrl);
+        if (directRes.ok) {
+          const model = await directRes.json();
+          if (model && model.id) {
+            results.push({
+              modelId: model.id,
+              id: model.id,
+              author: model.author,
+              downloads: model.downloads,
+              likes: model.likes,
+              pipeline_tag: model.pipeline_tag,
+              lastModified: model.lastModified
+            });
+          }
+        }
+      } catch (e) {
+        console.log('Direct model lookup failed, trying search...');
+      }
+    }
+    
+    // Also do a regular search (handles partial matches and variations)
+    const searchTerms = query.replace('/', ' ').trim(); // Replace / with space for better search
+    const searchUrl = `https://huggingface.co/api/models?search=${encodeURIComponent(searchTerms)}&limit=${limit}`;
+    const searchRes = await fetch(searchUrl);
+    
+    if (searchRes.ok) {
+      const searchResults = await searchRes.json();
+      if (searchResults && searchResults.length > 0) {
+        // Merge results, avoiding duplicates
+        const existingIds = new Set(results.map(r => r.id || r.modelId));
+        for (const r of searchResults) {
+          const id = r.id || r.modelId;
+          if (id && !existingIds.has(id)) {
+            results.push(r);
+            existingIds.add(id);
+          }
+        }
+      }
+    }
+    
+    // If query contains /, also try author filter
+    if (query.includes('/') && results.length < limit) {
+      const [author, modelName] = query.split('/');
+      if (author && modelName) {
+        try {
+          const authorUrl = `https://huggingface.co/api/models?author=${encodeURIComponent(author)}&search=${encodeURIComponent(modelName)}&limit=${limit}`;
+          const authorRes = await fetch(authorUrl);
+          if (authorRes.ok) {
+            const authorResults = await authorRes.json();
+            const existingIds = new Set(results.map(r => r.id || r.modelId));
+            for (const r of authorResults) {
+              const id = r.id || r.modelId;
+              if (id && !existingIds.has(id)) {
+                results.push(r);
+                existingIds.add(id);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    
+    return results.length > 0 ? results.slice(0, limit) : null;
+  } catch (err) {
+    console.error('HuggingFace search error:', err);
+    return null;
+  }
+}
+
+// Display HuggingFace search results
+async function displayHfSearchResults(query) {
+  const tbody = document.querySelector('#huggingfaceModelsTable tbody');
+  const mobileContainer = document.getElementById('hfMobileModelsList');
+  if (!tbody) return;
+  
+  // Show loading state
+  tbody.innerHTML = `
+    <tr id="hfSearchingRow">
+      <td colspan="8" style="text-align: center; padding: 30px 20px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+          <div style="width: 28px; height: 28px; border: 3px solid #e5e7eb; border-top-color: #8b7cf6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <span style="color: #6b7280; font-size: 14px;">Searching HuggingFace for "${query}"...</span>
+        </div>
+      </td>
+    </tr>
+  `;
+  
+  const results = await searchHuggingFaceModels(query, 20);
+  
+  if (!results || results.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 40px 20px; color: #6b7280;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <svg width="32" height="32" fill="none" stroke="#9ca3af" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+            </svg>
+            <span>Querying too frequently. Please wait / Clear Cache / Try the Intelligence Cubed Models.</span>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <button onclick="clearSearch(); switchModelverseTab('local');" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Go to I³ Models</button>
+              <button onclick="clearSearch()" style="padding: 8px 16px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Clear Search</button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+    if (mobileContainer) {
+      mobileContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; padding: 40px 20px; color: #6b7280; gap: 10px;">
+          <svg width="32" height="32" fill="none" stroke="#9ca3af" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+          </svg>
+          <span style="text-align: center;">Querying too frequently.<br>Please wait or try Intelligence Cubed Models.</span>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <button onclick="clearSearch(); switchModelverseTab('local');" style="padding: 10px 18px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">Go to I³ Models</button>
+          </div>
+        </div>
+      `;
+    }
+    updateSearchResultCount(0);
+    return;
+  }
+  
+  // Clear and populate with search results
+  tbody.innerHTML = '';
+  if (mobileContainer) mobileContainer.innerHTML = '';
+  
+  // Process results (reuse existing row creation logic)
+  const modelIds = results.map(m => m.modelId || m.id).filter(Boolean);
+  
+  // Fetch model cards in parallel (with limit to avoid rate limiting)
+  const hfMap = await fetchAllModelCards(modelIds.slice(0, 20), 4);
+  
+  results.forEach(entry => {
+    const modelId = entry.modelId || entry.id;
+    if (!modelId) return;
+    
+    const hf = hfMap[modelId];
+    const normalized = (hf && hf.normalized) ? hf.normalized : null;
+    if (normalized) normalized._hf = true;
+    if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
+    
+    // Create desktop row
+    const row = document.createElement('tr');
+    row.className = 'model-row hf-model-row hf-search-result';
+    row.setAttribute('data-hf', 'true');
+    
+    const escModelId = escapeHtml(modelId);
+    const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
+    const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
+    const baseModel = normalized?.baseModel || entry.base_model || normalized?.category || '-';
+    const pipelineTag = normalized?.pipelineTag || entry.pipeline_tag || null;
+    const author = normalized?.author || entry.author || '-';
+    const downloadsValue = Number.isFinite(Number(normalized?.downloads)) ? Number(normalized.downloads) : (Number.isFinite(Number(entry.downloads)) ? Number(entry.downloads) : null);
+    const likesValue = Number.isFinite(Number(normalized?.likes)) ? Number(normalized.likes) : (Number.isFinite(Number(entry.likes)) ? Number(entry.likes) : null);
+    // List API only has createdAt, individual model API has lastModified
+    const lastUpdated = normalized?.lastModified || entry.lastModified || entry.last_modified || entry.createdAt || null;
+    
+    const baseModelHtml = `
+      <div class="hf-meta-primary">${escapeHtml(baseModel || '-')}</div>
+      ${pipelineTag && pipelineTag !== baseModel ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
+    `;
+    const authorHtml = author ? escapeHtml(author) : '-';
+    const downloadsLikesHtml = `
+      <div class="hf-stat-line">${downloadsValue !== null && downloadsValue !== 0 ? `${formatNumber(downloadsValue)} downloads` : 'N/A'}</div>
+      <div class="hf-stat-sub">${likesValue !== null ? `${formatNumber(likesValue)} likes` : '-'}</div>
+    `;
+    const lastUpdatedHtml = formatDateDisplay(lastUpdated);
+    
+    // Highlight search term in model name
+    const highlightedName = escModelId.replace(new RegExp(`(${query})`, 'gi'), '<mark style="background:#fef08a;padding:0 2px;border-radius:2px;">$1</mark>');
+    
+    row.innerHTML = `
+      <td class="model-name">${highlightedName}</td>
+      <td class="paper-link" data-label="Paper">${paperLinkHtml}</td>
+      <td class="model-details" data-label="Details">
+        <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
+      </td>
+      <td class="hf-meta" data-label="Base Model">${baseModelHtml}</td>
+      <td class="hf-author" data-label="Author">${authorHtml || '-'}</td>
+      <td class="hf-downloads" data-label="Downloads / Likes">${downloadsLikesHtml}</td>
+      <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
+      <td class="action-cell" data-label="Actions">
+        <div class="invest">
+          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
+          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(row);
+    
+    // Create mobile item
+    if (mobileContainer) {
+      const icon = escapeHtml(modelId.charAt(0).toUpperCase());
+      const statsPrimary = downloadsValue !== null && downloadsValue !== 0 ? `${formatNumber(downloadsValue)} downloads` : 'N/A';
+      const statsSecondary = likesValue !== null ? `${formatNumber(likesValue)} likes` : '-';
+      
+      const item = document.createElement('div');
+      item.className = 'mobile-model-item hf-mobile-item hf-search-result';
+      item.setAttribute('data-hf', 'true');
+      item.setAttribute('data-model-id', modelId);
+      item.style.cursor = 'pointer';
+      item.innerHTML = `
+        <div class="mobile-model-item-header">
+          <div class="mobile-model-icon">${icon}</div>
+          <div style="flex: 1;">
+            <div class="mobile-model-name">${highlightedName}</div>
+          </div>
+          <div style="color: #9ca3af; font-size: 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
+        </div>
+        <div class="mobile-model-info">
+          <div class="mobile-model-info-row">
+            <span class="mobile-model-label">Author:</span>
+            <span class="mobile-model-value">${escapeHtml(author || '-')}</span>
+          </div>
+          <div class="mobile-model-info-row">
+            <span class="mobile-model-label">Stats:</span>
+            <span class="mobile-model-value">${statsPrimary} / ${statsSecondary}</span>
+          </div>
+        </div>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; text-align: center;">
+          <span style="color: #8b7cf6; font-size: 13px; font-weight: 500;">Tap to view details</span>
+        </div>
+      `;
+      
+      // Add click handler to show model card
+      item.addEventListener('click', () => {
+        showModelCard(modelId);
+      });
+      
+      mobileContainer.appendChild(item);
+    }
+  });
+  
+  // Update count
+  const info = document.querySelector('.search-info') || document.getElementById('searchResults');
+  if (info) {
+    info.innerHTML = `Found <strong>${results.length}</strong> models matching "<strong>${escapeHtml(query)}</strong>" <span style="color:#6b7280;font-size:12px;">(from ${formatLargeNumber(hfTotalModels || 1200000)} total)</span>`;
+  }
+  
+  // Hide pagination during search
+  const paginationContainer = document.getElementById('hfPaginationContainer');
+  if (paginationContainer) paginationContainer.style.display = 'none';
+  const mobilePagination = document.getElementById('hfMobilePaginationContainer');
+  if (mobilePagination) mobilePagination.style.display = 'none';
+}
+
 function performSearch() {
   const input = document.getElementById('searchInput') || document.getElementById('mobileSearchInput');
   const searchTerm = (input ? input.value : '').toLowerCase().trim();
@@ -360,15 +818,21 @@ async function showModelCard(modelName, signOverride) {
   if (purposeEl) {
     const shortText = (data.purpose || '—').substring(0, 200) + "...";
     purposeEl.innerHTML = `
-      ${shortText}
-      <br><br>
-      <a href="#" class="view-full-content" data-content="${encodeURIComponent(data.purpose || '')}" data-type="Purpose">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-        View Full Content
-      </a>
+      <div class="purpose-content clickable-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="max-height: 300px; overflow-y: auto; padding-right: 8px; cursor: pointer; transition: background 0.2s;" title="Click to view full content">
+        ${renderedContent}
+        ${isLong ? '<div style="color: #8b7cf6; font-size: 12px; margin-top: 8px; font-weight: 500;">Click to read more...</div>' : ''}
+      </div>
+      ${isLong ? `
+      <div style="margin-top: 12px;">
+        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          View Full Content
+        </a>
+      </div>
+      ` : ''}
     `;
   }
   if (useCaseEl) {
@@ -913,7 +1377,8 @@ async function fetchHuggingFaceModelCard(modelId) {
     else if (api.tags && api.tags.length) pipeline = api.tags[0];
 
     const pipelineTag = pipeline || cardData.pipeline_tag || card.pipeline_tag || null;
-    const baseModel = cardData.base_model || card.base_model || (api.config?.peft?.base_model_name_or_path) || pipelineTag || null;
+    // Use pipelineTag as the preferred category; keep base_model available as fallback.
+    const baseModel = pipelineTag || cardData.base_model || card.base_model || (api.config?.peft?.base_model_name_or_path) || null;
     const author = api.author || cardData.author || card.author || null;
     const downloads = api.downloads ?? api.downloads_count ?? null;
     const likes = api.likes ?? null;
@@ -939,6 +1404,7 @@ async function fetchHuggingFaceModelCard(modelId) {
       starsHtml: '—',
       purchasedPercent: 0,
       paperLink: sanitizeUrl(paperLink) || sanitizeUrl(card.paperLink || card.paper) || '-',
+      // normalized.baseModel will reflect the pipelineTag when available (so UI treats it as Category)
       baseModel: baseModel || '-',
       pipelineTag: pipelineTag || '-',
       license: license || '-',
@@ -996,8 +1462,9 @@ async function appendHuggingFaceModels(limit = 50) {
     const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
     const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
     const listMeta = listMetaMap[modelId] || {};
-    const baseModel = normalized?.baseModel || listMeta.base_model || normalized?.category || '-';
-    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || (normalized?.category !== baseModel ? normalized?.category : null);
+    // Prefer pipeline_tag (pipelineTag) to represent the model's Category
+    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || normalized?.category || null;
+    const category = pipelineTag || normalized?.category || normalized?.baseModel || listMeta.base_model || '-';
     const author = normalized?.author || listMeta.author || '-';
     const downloadsValue = Number.isFinite(Number(normalized?.downloads))
       ? Number(normalized.downloads)
@@ -1007,9 +1474,9 @@ async function appendHuggingFaceModels(limit = 50) {
       : (Number.isFinite(Number(listMeta.likes)) ? Number(listMeta.likes) : null);
     const lastUpdated = normalized?.lastModified || listMeta.lastModified || listMeta.last_modified || listMeta.updatedAt || null;
 
-    const baseModelHtml = `
-      <div class="hf-meta-primary">${escapeHtml(baseModel || '-')}</div>
-      ${pipelineTag && pipelineTag !== baseModel ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
+    const categoryHtml = `
+      <div class="hf-meta-primary">${escapeHtml(category || '-')}</div>
+      ${pipelineTag && pipelineTag !== category ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
     `;
     const authorHtml = author ? escapeHtml(author) : '-';
     const downloadsLikesHtml = `
@@ -1024,7 +1491,7 @@ async function appendHuggingFaceModels(limit = 50) {
       <td class="model-details" data-label="Details">
         <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
       </td>
-      <td class="hf-meta" data-label="Base Model">${baseModelHtml}</td>
+      <td class="hf-meta" data-label="Category">${categoryHtml}</td>
       <td class="hf-author" data-label="Author">${authorHtml || '-'}</td>
       <td class="hf-downloads" data-label="Downloads / Likes">${downloadsLikesHtml}</td>
       <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
@@ -1072,7 +1539,8 @@ async function appendHuggingFaceModelsToMobile(limit = 50) {
     if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
 
     const listMeta = listMetaMap[modelId] || {};
-    const baseModel = normalized?.baseModel || listMeta.base_model || normalized?.category || '-';
+    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || normalized?.category || null;
+    const category = pipelineTag || normalized?.category || normalized?.baseModel || listMeta.base_model || '-';
     const author = normalized?.author || listMeta.author || '-';
     const downloadsValue = Number.isFinite(Number(normalized?.downloads))
       ? Number(normalized.downloads)
@@ -1100,8 +1568,8 @@ async function appendHuggingFaceModelsToMobile(limit = 50) {
       </div>
       <div class="mobile-model-info">
         <div class="mobile-model-info-row">
-          <span class="mobile-model-label">Base:</span>
-          <span class="mobile-model-value">${escapeHtml(baseModel || '-')}</span>
+          <span class="mobile-model-label">Category:</span>
+          <span class="mobile-model-value">${escapeHtml(category || '-')}</span>
         </div>
         <div class="mobile-model-info-row">
           <span class="mobile-model-label">Author:</span>
