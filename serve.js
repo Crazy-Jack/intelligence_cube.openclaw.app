@@ -9,7 +9,7 @@ const fetch = require('node-fetch');
 console.log('✅ Dependencies loaded successfully');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 console.log(`🔧 Server configuration: PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
 
@@ -31,29 +31,29 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 新增：分页加载模型数据的API
+// API for paginated model data loading
 app.get('/api/models', (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const sortBy = req.query.sortBy || 'totalScore';
     
-    // 动态加载 model-data.js 来获取数据
+    // Dynamically load model-data.js to get data
     const modelDataPath = path.join(__dirname, 'model-data.js');
     // Use require for CommonJS since we removed ES module exports
     delete require.cache[require.resolve(modelDataPath)];
     const modelDataModule = require(modelDataPath);
     
-    // 获取模型数据
+    // Get model data
     const models = Object.entries(modelDataModule.MODEL_DATA).map(([name, data]) => ({
       name,
       ...data
     }));
     
-    // 排序
+    // Sort
     models.sort((a, b) => b[sortBy] - a[sortBy]);
     
-    // 分页
+    // Paginate
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const paginatedModels = models.slice(startIndex, endIndex);
@@ -75,7 +75,7 @@ app.get('/api/models', (req, res) => {
   }
 });
 
-// 新增：获取模型统计信息的API
+// API for getting model statistics
 app.get('/api/models/stats', (req, res) => {
   try {
     const modelDataPath = path.join(__dirname, 'model-data.js');
@@ -96,7 +96,150 @@ app.get('/api/models/stats', (req, res) => {
   }
 });
 
-// 新增：嵌入向量代理API
+// Query user agents from Firestore
+// User agents are stored in Firestore collection: models/{modelId}
+// where source: "user" OR ownerAddress != null
+// NOTE: AlloyDB is only for knowledge chunks (RAG), NOT for user agents!
+
+let userAgentsFirestore = null;
+try {
+  userAgentsFirestore = require('./src/user-agents-firestore.js');
+  userAgentsFirestore.initializeFirestore();
+  if (userAgentsFirestore.isFirestoreConfigured()) {
+    console.log('✅ User Agents Firestore helper loaded');
+  } else {
+    console.log('⚠️ Firestore Admin not initialized. Set GOOGLE_APPLICATION_CREDENTIALS or run on GCP.');
+  }
+} catch (error) {
+  console.warn('⚠️ User Agents Firestore helper not available:', error.message);
+}
+
+// Initialize AlloyDB connection for RAG queries
+let alloydb = null;
+try {
+  alloydb = require('./src/alloydb-connection.js');
+  // Initialize with Cloud SQL Proxy if enabled
+  const useCloudSqlProxy = process.env.USE_CLOUD_SQL_PROXY === 'true';
+  alloydb.initializeAlloyDB({ useCloudSqlProxy });
+  
+  // Check connection status (async, so we check after a brief delay)
+  setTimeout(() => {
+    if (alloydb.isAlloyDBConnected()) {
+      console.log('✅ AlloyDB connection initialized');
+    } else {
+      console.log('⚠️ AlloyDB not connected. Set USE_CLOUD_SQL_PROXY=true or ALLOYDB_HOST');
+      console.log('   Make sure Cloud SQL Proxy is running: cloud-sql-proxy i3-testnet:us-central1:personal-agent-cluster-primary');
+    }
+  }, 1000);
+} catch (error) {
+  console.warn('⚠️ AlloyDB connection not available:', error.message);
+  console.warn('   To enable: Install Cloud SQL Proxy and set USE_CLOUD_SQL_PROXY=true');
+}
+
+app.get('/api/user-agents', async (req, res) => {
+  try {
+    const { name, ownerAddress, publicOnly } = req.query;
+    
+    console.log('🔍 Querying Firestore for user agents', {
+      name: name || 'all',
+      ownerAddress: ownerAddress || 'all',
+      publicOnly: publicOnly === 'true'
+    });
+    
+    if (!userAgentsFirestore || !userAgentsFirestore.isFirestoreConfigured()) {
+      return res.json({
+        success: true,
+        agents: [],
+        message: 'Firestore not initialized. Please set GOOGLE_APPLICATION_CREDENTIALS environment variable or run on GCP with application default credentials.'
+      });
+    }
+    
+    // Build query options per PDF spec
+    const options = {};
+    if (ownerAddress) {
+      options.ownerAddress = ownerAddress; // Filter by wallet address
+    }
+    if (publicOnly === 'true') {
+      options.publicOnly = true; // Only public models
+    }
+    
+    // Get user agents from Firestore (per PDF: source: "user")
+    const agents = await userAgentsFirestore.listUserAgents(options);
+    
+    // Filter by name if provided (client-side filter for name matching)
+    let filteredAgents = agents;
+    if (name) {
+      filteredAgents = agents.filter(agent => 
+        agent.name && agent.name.toLowerCase().includes(name.toLowerCase())
+      );
+    }
+    
+    res.json({
+      success: true,
+      agents: filteredAgents,
+      total: filteredAgents.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error querying Firestore for user agents:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to query user agents from Firestore',
+      message: error.message 
+    });
+  }
+});
+
+// Get a single user agent by name
+app.get('/api/user-agents/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agent name is required'
+      });
+    }
+    
+    console.log('🔍 Querying Firestore for user agent:', name);
+    
+    if (!userAgentsFirestore || !userAgentsFirestore.isFirestoreConfigured()) {
+      return res.json({
+        success: true,
+        agent: null,
+        message: 'Firestore not initialized. Please set GOOGLE_APPLICATION_CREDENTIALS environment variable or run on GCP with application default credentials.'
+      });
+    }
+    
+    // Get specific user agent by name from Firestore
+    const agent = await userAgentsFirestore.getUserAgentByName(name);
+    
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        error: 'User agent not found',
+        agent: null
+      });
+    }
+    
+    res.json({
+      success: true,
+      agent: agent
+    });
+    
+  } catch (error) {
+    console.error('❌ Error querying Firestore for user agent:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to query user agent from Firestore',
+      message: error.message 
+    });
+  }
+});
+
+// Embeddings proxy API
+//Returns embedding vector of input string and embedding model ("i3-embedding" or "i3-embedding-large")
 app.post('/api/embeddings', async (req, res) => {
   try {
     const { model = 'i3-embedding', input } = req.body;
@@ -160,6 +303,10 @@ function isUserAgent(modelName) {
   return false;
 }
 
+// ============================================================================
+// GEMINI CODE (COMMENTED OUT - Now using I3 API/AutoRouter as backend)
+// ============================================================================
+/*
 // Helper: Check if Gemini test mode is enabled
 function isGeminiTestMode() {
   // Check environment variable first
@@ -249,8 +396,10 @@ function getGeminiApiKey() {
   
   return null;
 }
+*/
 
 // Helper: Transform OpenAI format to Gemini format
+/*
 function transformToGeminiFormat(messages, systemInstruction = null) {
   const contents = [];
   let systemParts = [];
@@ -332,8 +481,10 @@ function transformToGeminiFormat(messages, systemInstruction = null) {
   
   return requestBody;
 }
+*/
 
 // Helper: Transform Gemini response to OpenAI format
+/*
 function transformFromGeminiFormat(geminiResponse, modelName) {
   const choices = [];
   
@@ -369,22 +520,31 @@ function transformFromGeminiFormat(geminiResponse, modelName) {
     } : null
   };
 }
+*/
+// ============================================================================
+// END OF GEMINI CODE
+// ============================================================================
 
-// 新增：聊天完成代理API
+// Chat completions proxy API
 app.post('/api/chat/completions', async (req, res) => {
   try {
     const { model, messages, stream, systemInstruction } = req.body;
     const apiKey = req.headers['i3-api-key'] || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
     
-    // Check test mode from header (frontend toggle) first, then config
+    // Check test mode from header (frontend toggle)
     // Express normalizes headers to lowercase
     const testModeHeader = req.headers['x-test-mode'] || req.headers['X-Test-Mode'];
     const testModeFromHeader = testModeHeader === 'true';
-    const testModeFromConfig = isGeminiTestMode();
-    const isTestMode = testModeFromHeader || testModeFromConfig;
+    // Note: isGeminiTestMode() is commented out - now using I3 API/AutoRouter
+    // const testModeFromConfig = isGeminiTestMode();
+    const isTestMode = testModeFromHeader; // Removed Gemini test mode check
     
-    console.log('🚀 Processing chat completions request for model:', model, '| Test mode:', { header: testModeHeader, fromHeader: testModeFromHeader, fromConfig: testModeFromConfig, isTestMode });
+    console.log('🚀 Processing chat completions request for model:', model, '| Test mode:', { header: testModeHeader, fromHeader: testModeFromHeader, isTestMode });
     
+    // ============================================================================
+    // OLD CODE: User agent routing to Gemini API (COMMENTED OUT - can restore later)
+    // ============================================================================
+    /*
     // Check if this is a user agent - route to Gemini
     if (isUserAgent(model)) {
       console.log('🤖 Detected user agent, routing to Gemini API');
@@ -897,9 +1057,46 @@ app.post('/api/chat/completions', async (req, res) => {
       
       return;
     }
+    */
+    // ============================================================================
+    // END OF OLD CODE
+    // ============================================================================
     
-    // Not a user agent - route to I3 API (existing behavior)
-    console.log('📡 Routing to I3 API for regular model');
+    // Route all models (including user agents) to I3 API
+    // Try to get modelId from Firestore if this is a user agent
+    let agentModelId = null;
+    if (isUserAgent(model)) {
+      console.log('🤖 Detected user agent, querying Firestore for modelId...');
+      
+      // Query Firestore to get the agent's modelId
+      // If anything fails (not found, missing modelId, query error, Firestore not configured),
+      // just treat it as a regular model and route to I3 API
+      if (userAgentsFirestore && userAgentsFirestore.isFirestoreConfigured()) {
+        try {
+          const agent = await userAgentsFirestore.getUserAgentByName(model); //getUserAgentByName is imported from user-agents-firestore.js
+          if (agent && agent.modelId) {
+            agentModelId = agent.modelId;
+            console.log(`✅ Found user agent in Firestore: ${model} → modelId: ${agentModelId}`);
+            console.log(`   Purpose: ${agent.purpose || 'N/A'}`);
+            console.log(`   Use Case: ${agent.useCase || 'N/A'}`);
+            
+            // TODO: Use agentModelId for RAG queries to AlloyDB
+            // Example:
+            // 1. Generate embedding for user query: await getEmbedding(lastUserMessage)
+            // 2. Search AlloyDB: await searchSimilarChunks(agentModelId, queryEmbedding, { limit: 5 })
+            // 3. Add relevant chunks to system instruction for context-aware responses
+          } else {
+            console.warn(`⚠️ User agent "${model}" not found in Firestore or missing modelId - routing as regular model`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ Error querying Firestore for user agent "${model}": ${error.message} - routing as regular model`);
+        }
+      } else {
+        console.warn(`⚠️ Firestore not configured - routing user agent "${model}" as regular model`);
+      }
+    }
+    
+    console.log('📡 Routing to I3 API');
     
     const response = await fetch('http://34.71.119.178:8000/chat/completions', {
       method: 'POST',

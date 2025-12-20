@@ -276,6 +276,7 @@ class AgentChat {
             throw new Error('API Manager not available. Please ensure api-manager.js is loaded.');
         }
 
+
         // Build system prompt from agent data
         const systemPrompt = this.agentData?.purpose 
             ? `You are ${this.agentName}. ${this.agentData.purpose}\n\nUse Case: ${this.agentData.useCase || 'General assistance'}`
