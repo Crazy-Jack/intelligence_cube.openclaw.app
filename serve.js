@@ -1080,6 +1080,22 @@ app.post('/api/chat/completions', async (req, res) => {
     // ============================================================================
     
     // Route all models (including user agents) to I3 API
+    // Extract system instruction from messages if not provided separately
+    // Frontend sends system message in messages array, but backend also accepts systemInstruction field
+    let extractedSystemInstruction = systemInstruction;
+    if (!extractedSystemInstruction && messages && Array.isArray(messages)) {
+      const systemMessages = messages.filter(m => m.role === 'system');
+      if (systemMessages.length > 0) {
+        extractedSystemInstruction = systemMessages.map(m => 
+          typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+        ).join('\n\n');
+        // Remove system messages from messages array (I3 API will get systemInstruction separately)
+        req.body.messages = messages.filter(m => m.role !== 'system');
+        // Set systemInstruction in request body for I3 API
+        req.body.systemInstruction = extractedSystemInstruction;
+      }
+    }
+    
     // Try to get modelId from Firestore if this is a user agent
     let agentModelId = null;
     if (isUserAgent(model)) {
@@ -1127,7 +1143,8 @@ app.post('/api/chat/completions', async (req, res) => {
                   
                   if (embeddingResponse.ok) {
                     const embeddingData = await embeddingResponse.json();
-                    let queryEmbedding = embeddingData.data?.[0]?.embedding;
+                    // Handle I3 API response format: {success: true, data: {data: [{embedding: [...]}]}}
+                    let queryEmbedding = embeddingData.data?.data?.[0]?.embedding || embeddingData.data?.[0]?.embedding;
                     
                     if (queryEmbedding && Array.isArray(queryEmbedding)) {
                       console.log(`✅ Generated query embedding (dimension: ${queryEmbedding.length})`);
@@ -1148,6 +1165,14 @@ app.post('/api/chat/completions', async (req, res) => {
                       if (similarChunks && similarChunks.length > 0) {
                         console.log(`📚 Retrieved ${similarChunks.length} relevant knowledge chunks`);
                         
+                        // Log similarity scores
+                        console.log('📊 Similarity scores:');
+                        similarChunks.forEach((chunk, idx) => {
+                          const similarity = chunk.similarity ? chunk.similarity.toFixed(4) : 'N/A';
+                          const preview = chunk.content.substring(0, 60).replace(/\n/g, ' ');
+                          console.log(`   ${idx + 1}. Similarity: ${similarity} - "${preview}..."`);
+                        });
+                        
                         // Format chunks for system instruction
                         const chunksText = similarChunks
                           .map((chunk, idx) => `[Knowledge Chunk ${idx + 1}]\n${chunk.content}`)
@@ -1157,13 +1182,18 @@ app.post('/api/chat/completions', async (req, res) => {
                         const ragContext = `\n\n=== Relevant Knowledge Base Context ===\n${chunksText}\n=== End of Knowledge Base Context ===\n`;
                         
                         // Update system instruction with RAG context
-                        if (systemInstruction) {
-                          req.body.systemInstruction = systemInstruction + ragContext;
+                        if (req.body.systemInstruction || extractedSystemInstruction) {
+                          req.body.systemInstruction = (req.body.systemInstruction || extractedSystemInstruction) + ragContext;
                         } else {
                           req.body.systemInstruction = ragContext;
                         }
                         
                         console.log(`✅ Added ${similarChunks.length} knowledge chunks to system instruction`);
+                        console.log('📝 Final system instruction length:', req.body.systemInstruction.length, 'characters');
+                        console.log('\n📋 Full System Instruction:');
+                        console.log('─'.repeat(80));
+                        console.log(req.body.systemInstruction);
+                        console.log('─'.repeat(80));
                       } else {
                         console.log('⚠️ No similar chunks found in knowledge base');
                       }
