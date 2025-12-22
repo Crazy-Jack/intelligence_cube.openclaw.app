@@ -6,13 +6,11 @@
 
 const { Pool } = require('pg');
 
-// AlloyDB connection details from PDF
+// AlloyDB connection details
 const ALLOYDB_CONFIG = {
-  // Connection name format: project:region:instance
-  connectionName: 'i3-testnet:us-central1:personal-agent-cluster-primary',
-  
-  // Resource path from PDF
-  resourcePath: 'projects/i3-testnet/locations/us-central1/clusters/personal-agent-cluster/instances/personal-agent-cluster-primary',
+  // AlloyDB instance connection URI format:
+  // projects/[PROJECT_ID]/locations/[REGION]/clusters/[CLUSTER_ID]/instances/[INSTANCE_ID]
+  instanceUri: 'projects/i3-testnet/locations/us-central1/clusters/personal-agent-cluster/instances/personal-agent-cluster-primary',
   
   // Database credentials
   user: 'postgres',
@@ -22,9 +20,9 @@ const ALLOYDB_CONFIG = {
   // Connection options
   port: 5432,
   
-  // For Cloud SQL Proxy (recommended for local dev)
-  // If using Cloud SQL Proxy, set host to the socket path:
-  // host: '/cloudsql/i3-testnet:us-central1:personal-agent-cluster-primary'
+  // For AlloyDB Auth Proxy (recommended for local dev)
+  // The proxy listens on localhost:5432 by default
+  // Start with: ./alloydb-auth-proxy projects/i3-testnet/locations/us-central1/clusters/personal-agent-cluster/instances/personal-agent-cluster-primary
   
   // For direct connection (if public IP enabled)
   // You'll need to get the IP from GCP Console:
@@ -55,26 +53,34 @@ function initializeAlloyDB(options = {}) {
       port: options.port || ALLOYDB_CONFIG.port,
       max: 10, // Maximum pool size
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 30000, // Increased timeout for Auth Proxy (30 seconds)
     };
 
-    // Option 1: Use Cloud SQL Proxy (recommended for local dev)
-    // Cloud SQL Proxy v2 listens on localhost:5432 by default
-    if (options.useCloudSqlProxy || process.env.USE_CLOUD_SQL_PROXY === 'true') {
-      config.host = 'localhost'; // Cloud SQL Proxy listens on localhost
-      console.log('🔌 Using Cloud SQL Proxy on localhost:', config.host + ':' + config.port);
+    // Option 1: Use AlloyDB Auth Proxy (recommended for local dev)
+    // AlloyDB Auth Proxy listens on localhost:5432 by default
+    if (options.useAlloyDBAuthProxy || process.env.USE_ALLOYDB_AUTH_PROXY === 'true' || process.env.USE_CLOUD_SQL_PROXY === 'true') {
+      config.host = 'localhost'; // AlloyDB Auth Proxy listens on localhost
+      console.log('🔌 Using AlloyDB Auth Proxy on localhost:', config.host + ':' + config.port);
+      console.log('   Make sure AlloyDB Auth Proxy is running with:');
+      console.log(`   ./alloydb-auth-proxy ${ALLOYDB_CONFIG.instanceUri}`);
     }
-    // Option 2: Direct connection with IP (if public IP enabled)
-    else if (options.host || process.env.ALLOYDB_HOST) {
-      config.host = options.host || process.env.ALLOYDB_HOST;
-      console.log('🔌 Using direct connection to:', config.host);
+    // Option 2: Direct connection with public IP (if public IP enabled)
+    else if (options.host || process.env.ALLOYDB_HOST || process.env.ALLOYDB_PUBLIC_IP) {
+      config.host = options.host || process.env.ALLOYDB_HOST || process.env.ALLOYDB_PUBLIC_IP;
+      // SSL is required for public connections
+      config.ssl = {
+        rejectUnauthorized: false // SSL required for public connections
+      };
+      console.log('🔌 Using direct connection to AlloyDB via public IP:', config.host);
+      console.log('   SSL enabled for secure connection');
     }
     // Option 3: Try environment variable first, then prompt user
     else {
       throw new Error(
-        'AlloyDB host not configured. Set ALLOYDB_HOST environment variable or use Cloud SQL Proxy.\n' +
+        'AlloyDB host not configured. Set ALLOYDB_HOST environment variable or use AlloyDB Auth Proxy.\n' +
         'To get the IP: Go to GCP Console → AlloyDB → personal-agent-cluster → personal-agent-cluster-primary → Primary IP\n' +
-        'Or install Cloud SQL Proxy and set USE_CLOUD_SQL_PROXY=true'
+        'Or install AlloyDB Auth Proxy and set USE_ALLOYDB_AUTH_PROXY=true\n' +
+        'Download from: https://github.com/GoogleCloudPlatform/alloydb-auth-proxy/releases'
       );
     }
 

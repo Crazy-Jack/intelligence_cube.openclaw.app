@@ -118,22 +118,39 @@ try {
 let alloydb = null;
 try {
   alloydb = require('./src/alloydb-connection.js');
-  // Initialize with Cloud SQL Proxy if enabled
-  const useCloudSqlProxy = process.env.USE_CLOUD_SQL_PROXY === 'true';
-  alloydb.initializeAlloyDB({ useCloudSqlProxy });
+  
+  // Try public IP connection first (if set), otherwise try Auth Proxy
+  const publicIP = process.env.ALLOYDB_PUBLIC_IP || process.env.ALLOYDB_HOST;
+  const useAlloyDBAuthProxy = process.env.USE_ALLOYDB_AUTH_PROXY === 'true';
+  
+  if (publicIP) {
+    // Use direct connection via public IP
+    alloydb.initializeAlloyDB({ host: publicIP });
+    console.log(`🔌 Connecting to AlloyDB via public IP: ${publicIP}`);
+  } else if (useAlloyDBAuthProxy) {
+    // Use AlloyDB Auth Proxy
+    alloydb.initializeAlloyDB({ useAlloyDBAuthProxy });
+    console.log('🔌 Connecting to AlloyDB via Auth Proxy');
+  } else {
+    // Try to auto-detect (will use public IP if available)
+    alloydb.initializeAlloyDB();
+  }
   
   // Check connection status (async, so we check after a brief delay)
   setTimeout(() => {
     if (alloydb.isAlloyDBConnected()) {
       console.log('✅ AlloyDB connection initialized');
     } else {
-      console.log('⚠️ AlloyDB not connected. Set USE_CLOUD_SQL_PROXY=true or ALLOYDB_HOST');
-      console.log('   Make sure Cloud SQL Proxy is running: cloud-sql-proxy i3-testnet:us-central1:personal-agent-cluster-primary');
+      console.log('⚠️ AlloyDB not connected. Set ALLOYDB_PUBLIC_IP or USE_ALLOYDB_AUTH_PROXY=true');
+      if (!publicIP && !useAlloyDBAuthProxy) {
+        console.log('   Option 1: Set ALLOYDB_PUBLIC_IP=35.239.188.129 for direct connection');
+        console.log('   Option 2: Set USE_ALLOYDB_AUTH_PROXY=true and start the proxy');
+      }
     }
   }, 1000);
 } catch (error) {
   console.warn('⚠️ AlloyDB connection not available:', error.message);
-  console.warn('   To enable: Install Cloud SQL Proxy and set USE_CLOUD_SQL_PROXY=true');
+  console.warn('   To enable: Set ALLOYDB_PUBLIC_IP or USE_ALLOYDB_AUTH_PROXY=true');
 }
 
 app.get('/api/user-agents', async (req, res) => {
@@ -1080,11 +1097,91 @@ app.post('/api/chat/completions', async (req, res) => {
             console.log(`   Purpose: ${agent.purpose || 'N/A'}`);
             console.log(`   Use Case: ${agent.useCase || 'N/A'}`);
             
-            // TODO: Use agentModelId for RAG queries to AlloyDB
-            // Example:
-            // 1. Generate embedding for user query: await getEmbedding(lastUserMessage)
-            // 2. Search AlloyDB: await searchSimilarChunks(agentModelId, queryEmbedding, { limit: 5 })
-            // 3. Add relevant chunks to system instruction for context-aware responses
+            // RAG: Retrieve relevant knowledge chunks from AlloyDB
+            if (alloydb && alloydb.isAlloyDBConnected()) {
+              try {
+                // Extract last user message for embedding
+                const userMessages = messages.filter(m => m.role === 'user');
+                const lastUserMessage = userMessages.length > 0 
+                  ? (typeof userMessages[userMessages.length - 1].content === 'string' 
+                      ? userMessages[userMessages.length - 1].content 
+                      : JSON.stringify(userMessages[userMessages.length - 1].content))
+                  : null;
+                
+                if (lastUserMessage) {
+                  console.log('🔍 Generating embedding for user query...');
+                  
+                  // Generate embedding for user query using I3 API
+                  const apiKey = req.headers['i3-api-key'] || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
+                  const embeddingResponse = await fetch('http://34.71.119.178:8000/embeddings', {
+                    method: 'POST',
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'I3-API-Key': apiKey
+                    },
+                    body: JSON.stringify({ 
+                      model: 'i3-embedding', 
+                      input: lastUserMessage 
+                    })
+                  });
+                  
+                  if (embeddingResponse.ok) {
+                    const embeddingData = await embeddingResponse.json();
+                    let queryEmbedding = embeddingData.data?.[0]?.embedding;
+                    
+                    if (queryEmbedding && Array.isArray(queryEmbedding)) {
+                      console.log(`✅ Generated query embedding (dimension: ${queryEmbedding.length})`);
+                      
+                      // Truncate to 768 dimensions if needed (to match stored chunks in AlloyDB)
+                      if (queryEmbedding.length > 768) {
+                        console.log(`⚠️ Truncating query embedding from ${queryEmbedding.length} to 768 dimensions for schema compatibility`);
+                        queryEmbedding = queryEmbedding.slice(0, 768);
+                      }
+                      
+                      // Search AlloyDB for similar chunks using cosine similarity
+                      const similarChunks = await alloydb.searchSimilarChunks(
+                        agentModelId, 
+                        queryEmbedding, 
+                        { limit: 5 }
+                      );
+                      
+                      if (similarChunks && similarChunks.length > 0) {
+                        console.log(`📚 Retrieved ${similarChunks.length} relevant knowledge chunks`);
+                        
+                        // Format chunks for system instruction
+                        const chunksText = similarChunks
+                          .map((chunk, idx) => `[Knowledge Chunk ${idx + 1}]\n${chunk.content}`)
+                          .join('\n\n');
+                        
+                        // Add chunks to system instruction
+                        const ragContext = `\n\n=== Relevant Knowledge Base Context ===\n${chunksText}\n=== End of Knowledge Base Context ===\n`;
+                        
+                        // Update system instruction with RAG context
+                        if (systemInstruction) {
+                          req.body.systemInstruction = systemInstruction + ragContext;
+                        } else {
+                          req.body.systemInstruction = ragContext;
+                        }
+                        
+                        console.log(`✅ Added ${similarChunks.length} knowledge chunks to system instruction`);
+                      } else {
+                        console.log('⚠️ No similar chunks found in knowledge base');
+                      }
+                    } else {
+                      console.warn('⚠️ Invalid embedding format received');
+                    }
+                  } else {
+                    console.warn('⚠️ Failed to generate embedding, continuing without RAG context');
+                  }
+                } else {
+                  console.log('⚠️ No user message found, skipping RAG');
+                }
+              } catch (error) {
+                console.warn(`⚠️ Error during RAG retrieval: ${error.message} - continuing without RAG context`);
+              }
+            } else {
+              console.warn('⚠️ AlloyDB not connected - skipping RAG retrieval');
+            }
           } else {
             console.warn(`⚠️ User agent "${model}" not found in Firestore or missing modelId - routing as regular model`);
           }

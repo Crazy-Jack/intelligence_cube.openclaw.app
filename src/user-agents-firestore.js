@@ -5,6 +5,7 @@
 // NOT in AlloyDB (AlloyDB is only for knowledge chunks/RAG)
 
 const admin = require('firebase-admin');
+const { Firestore } = require('@google-cloud/firestore');
 
 // Initialize Firebase Admin (if not already initialized)
 let firestore = null;
@@ -15,26 +16,26 @@ function initializeFirestore() {
   }
 
   try {
-    // Check if Firebase Admin is already initialized
-    if (admin.apps.length === 0) {
-      // Initialize with service account or application default credentials
-      // Option 1: Use service account key file (if available)
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount)
-        });
-      } 
-      // Option 2: Use application default credentials (for Cloud Run, GCE, etc.)
-      else {
-        admin.initializeApp({
-          credential: admin.credential.applicationDefault()
-        });
-      }
+    // Get project ID and database ID from environment or defaults
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'i3-testnet';
+    const databaseId = process.env.FIRESTORE_DATABASE_ID || 'i3-testnet';
+    
+    // Use @google-cloud/firestore directly to specify database ID
+    // This allows us to connect to a specific database (not just the default)
+    const firestoreConfig = {
+      projectId: projectId,
+      databaseId: databaseId
+    };
+    
+    // If service account key is provided, use it
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      const serviceAccount = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+      firestoreConfig.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     }
-
-    firestore = admin.firestore();
-    console.log('✅ Firestore Admin initialized');
+    // Otherwise, use application default credentials (already set up via gcloud auth)
+    
+    firestore = new Firestore(firestoreConfig);
+    console.log(`✅ Firestore initialized (project: ${projectId}, database: ${databaseId})`);
     return firestore;
   } catch (error) {
     console.error('❌ Error initializing Firestore Admin:', error);
