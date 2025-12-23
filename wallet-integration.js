@@ -107,6 +107,32 @@ function isRealMobileDevice() {
   return isMobileUA && isTouchDevice && isSmallScreen;
 }
 
+// 打开 Binance Web3 Wallet dApp browser 的 deeplink 辅助函数
+function openBinanceDappBrowser(url, chainIdHex) {
+  const utils = window.BINANCE_W3W_UTILS;
+  // 兼容：文档写 getDeeplink，types 里是 getDeepLink
+  const getLink =
+    utils?.getDeeplink ||
+    utils?.getDeepLink ||
+    utils?.getDeepLink; // 保守冗余，避免你后续换版本
+  if (typeof getLink !== "function") return false;
+  let chainIdNum;
+  try {
+    chainIdNum = chainIdHex ? parseInt(chainIdHex, 16) : undefined;
+  } catch (_) {
+    chainIdNum = undefined;
+  }
+  const { http, bnc } = getLink(url, chainIdNum) || {};
+  const isAndroid =
+    (typeof utils?.getIsAndroid === "function" && utils.getIsAndroid()) ||
+    /Android/i.test(navigator.userAgent);
+  const target = (isAndroid ? bnc : http) || http || bnc;
+  if (!target) return false;
+  // 必须在"用户点击触发的同步链路"里调用，避免被浏览器拦截
+  window.location.href = target;
+  return true;
+}
+
 function getBinanceProvider() {
   // 1. Binance App 内置浏览器（推荐）
   if (window.binanceChain && typeof window.binanceChain.request === 'function') {
@@ -406,11 +432,36 @@ async function connectBinanceWallet() {
     providerFound: !!binanceProvider
   });
 
-  // === 🔑 手机端如果没有 provider，停在这里（不 fallback 到 WalletConnect）===
+  // === 🔑 手机端如果没有 provider：先 deeplink 到 Binance dApp browser（不要自动 fallback 到 WalletConnect） ===
   if (isMobileEnv && !hasInjectedProvider) {
-    console.log('[Connect][Binance] Mobile & no injected provider → stop here (no WC fallback)');
-    // 不跳转到 WalletConnect，直接停止
-    showNotification('Please open this page in Binance Wallet App browser', 'error');
+    const inBinance =
+      !!window.ethereum?.isBinance ||
+      (typeof window.BINANCE_W3W_UTILS?.isInBinance === "function" && window.BINANCE_W3W_UTILS.isInBinance());
+
+    // 不在 Binance 内置 dApp browser：像 MetaMask 一样，直接 deeplink 跳转，然后 return
+    if (!inBinance) {
+      try { closeWalletModal?.(); } catch (_) {}
+      const ok = openBinanceDappBrowser(window.location.href, preferred?.chainId);
+      if (ok) {
+        showNotification(
+          "Opening in Binance Web3 Wallet… After it opens, tap Binance Wallet again to connect.",
+          "info"
+        );
+      } else {
+        // deeplink 不可用（通常是 utils 未加载/被拦截/URL 不可达）
+        showNotification(
+          "Binance Wallet is not available in this browser. Please open this page in Binance Wallet dApp browser and try again.",
+          "error"
+        );
+      }
+      return;
+    }
+
+    // 已经在 Binance dApp browser 里但仍没有注入（极少见）：提示刷新/重开
+    showNotification(
+      "Detected Binance dApp browser, but provider is not injected yet. Please refresh this page and try again.",
+      "info"
+    );
     return;
   }
 

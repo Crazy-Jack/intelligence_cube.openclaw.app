@@ -23,6 +23,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
+    
+    <!-- Binance W3W Utils (for deeplink / universal link) -->
+    <script type="module">
+      // 固定版本，避免未来 breaking change
+      import * as BINANCE_W3W_UTILS from 'https://esm.run/@binance/w3w-utils@1.1.8';
+      window.BINANCE_W3W_UTILS = BINANCE_W3W_UTILS;
+    </script>
+
     <!-- Safe polyfills for Solana web3.js (module-friendly, no globals pollution) -->
     <script type="module">
     // 只有缺失时才注入，避免覆盖浏览器原生实现
