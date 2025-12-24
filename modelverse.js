@@ -242,6 +242,39 @@ function renderMarkdown(text, modelId) {
 let hfSearchDebounceTimer = null;
 let lastHfSearchQuery = '';
 
+// Search HuggingFace models by category with pipeline_tag
+async function searchHuggingFaceModelsByCategory(category, limit = 50) {
+  if (!category) return null;
+  
+  try {
+    let results = [];
+    
+    // Use HuggingFace API with pipeline_tag parameter
+    const searchUrl = `https://huggingface.co/api/models?pipeline_tag=${encodeURIComponent(category)}&limit=${limit}`;
+    const searchRes = await fetch(searchUrl);
+    
+    if (searchRes.ok) {
+      const searchResults = await searchRes.json();
+      if (searchResults && searchResults.length > 0) {
+        results = searchResults.map(r => ({
+          modelId: r.id || r.modelId,
+          id: r.id || r.modelId,
+          author: r.author,
+          downloads: r.downloads,
+          likes: r.likes,
+          pipeline_tag: r.pipeline_tag,
+          lastModified: r.lastModified
+        }));
+      }
+    }
+    
+    return results.length > 0 ? results : null;
+  } catch (err) {
+    console.error('HuggingFace category search error:', err);
+    return null;
+  }
+}
+
 // Search HuggingFace models via API (searches entire catalog)
 async function searchHuggingFaceModels(query, limit = 20) {
   if (!query || query.length < 2) return null;
@@ -322,6 +355,225 @@ async function searchHuggingFaceModels(query, limit = 20) {
   }
 }
 
+// Perform search by category
+async function performCategorySearch() {
+  const categorySelect = document.getElementById('categoryFilter');
+  const category = categorySelect ? categorySelect.value : '';
+  
+  if (!category) {
+    clearSearch();
+    return;
+  }
+  
+  // Display category search results
+  await displayHfCategorySearchResults(category);
+}
+
+// Display HuggingFace category search results
+async function displayHfCategorySearchResults(category) {
+  const tbody = document.querySelector('#huggingfaceModelsTable tbody');
+  const mobileContainer = document.getElementById('hfMobileModelsList');
+  if (!tbody) return;
+  
+  // Get category label from select
+  const categorySelect = document.getElementById('categoryFilter');
+  const categoryLabel = categorySelect?.options[categorySelect?.selectedIndex]?.text || category;
+  
+  // Show loading state
+  tbody.innerHTML = `
+    <tr id="hfSearchingRow">
+      <td colspan="8" style="text-align: center; padding: 30px 20px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+          <div style="width: 28px; height: 28px; border: 3px solid #e5e7eb; border-top-color: #8b7cf6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <span style="color: #6b7280; font-size: 14px;">Loading ${categoryLabel} models...</span>
+        </div>
+      </td>
+    </tr>
+  `;
+  
+  const results = await searchHuggingFaceModelsByCategory(category, 50);
+  
+  if (!results || results.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 40px 20px; color: #6b7280;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <svg width="32" height="32" fill="none" stroke="#9ca3af" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+            </svg>
+            <span>No models found in this category. Querying too frequently / Please wait.</span>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <button onclick="clearSearch()" style="padding: 8px 16px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Try Another Category</button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+    if (mobileContainer) {
+      mobileContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; padding: 40px 20px; color: #6b7280; gap: 10px;">
+          <svg width="32" height="32" fill="none" stroke="#9ca3af" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+          </svg>
+          <span style="text-align: center;">No models found in this category.</span>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <button onclick="clearSearch()" style="padding: 10px 18px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px;">Try Another</button>
+          </div>
+        </div>
+      `;
+    }
+    updateSearchResultCount(0);
+    return;
+  }
+  
+  // Clear and populate with category results
+  // Fetch model cards in parallel (with limit to avoid rate limiting)
+  const modelIds = results.map(m => m.modelId || m.id).filter(Boolean);
+  const hfMap = await fetchAllModelCards(modelIds.slice(0, 50), 4);
+  
+  // Use helper function to render results
+  await renderHfSearchResults(results, hfMap, {
+    tbody,
+    mobileContainer,
+    query: null,
+    categoryLabel
+  });
+}
+
+// Helper function to render HuggingFace search results into the tables
+async function renderHfSearchResults(results, hfMap, displayContext) {
+  const { tbody, mobileContainer, query, categoryLabel, infoSelector } = displayContext;
+  
+  if (!tbody) return;
+  
+  // Clear previous content
+  tbody.innerHTML = '';
+  if (mobileContainer) mobileContainer.innerHTML = '';
+  
+  results.forEach(entry => {
+    const modelId = entry.modelId || entry.id;
+    if (!modelId) return;
+    
+    const hf = hfMap[modelId];
+    const normalized = (hf && hf.normalized) ? hf.normalized : null;
+    if (normalized) normalized._hf = true;
+    if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
+    
+    // Create desktop row
+    const row = document.createElement('tr');
+    row.className = 'model-row hf-model-row hf-search-result';
+    row.setAttribute('data-hf', 'true');
+    
+    const escModelId = escapeHtml(modelId);
+    const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
+    const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
+    const baseModel = normalized?.baseModel || entry.base_model || normalized?.category || '-';
+    const pipelineTag = normalized?.pipelineTag || entry.pipeline_tag || (query || categoryLabel || '');
+    const author = normalized?.author || entry.author || '-';
+    const downloadsValue = Number.isFinite(Number(normalized?.downloads)) ? Number(normalized.downloads) : (Number.isFinite(Number(entry.downloads)) ? Number(entry.downloads) : null);
+    const likesValue = Number.isFinite(Number(normalized?.likes)) ? Number(normalized.likes) : (Number.isFinite(Number(entry.likes)) ? Number(entry.likes) : null);
+    const lastUpdated = normalized?.lastModified || entry.lastModified || entry.last_modified || entry.createdAt || null;
+    
+    const baseModelHtml = `
+      <div class="hf-meta-primary">${escapeHtml(baseModel || '-')}</div>
+      ${pipelineTag && pipelineTag !== baseModel ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
+    `;
+    const authorHtml = author ? escapeHtml(author) : '-';
+    const downloadsLikesHtml = `
+      <div class="hf-stat-line">${downloadsValue !== null && downloadsValue !== 0 ? `${formatNumber(downloadsValue)} downloads` : 'N/A'}</div>
+      <div class="hf-stat-sub">${likesValue !== null ? `${formatNumber(likesValue)} likes` : '-'}</div>
+    `;
+    const lastUpdatedHtml = formatDateDisplay(lastUpdated);
+    
+    // Highlight search term in model name if query is provided
+    let highlightedName = escModelId;
+    if (query) {
+      highlightedName = escModelId.replace(new RegExp(`(${query})`, 'gi'), '<mark style="background:#fef08a;padding:0 2px;border-radius:2px;">$1</mark>');
+    }
+    
+    row.innerHTML = `
+      <td class="model-name">${highlightedName}</td>
+      <td class="paper-link" data-label="Paper">${paperLinkHtml}</td>
+      <td class="model-details" data-label="Details">
+        <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
+      </td>
+      <td class="hf-meta" data-label="Base Model">${baseModelHtml}</td>
+      <td class="hf-author" data-label="Author">${authorHtml || '-'}</td>
+      <td class="hf-downloads" data-label="Downloads / Likes">${downloadsLikesHtml}</td>
+      <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
+      <td class="action-cell" data-label="Actions">
+        <div class="invest">
+          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
+          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(row);
+    
+    // Create mobile item
+    if (mobileContainer) {
+      const icon = escapeHtml(modelId.charAt(0).toUpperCase());
+      const statsPrimary = downloadsValue !== null && downloadsValue !== 0 ? `${formatNumber(downloadsValue)} downloads` : 'N/A';
+      const statsSecondary = likesValue !== null ? `${formatNumber(likesValue)} likes` : '-';
+      
+      const item = document.createElement('div');
+      item.className = 'mobile-model-item hf-mobile-item hf-search-result';
+      item.setAttribute('data-hf', 'true');
+      item.setAttribute('data-model-id', modelId);
+      item.style.cursor = 'pointer';
+      item.innerHTML = `
+        <div class="mobile-model-item-header">
+          <div class="mobile-model-icon">${icon}</div>
+          <div style="flex: 1;">
+            <div class="mobile-model-name">${escModelId}</div>
+          </div>
+          <div style="color: #9ca3af; font-size: 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
+        </div>
+        <div class="mobile-model-info">
+          <div class="mobile-model-info-row">
+            <span class="mobile-model-label">Author:</span>
+            <span class="mobile-model-value">${escapeHtml(author || '-')}</span>
+          </div>
+          <div class="mobile-model-info-row">
+            <span class="mobile-model-label">Stats:</span>
+            <span class="mobile-model-value">${statsPrimary} / ${statsSecondary}</span>
+          </div>
+        </div>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; text-align: center;">
+          <span style="color: #8b7cf6; font-size: 13px; font-weight: 500;">Tap to view details</span>
+        </div>
+      `;
+      
+      // Add click handler to show model card
+      item.addEventListener('click', () => {
+        showModelCard(modelId);
+      });
+      
+      mobileContainer.appendChild(item);
+    }
+  });
+  
+  // Update count
+  const info = document.querySelector('.search-info') || document.getElementById('searchResults');
+  if (info) {
+    if (query) {
+      info.innerHTML = `Found <strong>${results.length}</strong> models matching "<strong>${escapeHtml(query)}</strong>" <span style="color:#6b7280;font-size:12px;">(from ${formatLargeNumber(hfTotalModels || 1200000)} total)</span>`;
+    } else if (categoryLabel) {
+      info.innerHTML = `Found <strong>${results.length}</strong> models in <strong>${categoryLabel}</strong>`;
+    }
+  }
+  
+  // Hide pagination during search
+  const paginationContainer = document.getElementById('hfPaginationContainer');
+  if (paginationContainer) paginationContainer.style.display = 'none';
+  const mobilePagination = document.getElementById('hfMobilePaginationContainer');
+  if (mobilePagination) mobilePagination.style.display = 'none';
+}
+
 // Display HuggingFace search results
 async function displayHfSearchResults(query) {
   const tbody = document.querySelector('#huggingfaceModelsTable tbody');
@@ -377,131 +629,18 @@ async function displayHfSearchResults(query) {
   }
   
   // Clear and populate with search results
-  tbody.innerHTML = '';
-  if (mobileContainer) mobileContainer.innerHTML = '';
-  
-  // Process results (reuse existing row creation logic)
   const modelIds = results.map(m => m.modelId || m.id).filter(Boolean);
   
   // Fetch model cards in parallel (with limit to avoid rate limiting)
   const hfMap = await fetchAllModelCards(modelIds.slice(0, 20), 4);
   
-  results.forEach(entry => {
-    const modelId = entry.modelId || entry.id;
-    if (!modelId) return;
-    
-    const hf = hfMap[modelId];
-    const normalized = (hf && hf.normalized) ? hf.normalized : null;
-    if (normalized) normalized._hf = true;
-    if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
-    
-    // Create desktop row
-    const row = document.createElement('tr');
-    row.className = 'model-row hf-model-row hf-search-result';
-    row.setAttribute('data-hf', 'true');
-    
-    const escModelId = escapeHtml(modelId);
-    const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
-    const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
-    const baseModel = normalized?.baseModel || entry.base_model || normalized?.category || '-';
-    const pipelineTag = normalized?.pipelineTag || entry.pipeline_tag || null;
-    const author = normalized?.author || entry.author || '-';
-    const downloadsValue = Number.isFinite(Number(normalized?.downloads)) ? Number(normalized.downloads) : (Number.isFinite(Number(entry.downloads)) ? Number(entry.downloads) : null);
-    const likesValue = Number.isFinite(Number(normalized?.likes)) ? Number(normalized.likes) : (Number.isFinite(Number(entry.likes)) ? Number(entry.likes) : null);
-    // List API only has createdAt, individual model API has lastModified
-    const lastUpdated = normalized?.lastModified || entry.lastModified || entry.last_modified || entry.createdAt || null;
-    
-    const baseModelHtml = `
-      <div class="hf-meta-primary">${escapeHtml(baseModel || '-')}</div>
-      ${pipelineTag && pipelineTag !== baseModel ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
-    `;
-    const authorHtml = author ? escapeHtml(author) : '-';
-    const downloadsLikesHtml = `
-      <div class="hf-stat-line">${downloadsValue !== null && downloadsValue !== 0 ? `${formatNumber(downloadsValue)} downloads` : 'N/A'}</div>
-      <div class="hf-stat-sub">${likesValue !== null ? `${formatNumber(likesValue)} likes` : '-'}</div>
-    `;
-    const lastUpdatedHtml = formatDateDisplay(lastUpdated);
-    
-    // Highlight search term in model name
-    const highlightedName = escModelId.replace(new RegExp(`(${query})`, 'gi'), '<mark style="background:#fef08a;padding:0 2px;border-radius:2px;">$1</mark>');
-    
-    row.innerHTML = `
-      <td class="model-name">${highlightedName}</td>
-      <td class="paper-link" data-label="Paper">${paperLinkHtml}</td>
-      <td class="model-details" data-label="Details">
-        <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
-      </td>
-      <td class="hf-meta" data-label="Base Model">${baseModelHtml}</td>
-      <td class="hf-author" data-label="Author">${authorHtml || '-'}</td>
-      <td class="hf-downloads" data-label="Downloads / Likes">${downloadsLikesHtml}</td>
-      <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
-      <td class="action-cell" data-label="Actions">
-        <div class="invest">
-          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
-          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
-        </div>
-      </td>
-    `;
-    tbody.appendChild(row);
-    
-    // Create mobile item
-    if (mobileContainer) {
-      const icon = escapeHtml(modelId.charAt(0).toUpperCase());
-      const statsPrimary = downloadsValue !== null && downloadsValue !== 0 ? `${formatNumber(downloadsValue)} downloads` : 'N/A';
-      const statsSecondary = likesValue !== null ? `${formatNumber(likesValue)} likes` : '-';
-      
-      const item = document.createElement('div');
-      item.className = 'mobile-model-item hf-mobile-item hf-search-result';
-      item.setAttribute('data-hf', 'true');
-      item.setAttribute('data-model-id', modelId);
-      item.style.cursor = 'pointer';
-      item.innerHTML = `
-        <div class="mobile-model-item-header">
-          <div class="mobile-model-icon">${icon}</div>
-          <div style="flex: 1;">
-            <div class="mobile-model-name">${highlightedName}</div>
-          </div>
-          <div style="color: #9ca3af; font-size: 12px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
-          </div>
-        </div>
-        <div class="mobile-model-info">
-          <div class="mobile-model-info-row">
-            <span class="mobile-model-label">Author:</span>
-            <span class="mobile-model-value">${escapeHtml(author || '-')}</span>
-          </div>
-          <div class="mobile-model-info-row">
-            <span class="mobile-model-label">Stats:</span>
-            <span class="mobile-model-value">${statsPrimary} / ${statsSecondary}</span>
-          </div>
-        </div>
-        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; text-align: center;">
-          <span style="color: #8b7cf6; font-size: 13px; font-weight: 500;">Tap to view details</span>
-        </div>
-      `;
-      
-      // Add click handler to show model card
-      item.addEventListener('click', () => {
-        showModelCard(modelId);
-      });
-      
-      mobileContainer.appendChild(item);
-    }
+  // Use helper function to render results
+  await renderHfSearchResults(results, hfMap, {
+    tbody,
+    mobileContainer,
+    query,
+    categoryLabel: null
   });
-  
-  // Update count
-  const info = document.querySelector('.search-info') || document.getElementById('searchResults');
-  if (info) {
-    info.innerHTML = `Found <strong>${results.length}</strong> models matching "<strong>${escapeHtml(query)}</strong>" <span style="color:#6b7280;font-size:12px;">(from ${formatLargeNumber(hfTotalModels || 1200000)} total)</span>`;
-  }
-  
-  // Hide pagination during search
-  const paginationContainer = document.getElementById('hfPaginationContainer');
-  if (paginationContainer) paginationContainer.style.display = 'none';
-  const mobilePagination = document.getElementById('hfMobilePaginationContainer');
-  if (mobilePagination) mobilePagination.style.display = 'none';
 }
 
 function performSearch() {
@@ -578,8 +717,10 @@ function performSearch() {
 function clearSearch() {
   const input = document.getElementById('searchInput');
   const mobileInput = document.getElementById('mobileSearchInput');
+  const categoryFilter = document.getElementById('categoryFilter');
   if (input) input.value = '';
   if (mobileInput) mobileInput.value = '';
+  if (categoryFilter) categoryFilter.value = '';
   
   document.querySelectorAll('.models-table tbody tr').forEach(row => {
     row.style.display = '';
@@ -816,38 +957,78 @@ async function showModelCard(modelName, signOverride) {
 
   if (titleEl)    titleEl.textContent = `${modelName} Details`;
   if (purposeEl) {
-    const shortText = (data.purpose || '—').substring(0, 200) + "...";
-    purposeEl.innerHTML = `
-      <div class="purpose-content clickable-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="max-height: 300px; overflow-y: auto; padding-right: 8px; cursor: pointer; transition: background 0.2s;" title="Click to view full content">
-        ${renderedContent}
-        ${isLong ? '<div style="color: #8b7cf6; font-size: 12px; margin-top: 8px; font-weight: 500;">Click to read more...</div>' : ''}
-      </div>
-      ${isLong ? `
-      <div style="margin-top: 12px;">
-        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px;">
+    const fullPurpose = data.purpose || '—';
+    const isHuggingFace = data._hf;
+    if (isHuggingFace && fullPurpose !== '—') {
+      // For HuggingFace models, only show "View Full Content" link
+      purposeEl.innerHTML = `
+        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
           View Full Content
         </a>
-      </div>
-      ` : ''}
-    `;
+      `;
+    } else if (!isHuggingFace) {
+      // For local models, show preview + link
+      const shortText = fullPurpose.substring(0, 200) + (fullPurpose.length > 200 ? "..." : "");
+      const isLong = fullPurpose.length > 200;
+      const renderedContent = typeof renderMarkdown === 'function' ? renderMarkdown(shortText, modelName) : escapeHtml(shortText);
+      purposeEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div>${renderedContent}</div>
+          ${isLong ? `
+          <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            View Full Content
+          </a>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      purposeEl.innerHTML = '—';
+    }
   }
   if (useCaseEl) {
-    const shortText = (data.useCase || '—').substring(0, 150) + "...";
-    useCaseEl.innerHTML = `
-      ${shortText}
-      <br><br>
-        <a href="#" class="view-full-content" data-content="${encodeURIComponent(data.useCase || '')}" data-type="Use Case">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-        View Full Content
-      </a>
-    `;
+    const fullUseCase = data.useCase || '—';
+    const isHuggingFace = data._hf;
+    if (isHuggingFace && fullUseCase !== '—') {
+      // For HuggingFace models, only show "View Full Content" link
+      useCaseEl.innerHTML = `
+        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullUseCase)}" data-type="Use Case" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          View Full Content
+        </a>
+      `;
+    } else if (!isHuggingFace) {
+      // For local models, show preview + link
+      const shortText = fullUseCase.substring(0, 150) + (fullUseCase.length > 150 ? "..." : "");
+      const isLong = fullUseCase.length > 150;
+      const renderedContent = typeof renderMarkdown === 'function' ? renderMarkdown(shortText, modelName) : escapeHtml(shortText);
+      useCaseEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div>${renderedContent}</div>
+          ${isLong ? `
+          <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullUseCase)}" data-type="Use Case" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            View Full Content
+          </a>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      useCaseEl.innerHTML = '—';
+    }
   }
   if (categoryEl) categoryEl.textContent = data.category || '—';
   if (industryEl) industryEl.textContent = data.industry || '—';
@@ -1192,6 +1373,7 @@ function getModelData(name) {
 function showFullContentModal(content, title = 'Content') {
   const fullModal = document.createElement('div');
   fullModal.className = 'full-content-modal';
+  const renderedContent = typeof renderMarkdown === 'function' ? renderMarkdown(content) : escapeHtml(content);
   fullModal.innerHTML = `
     <div class="full-content-overlay">
       <div class="full-content-container">
@@ -1205,7 +1387,7 @@ function showFullContentModal(content, title = 'Content') {
           </button>
         </div>
         <div class="full-content-body">
-          ${content}
+          ${renderedContent}
         </div>
       </div>
     </div>
