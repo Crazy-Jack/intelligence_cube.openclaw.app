@@ -702,6 +702,13 @@
                         </svg>
                         Workflows
                     </button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <path d="M12 12l-10 5 10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+                        </svg>
+                        Personal Agent
+                    </button>
                     <button class="nav-item active">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                             <path d="M7 4V2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -724,6 +731,7 @@
                     <button class="nav-item" onclick="window.location.href='benchmark.html'">Benchmark</button>
                     <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
                     <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Agent</button>
                     <button class="nav-item active" onclick="window.location.href='mycart.html'">MyCart</button>
                 </div>
             </div>
@@ -2002,13 +2010,10 @@
 
             <div style="margin: 20px 0;">
                 <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Select Network</label>
-                <select id="chainSelector" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                <select id="chainSelector" style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
                     <option value="BSC">BNB Smart Chain (BSC)</option>
                     <option value="OPBNB">opBNB Mainnet</option>
-                    <option value="ETH">Ethereum Mainnet</option>
-                    <option value="BASE">Base Mainnet</option>
-                    <option value="SOLANA_DEVNET">Solana Devnet</option>
-                    <option value="SOLANA_MAINNET">Solana Mainnet</option>
+                    <option value="SOLANA">Solana Devnet</option>
                 </select>
             </div>
 
