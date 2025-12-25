@@ -8,6 +8,27 @@ export default defineConfig({
     port: 3001,
     strictPort: true,
   },
+  // Node.js polyfills for crypto (needed by Binance SDK)
+  define: {
+    'process.env': {},
+    global: 'globalThis',
+  },
+  resolve: {
+    alias: {
+      // Polyfill Node.js modules for browser
+      crypto: 'crypto-browserify',
+      stream: 'stream-browserify',
+      buffer: 'buffer',
+    }
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      // Node.js global to browser globalThis
+      define: {
+        global: 'globalThis'
+      }
+    }
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -55,7 +76,8 @@ export default defineConfig({
           'canvas.js',
           'workflow.js',
           'myassets.js',
-          'mycart.js'
+          'mycart.js',
+          'binance-sdk.js'
         ]
         
         // Copy CSS files as-is to dist root

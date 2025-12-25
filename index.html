@@ -31,7 +31,7 @@
       window.BINANCE_W3W_UTILS = BINANCE_W3W_UTILS;
     </script>
 
-    <!-- Safe polyfills for Solana web3.js (module-friendly, no globals pollution) -->
+    <!-- Safe polyfills for Solana web3.js and Binance SDK (module-friendly, no globals pollution) -->
     <script type="module">
     // 只有缺失时才注入，避免覆盖浏览器原生实现
     if (!('Buffer' in globalThis)) {
@@ -46,7 +46,17 @@
         const { TextEncoder } = await import('https://esm.sh/text-encoding');
         globalThis.TextEncoder = TextEncoder;
     }
+    
+    // Crypto polyfill for Binance SDK (needed for HMAC functions)
+    if (typeof window !== 'undefined' && !window.crypto?.subtle) {
+      // Use Web Crypto API polyfill if needed (modern browsers should have it)
+      console.warn('[Crypto] Web Crypto API not available');
+    }
     </script>
+
+    <!-- Binance Web3 Wallet SDK Provider (for QR code connection) -->
+    <!-- Using npm bundle with proper crypto polyfills -->
+    <script type="module" src="binance-sdk.js"></script>
 
     
     <!-- Base Account SDK -->
