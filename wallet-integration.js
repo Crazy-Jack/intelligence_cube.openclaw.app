@@ -2,6 +2,81 @@
 // 在所有需要钱包功能的页面中使用
 
 /**
+ * Remove "Recommended" badge from Binance W3W SDK modal
+ * The SDK doesn't provide official customization options, so we use DOM manipulation
+ */
+(function initBinanceBadgeRemover() {
+  let observerActive = false;
+  
+  const removeBinanceBadge = () => {
+    const wrapper = document.getElementById('binanceW3W-wrapper');
+    if (!wrapper) return;
+    
+    // Target the "Recommended" badge by its class combination
+    const selectors = [
+      '.w3w-t-subtitle3.absolute.top-0.right-0',
+      '.absolute.top-0.right-0.h-5',
+      '[class*="w3w-t-subtitle3"][class*="absolute"]'
+    ];
+    
+    selectors.forEach(selector => {
+      try {
+        const badges = wrapper.querySelectorAll(selector);
+        badges.forEach(badge => {
+          // Check if it contains "Recommended" text or has the green color
+          if (badge.textContent?.includes('Recommended') || 
+              badge.className?.includes('2EBD85') ||
+              badge.className?.includes('subtitle3')) {
+            badge.style.display = 'none';
+            badge.style.visibility = 'hidden';
+            badge.style.opacity = '0';
+            badge.style.width = '0';
+            badge.style.height = '0';
+            badge.style.overflow = 'hidden';
+          }
+        });
+      } catch (e) {
+        // Silently ignore selector errors
+      }
+    });
+  };
+  
+  // Use MutationObserver to watch for Binance modal injection
+  const startObserver = () => {
+    if (observerActive) return;
+    observerActive = true;
+    
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          // Check if binanceW3W-wrapper was added
+          const hasWrapper = document.getElementById('binanceW3W-wrapper');
+          if (hasWrapper) {
+            // Run removal multiple times with delays to catch late-rendered elements
+            removeBinanceBadge();
+            setTimeout(removeBinanceBadge, 100);
+            setTimeout(removeBinanceBadge, 300);
+            setTimeout(removeBinanceBadge, 500);
+          }
+        }
+      }
+    });
+    
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+  };
+  
+  // Start observer when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startObserver);
+  } else {
+    startObserver();
+  }
+})();
+
+/**
  * 显示钱包选择模态框 - 新增功能
  */
 function showWalletSelectionModal() {
