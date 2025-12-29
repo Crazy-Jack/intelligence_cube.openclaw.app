@@ -488,6 +488,13 @@
                         </svg>
                         Workflows
                     </button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <path d="M12 12l-10 5 10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+                        </svg>
+                        Personal Agent
+                    </button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                             <path d="M7 4V2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -510,6 +517,7 @@
                     <button class="nav-item" onclick="window.location.href='benchmark.html'">Benchmark</button>
                     <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
                     <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Agent</button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
                 </div>
             </div>
@@ -3460,7 +3468,7 @@
                 </div>
 
                 <!-- Binance Wallet 选项 -->
-                <div class="wallet-option available" onclick="window.open('https://www.binance.com/en/web3wallet', '_blank')">
+                <div class="wallet-option available" onclick="connectBinanceWallet()">
                     <span class="wallet-icon-wrap">
                         <!-- 使用 binance_wallet.jpeg 作为图标 -->
                         <img src="png/binance_wallet.jpeg" alt="Binance Wallet">

@@ -649,7 +649,9 @@ function updateSearchResultCount(count) {
     const displayedCount = totalRows || count;
     if (info) info.textContent = `Showing ${displayedCount} / ${formatLargeNumber(hfTotalModels)} models`;
   } else {
-    if (info) info.textContent = `Showing ${Math.min(count, totalRows)} / ${total} models`;
+    // Fixed count for Intelligence Cubed local models
+    const i3TotalModels = 506;
+    if (info) info.textContent = `Showing ${i3TotalModels} / ${i3TotalModels} models`;
   }
   
   const mobileInfo = document.getElementById('mobileSearchResults');
@@ -665,9 +667,9 @@ function updateSearchResultCount(count) {
     if (currentModelverseTab === 'hf' && hfTotalModels) {
       mobileInfo.textContent = `${displayCount} / ${formatLargeNumber(hfTotalModels)} models`;
     } else {
-      const rawTotal = mobileItems.length || totalRows || count;
-      const finalTotal = rawTotal || displayCount;
-      mobileInfo.textContent = `${displayCount}/${finalTotal} models`;
+      // Fixed count for Intelligence Cubed local models
+      const i3TotalModels = 506;
+      mobileInfo.textContent = `${i3TotalModels}/${i3TotalModels} models`;
     }
   }
 }
@@ -1452,9 +1454,9 @@ async function fetchHuggingFaceTotalCount() {
 // Format large numbers (e.g., 1200000 -> "1.2M")
 function formatLargeNumber(num) {
   if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
+    return (num / 1000000).toFixed(1) + ' Million';
   } else if (num >= 1000) {
-    return (num / 1000).toFixed(0) + 'K';
+    return (num / 1000).toFixed(0) + ' K';
   }
   return num.toString();
 }

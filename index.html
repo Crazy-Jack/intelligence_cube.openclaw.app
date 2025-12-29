@@ -1505,6 +1505,13 @@
                         </svg>
                         Workflows
                     </button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <path d="M12 12l-10 5 10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+                        </svg>
+                        Personal Agent
+                    </button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                             <path d="M7 4V2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -1537,6 +1544,7 @@
                     </button>
                     <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
                     <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Agent</button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
                 </div>
             </div>
@@ -1723,17 +1731,6 @@
         </aside>
         <section class="chat-main">
             <div class="chat-header" id="chatHeader">
-                <button class="chat-history-toggle-btn" onclick="toggleChatSidebar()" title="Chat History" aria-label="Chat History">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon-only">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                    <span class="btn-text">Chat History</span>
-                </button>
                 <span id="chatHeaderText" style="flex:1;">Select a model to start chatting</span>
             </div>
             <div id="chatMessages" class="chat-messages"></div>
@@ -6395,7 +6392,7 @@
 
             <div class="wallet-options">
                 <!-- Binance Wallet 选项 - 优先显示，特别是移动设备 -->
-                <div class="wallet-option available binance-wallet-option" id="binanceWalletOption" onclick="window.open('https://www.binance.com/en/web3wallet', '_blank')">
+                <div class="wallet-option available binance-wallet-option" id="binanceWalletOption" onclick="connectBinanceWallet()">
                     <span class="wallet-icon-wrap">
                         <!-- 使用 binance_wallet.jpeg 作为图标 -->
                         <img src="png/binance_wallet.jpeg" alt="Binance Wallet">

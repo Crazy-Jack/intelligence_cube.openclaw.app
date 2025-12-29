@@ -76,18 +76,83 @@ function closeWalletModal() {
     }
 }
 
+// === Binance deeplink debug (minimal) ===
+function i3_bncDebugEnabled() {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get('bncdebug') === '1') return true;
+    return localStorage.getItem('__i3_bncdebug') === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function i3_bncLog(stage, payload) {
+  if (!i3_bncDebugEnabled()) return;
+  try {
+    console.log('[BNC]', stage, payload ?? '');
+  } catch (_) {}
+}
+
+function i3_bncProbeEnv(stage) {
+  if (!i3_bncDebugEnabled()) return;
+  const utils = window.BINANCE_W3W_UTILS;
+  let isInBinance = null;
+  try {
+    if (typeof utils?.isInBinance === 'function') isInBinance = !!utils.isInBinance();
+  } catch (_) {}
+  const eth = window.ethereum;
+  i3_bncLog(stage, {
+    href: window.location.href,
+    ua_has_binance: /Binance/i.test(navigator.userAgent),
+    utils_present: !!utils,
+    utils_isInBinance: isInBinance,
+    injected: {
+      binancew3w: !!window.binancew3w?.ethereum,
+      ethereum: !!eth,
+      ethereum_isBinance: !!eth?.isBinance,
+      ethereum_isMetaMask: !!eth?.isMetaMask,
+      providers_len: Array.isArray(eth?.providers) ? eth.providers.length : null,
+    },
+    visibility: document.visibilityState,
+  });
+}
+
 // === 工具函数 ===
 // 等待 provider 返回非空账户（初次授权常见需要等几百毫秒）
-async function waitForAccounts(provider, { totalMs = 15000, stepMs = 300 } = {}) {
+async function waitForAccounts(provider, { totalMs = 15000, stepMs = 300, reqTimeoutMs = 1500 } = {}) {
   const deadline = Date.now() + totalMs;
+
   while (Date.now() < deadline) {
     try {
-      const accts = await provider.request({ method: 'eth_accounts' });
+      // ✅ 每次 eth_accounts 请求加超时，防止在假 provider 环境永远卡住
+      const accts = await Promise.race([
+        provider.request({ method: 'eth_accounts' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('eth_accounts timeout')), reqTimeoutMs))
+      ]);
+
       if (Array.isArray(accts) && accts[0]) return accts[0];
-    } catch {}
+    } catch (e) {
+      // 吃掉 timeout/临时错误，继续轮询
+    }
+
     await new Promise(r => setTimeout(r, stepMs));
   }
+
   throw new Error('Timed out waiting for wallet accounts');
+}
+
+// ✅ 强信号函数：检测是否有真正可用的 Binance EVM provider
+// 用于区分 "真正的 Web3 Wallet dApp browser" vs "普通 Explorer/SafariView（tonbridge）"
+function hasStrongBinanceEvmProvider() {
+  try {
+    if (window.binanceChain && typeof window.binanceChain.request === 'function') return true;
+    if (window.BinanceChain && typeof window.BinanceChain.request === 'function') return true;
+    if (window.binancew3w?.ethereum && typeof window.binancew3w.ethereum.request === 'function') return true;
+    if (window.ethereum?.isBinance) return true;
+    if (Array.isArray(window.ethereum?.providers) && window.ethereum.providers.some(p => p?.isBinance)) return true;
+  } catch (_) {}
+  return false;
 }
 
 // 检测是否为移动设备
@@ -105,6 +170,177 @@ function isRealMobileDevice() {
   
   // 真机特征：移动 UA + 触摸支持 + 小屏幕
   return isMobileUA && isTouchDevice && isSmallScreen;
+}
+
+// === Binance deeplink flags (do NOT affect other wallets) ===
+// ✅ 停用旧的 i3ac 自动重连标记
+function i3_withBinanceFlags(rawUrl, { autoConnect = false } = {}) {
+  try {
+    const u = new URL(rawUrl, window.location.origin);
+
+    // 你如果还想保留 bnc=1 作为"来源标记"可以留着；
+    // 但不要再设置 i3ac（自动重连触发器）
+    if (!u.searchParams.has('bnc') && !u.searchParams.has('binance')) {
+      u.searchParams.set('bnc', '1');
+    }
+
+    // 不再写入 i3ac（无论 autoConnect 传什么都忽略）
+    u.searchParams.delete('i3ac');
+
+    return u.toString();
+  } catch (_) {
+    const sep = rawUrl.includes('?') ? '&' : '?';
+    // 不再拼接 i3ac
+    return rawUrl + sep + 'bnc=1';
+  }
+}
+
+function i3_consumeUrlParam(paramName) {
+  try {
+    const u = new URL(window.location.href);
+    if (!u.searchParams.has(paramName)) return;
+    u.searchParams.delete(paramName);
+    history.replaceState(null, '', u.toString());
+  } catch (_) {}
+}
+
+function i3_setUrlParam(paramName, value) {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.set(paramName, String(value));
+    history.replaceState(null, '', u.toString());
+  } catch (_) {}
+}
+
+// 打开 Binance Web3 Wallet dApp browser 的 deeplink 辅助函数（debug: show both links）
+function openBinanceDappBrowser(url, chainIdHex) {
+  url = i3_withBinanceFlags(url, { autoConnect: false });
+  const utils = window.BINANCE_W3W_UTILS;
+  const getLink = utils?.getDeeplink || utils?.getDeepLink;
+  if (typeof getLink !== "function") {
+    i3_bncLog('deeplink.no_utils', { utils_present: !!utils, has_getLink: typeof getLink });
+    return false;
+  }
+  let chainIdNum;
+  try { chainIdNum = chainIdHex ? parseInt(chainIdHex, 16) : undefined; } catch (_) { chainIdNum = undefined; }
+  const { http, bnc } = getLink(url, chainIdNum) || {};
+  i3_bncProbeEnv('before_deeplink');
+  i3_bncLog('deeplink.links', { bnc, http, chainIdNum, url });
+  const targetBnc = bnc || '';
+  const targetHttp = http || '';
+
+  // --- debug 模式：弹出二选一按钮，确保 iOS 仍然是"用户手势同步触发" ---
+  if (i3_bncDebugEnabled()) {
+    const id = 'i3-bnc-linkpicker';
+    if (!document.getElementById(id)) {
+      const wrap = document.createElement('div');
+      wrap.id = id;
+      wrap.style.position = 'fixed';
+      wrap.style.left = '12px';
+      wrap.style.right = '12px';
+      wrap.style.bottom = '80px';
+      wrap.style.zIndex = '100000';
+      wrap.style.background = 'rgba(0,0,0,0.85)';
+      wrap.style.color = '#fff';
+      wrap.style.fontFamily = 'monospace';
+      wrap.style.fontSize = '12px';
+      wrap.style.padding = '10px';
+      wrap.style.borderRadius = '10px';
+      wrap.innerHTML = `
+        <div style="margin-bottom:8px;">[BNC] Pick a deeplink (iOS must be user-gesture)</div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <button id="i3-bnc-open-bnc" style="flex:1; padding:10px;">Open BNC</button>
+          <button id="i3-bnc-open-http" style="flex:1; padding:10px;">Open HTTP</button>
+          <button id="i3-bnc-close" style="padding:10px;">X</button>
+        </div>
+        <div style="word-break:break-all; opacity:0.9;">bnc: ${targetBnc || '(empty)'}</div>
+        <div style="word-break:break-all; opacity:0.9; margin-top:6px;">http: ${targetHttp || '(empty)'}</div>
+      `;
+      document.body.appendChild(wrap);
+      const close = () => { try { wrap.remove(); } catch (_) {} };
+      wrap.querySelector('#i3-bnc-close')?.addEventListener('click', () => {
+        i3_bncLog('picker.close', {});
+        close();
+      });
+      wrap.querySelector('#i3-bnc-open-bnc')?.addEventListener('click', () => {
+        if (!targetBnc) return i3_bncLog('picker.bnc_empty', {});
+        i3_bncLog('navigate.bnc', { target: targetBnc });
+        close();
+        window.location.href = targetBnc;
+      });
+      wrap.querySelector('#i3-bnc-open-http')?.addEventListener('click', () => {
+        if (!targetHttp) return i3_bncLog('picker.http_empty', {});
+        i3_bncLog('navigate.http', { target: targetHttp });
+        close();
+        window.location.href = targetHttp;
+      });
+    }
+    return true;
+  }
+
+  // --- 非 debug：保持你当前策略（移动端优先 bnc） ---
+  const target = bnc || http;
+  if (!target) return false;
+  window.location.href = target;
+  return true;
+}
+
+// 是否处在 Binance App 的 dApp browser / Binance 环境
+// ✅ 只相信真实注入/UA，不再吃 i3ac/bnc/SessionStorage 标记
+function isInBinanceEnv() {
+  try {
+    const ua = (navigator.userAgent || '').toLowerCase();
+
+    // 真实注入（最可靠）
+    const hasBinanceChain = typeof window.BinanceChain !== 'undefined';
+    const hasBinanceEvm = !!(window.binance && window.binance.ethereum);
+
+    // UA 仅作辅助（不要再用 URL/sessionStorage 作为"在 binance 环境"的依据）
+    const uaLooksBinance =
+      ua.includes('binance') ||
+      ua.includes('binancewebview') ||
+      ua.includes('bnc');
+
+    return hasBinanceChain || hasBinanceEvm || (uaLooksBinance && (hasBinanceChain || hasBinanceEvm));
+  } catch (e) {
+    return false;
+  }
+}
+
+// 等待 Binance provider 注入（in-app browser 注入有时是异步的）
+async function waitForBinanceProvider({ totalMs = 3000, stepMs = 150 } = {}) {
+  const deadline = Date.now() + totalMs;
+  while (Date.now() < deadline) {
+    // 首先尝试 getBinanceProvider
+    let p = getBinanceProvider();
+    if (p && typeof p.request === 'function') {
+      console.log('[waitForBinanceProvider] Found provider via getBinanceProvider');
+      return p;
+    }
+    
+    // ✅ 补丁3: 在 Binance 环境里，直接接受 window.ethereum（即使带 isMetaMask 等兼容标记）
+    if (window.ethereum && typeof window.ethereum.request === 'function') {
+      if (isInBinanceEnv()) {
+        console.log('[waitForBinanceProvider] In Binance env, using window.ethereum directly');
+        return window.ethereum;
+      }
+      
+      // 原有保守逻辑：移动端且没有其他钱包标记时，可能就是币安
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isOtherWallet = window.ethereum.isMetaMask || 
+                            window.ethereum.isCoinbaseWallet || 
+                            window.ethereum.isTrust ||
+                            window.ethereum.isPhantom;
+      
+      if (isMobile && !isOtherWallet) {
+        console.log('[waitForBinanceProvider] Found window.ethereum on mobile (assuming Binance)');
+        return window.ethereum;
+      }
+    }
+    
+    await new Promise(r => setTimeout(r, stepMs));
+  }
+  return null;
 }
 
 function getBinanceProvider() {
@@ -142,18 +378,20 @@ function getBinanceProvider() {
   }
 
   // 6. 🔑 Fallback：如果没有明确的 Binance 标记，检查通用 window.ethereum
-  // 但要确保它不是 MetaMask 或其他钱包（避免误触发其他钱包的 deeplink）
+  // 关键修复：在 Binance in-app 环境里，即使它带 isMetaMask 等兼容标记，也允许使用
   if (window.ethereum && typeof window.ethereum.request === 'function') {
-    // ⚠️ 如果是 MetaMask/Coinbase/Trust 等其他钱包，不要用它，否则会触发它们的 App 跳转
-    if (window.ethereum.isMetaMask || 
-        window.ethereum.isCoinbaseWallet || 
+    if (isInBinanceEnv()) {
+      console.log('[Binance] In Binance environment; using window.ethereum as provider fallback');
+      return window.ethereum;
+    }
+    // 非 Binance 环境：避免误把 MetaMask/Coinbase/Trust 等当成 Binance
+    if (window.ethereum.isMetaMask ||
+        window.ethereum.isCoinbaseWallet ||
         window.ethereum.isTrust ||
         window.ethereum.isTokenPocket) {
       console.warn('[Binance] window.ethereum is from another wallet (MetaMask/Coinbase/etc), NOT using it for Binance');
-      return null;  // 不用其他钱包的 provider
+      return null;
     }
-    
-    // 只有当 ethereum 不是其他钱包时，才作为 fallback
     console.log('[Binance] Fallback to generic window.ethereum provider (not marked as other wallets)');
     return window.ethereum;
   }
@@ -267,7 +505,7 @@ async function connectMetaMaskWallet() {
       
       // 如果是用户主动拒绝，不要跳转 deep link
       if (e.code === 4001 || e.message?.includes('User rejected') || e.message?.includes('user rejected')) {
-        showNotification('Connection cancelled by user', 'error');
+        showNotification('Connection cancelled by user(binance wallet is not available in US region.))error');
         return;
       }
       
@@ -347,6 +585,7 @@ async function connectMetaMaskWallet() {
 
 // 1.5) Binance Wallet —— 桌面走扩展，手机走 WalletConnect/AppKit
 async function connectBinanceWallet() {
+  i3_bncProbeEnv('click_connectBinanceWallet');
   console.log('[Connect][Binance] start');
   
   // 🔑 关键：Binance Wallet 必须使用 BNB (EVM) 网络
@@ -356,25 +595,64 @@ async function connectBinanceWallet() {
       setPreferredNetwork('bnb');
       preferred = getPreferredNetwork();
   }
-
   // 如果用户选择了非 BNB 的其他 EVM 网络，强制提示切换到 BNB
   if (preferred.key !== 'bnb' && preferred.kind === 'evm') {
     console.warn('[Connect][Binance] User selected', preferred.key, 'but Binance Wallet works best with BNB Chain');
     showNotification('Binance Wallet works best with BNB Chain', 'info');
   }
-
   if (!preferred || preferred.kind !== 'evm') {
     showNotification('Invalid network: Please choose an EVM network first.', 'error');
     try { openNetworkPickerModal?.(); } catch (_) {}
     return;
   }
 
+  // ---- NEW: Mobile-first Binance via WalletConnect/AppKit when no injected provider ----
+  const isMobile = isMobileDevice();
+  const hasStrongInjected = hasStrongBinanceEvmProvider(); // 你已有的函数
+
+  // 移动端 + 没有 Binance 注入 provider（外部浏览器 deep link 进来通常就是这个状态）
+  // => 直接走 AppKit/WalletConnect（这才是 PancakeSwap 那种"跳 app 确认"的正确模型）
+  if (isMobile && !hasStrongInjected) {
+    console.log('[Binance] Mobile without injected provider -> WalletConnect/AppKit');
+
+    if (!window.walletManager || typeof window.walletManager.connectWalletConnect !== 'function') {
+      throw new Error('WalletConnect/AppKit not available (walletManager.connectWalletConnect missing).');
+    }
+
+    // 关闭钱包选择弹窗
+    try { closeWalletModal?.(); } catch {}
+
+    // 走你现有的 AppKit/WC 连接
+    const result = await window.walletManager.connectWalletConnect();
+
+    // 连接成功后：用 Binance 名义显示（UI 图标/文案按 binance 走）
+    try {
+      window.walletManager.walletType = 'binance';
+    } catch {}
+
+    // 如用户选了网络偏好（BNB/opBNB/ETH/Base 等 EVM），尝试切链
+    try {
+      const provider = window.walletManager.ethereum;
+      await enforcePreferredEvmChain(provider);
+    } catch (e) {
+      console.warn('[Binance] enforcePreferredEvmChain failed (non-fatal):', e);
+    }
+
+    // UI 刷新（你已有 updateWalletUI）
+    try {
+      updateWalletUI(window.walletManager.address, window.walletManager.credits);
+    } catch {}
+
+    showNotification('Binance Wallet connected via WalletConnect!', 'success');
+    return result;
+  }
+  
   const isMobileEnv = isMobileDevice() || isRealMobileDevice();
   
   // 🔑 检测 Binance Wallet 是否已注入 provider（in-app browser 场景）
-  const binanceProvider = getBinanceProvider();
-  const hasInjectedProvider = binanceProvider && typeof binanceProvider.request === 'function';
-
+  let binanceProvider = getBinanceProvider();
+  let hasInjectedProvider = binanceProvider && typeof binanceProvider.request === 'function';
+  
   // 🔍 详细的调试信息输出
   console.log('🔍 [Binance Debug] Environment detection:', {
     ua: navigator.userAgent.substring(0, 100),
@@ -406,29 +684,183 @@ async function connectBinanceWallet() {
     providerFound: !!binanceProvider
   });
 
-  // === 🔑 手机端如果没有 provider，停在这里（不 fallback 到 WalletConnect）===
-  if (isMobileEnv && !hasInjectedProvider) {
-    console.log('[Connect][Binance] Mobile & no injected provider → stop here (no WC fallback)');
-    // 不跳转到 WalletConnect，直接停止
-    showNotification('Please open this page in Binance Wallet App browser', 'error');
-    return;
+  // ✅ 新增：强信号判断 —— 区分真正的 Web3 Wallet dApp browser vs tonbridge/SafariView
+  const strongBinanceEvm = hasStrongBinanceEvmProvider();
+  console.log('🔍 [Binance Debug] strongBinanceEvm:', strongBinanceEvm);
+
+  // ✅ 如果"看似有 provider"，但没有任何 Binance EVM 强信号：
+  // 大概率是在 Binance App 的普通 Explorer/SafariView（tonbridge 那种），不要走直连，直接 deeplink 到 Web3 Wallet dApp browser
+  if (isMobileEnv && hasInjectedProvider && !strongBinanceEvm) {
+    console.warn('[Connect][Binance] Provider exists but NO strong Binance EVM markers. Treat as NO provider and deeplink to Web3 Wallet.');
+    hasInjectedProvider = false;
+    binanceProvider = null;
   }
 
-  // === 桌面端或 Binance Wallet App 内置浏览器：直连逻辑 ===
-  try {
-    const provider = getBinanceProvider();
-    if (!provider || typeof provider.request !== 'function') {
-      throw new Error('Binance Web3 Wallet not found');
+  // === 🔑 手机端处理逻辑 ===
+  if (isMobileEnv) {
+    const inBinance = isInBinanceEnv();
+    
+    console.log('[Connect][Binance] Mobile check - inBinance:', inBinance, 'hasInjectedProvider:', hasInjectedProvider, 'strongBinanceEvm:', strongBinanceEvm);
+    
+    // 🔑 关键修复：只要有 provider 就尝试直接连接
+    // 不再严格依赖 isInBinanceEnv()，因为币安 in-app browser 可能检测不到
+    if (hasInjectedProvider) {
+      console.log('[Connect][Binance] Mobile with provider, attempting direct connect (inBinance=' + inBinance + ')...');
+      
+      try {
+        const provider = binanceProvider;
+        
+        // 🔑 直接请求账户，不做链切换（避免触发页面刷新）
+        console.log('[Connect][Binance] In-app: Checking accounts (skipping chain switch)...');
+        
+        // ✅ 补丁2: 先查是否已授权，避免不必要的刷新（带超时，防止假 provider 卡死）
+        let accts = [];
+        try {
+          accts = await Promise.race([
+            provider.request({ method: 'eth_accounts' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('eth_accounts timeout')), 1500))
+          ]);
+          console.log('[Connect][Binance] In-app: eth_accounts result:', accts?.length || 0, 'accounts');
+        } catch (ethAccErr) {
+          console.warn('[Connect][Binance] In-app: eth_accounts failed/timeout:', ethAccErr?.message);
+          // ✅ 不再 deeplink，直接报错
+          if (ethAccErr?.message?.includes('timeout')) {
+            throw new Error('Binance provider not responding. If you are in Binance DApp browser, try reloading. Otherwise use WalletConnect.');
+          }
+        }
+        
+        if (!Array.isArray(accts) || accts.length === 0) {
+          // ✅ 不再写入 pending 标记，直接请求授权
+          console.log('[Connect][Binance] In-app: No accounts yet, requesting authorization...');
+          
+          try {
+            await Promise.race([
+              provider.request({ method: 'eth_requestAccounts' }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('eth_requestAccounts timeout')), 6000))
+            ]);
+          } catch (reqErr) {
+            // 用户拒绝（code 4001）才停止
+            if (reqErr?.code === 4001) {
+              showNotification('Connection cancelled by user', 'info');
+              return;
+            }
+            // ✅ 超时或其他错误：不再 deeplink，直接报错
+            if (reqErr?.message?.includes('timeout')) {
+              throw new Error('Binance provider not available. If you are in Binance DApp browser, try reloading. Otherwise use WalletConnect.');
+            }
+            console.warn('[Connect][Binance] In-app: eth_requestAccounts warning (may be normal):', reqErr?.message);
+            // 不直接 return：有些情况下会刷新或延迟注入，后面 waitForAccounts 仍可能拿到
+          }
+        } else {
+          console.log('[Connect][Binance] In-app: Already authorized, skipping eth_requestAccounts');
+        }
+        
+        // 等待账户地址返回
+        const address = await waitForAccounts(provider);
+        if (!address) {
+          throw new Error('Failed to get account address from Binance Wallet');
+        }
+        
+        // 连接成功（不再需要清理 pending 标记，因为已禁用）
+        
+        console.log('[Connect][Binance] In-app: Account retrieved:', address.slice(0, 6) + '...' + address.slice(-4));
+        
+        // 写入状态 & 刷 UI & 广播事件
+        if (window.walletManager) {
+          window.walletManager.ethereum = provider;
+          window.walletManager.walletType = 'binance';
+          window.walletManager.walletAddress = address;
+          window.walletManager.isConnected = true;
+          
+          try {
+            await window.walletManager.fetchRemoteWalletDataIfAvailable?.();
+          } catch (e) {
+            console.warn('[Connect][Binance] Failed to fetch remote data:', e);
+          }
+          
+          window.walletManager.loadWalletSpecificData?.();
+          window.walletManager.saveToStorage?.();
+          window.walletManager.setupEventListeners?.();
+          window.walletManager.updateUI?.();
+          
+          window.dispatchEvent(new CustomEvent('walletConnected', {
+            detail: {
+              address,
+              credits: window.walletManager.credits || 0,
+              isNewUser: !window.walletManager.getWalletData?.(address)
+            }
+          }));
+          
+          // 更新网络徽章（获取当前链 ID，不切换）
+          try {
+            const chainId = await provider.request({ method: 'eth_chainId' });
+            const networkInfo = mapChainIdToDisplay(chainId, 'binance');
+            if (networkInfo) {
+              renderNetworkBadge(networkInfo);
+            }
+          } catch (e) {
+            console.warn('[Connect][Binance] Failed to update network badge:', e);
+          }
+        }
+        
+        // 关闭登录弹窗
+        const modal = document.getElementById('walletModal');
+        if (modal) {
+          modal.classList.remove('show');
+          modal.style.display = 'none';
+        }
+        
+        showNotification('Binance Wallet connected successfully!', 'success');
+        console.log('[Connect][Binance] ✅ Mobile Success ->', address);
+        return;
+        
+      } catch (e) {
+        console.error('[Connect][Binance] ❌ Mobile Error:', e);
+        const errorMessage = e?.message || '';
+        const errorCode = e?.code;
+        
+        if (errorCode === 4001 || errorMessage.toLowerCase().includes('user rejected')) {
+          showNotification('Connection cancelled', 'info');
+          return;
+        }
+        
+        showNotification(errorMessage || 'Failed to connect Binance Wallet', 'error');
+        return;
+      }
     }
+    
+    // ✅ 这一段按新逻辑其实永远不会走到（因为上面已经 early-return 走 WalletConnect 了）
+    // 但留个保险：不要再 deep link，直接报错提示
+    else {
+      throw new Error('Binance injected provider not found on mobile. Please use WalletConnect flow.');
+    }
+  }
 
-    console.log('[Connect][Binance] Provider found, attempting connection...');
-
-    // 把 provider 存到 walletManager，后续统一用 this.ethereum
+  // === 桌面端：直连逻辑（使用扩展） ===
+  try {
+    let provider = binanceProvider || getBinanceProvider();
+    
+    // 如果 getBinanceProvider 返回 null，尝试直接使用 window.ethereum
+    if (!provider && window.ethereum && typeof window.ethereum.request === 'function') {
+      console.log('[Connect][Binance] getBinanceProvider returned null, trying window.ethereum directly');
+      provider = window.ethereum;
+    }
+    
+    if (!provider || typeof provider.request !== 'function') {
+      // 桌面端没有 Binance 扩展，显示安装指引
+      showNotification('Please install Binance Web3 Wallet Chrome extension', 'error');
+      window.open('https://chrome.google.com/webstore/detail/binance-wallet/fhbohimaelbohpjbbldcngcnapndodjp', '_blank');
+      return;
+    }
+    
+    console.log('[Connect][Binance] Desktop: Provider found, attempting connection...');
+    
+    // 把 provider 存到 walletManager
     if (window.walletManager) {
       window.walletManager.ethereum = provider;
     }
-
-    // 🔑 按当前选择的 EVM 网络切链（BNB / opBNB / Base 等）
+    
+    // 🔑 桌面端可以尝试切链（扩展支持较好）
     try {
       await enforcePreferredEvmChain(provider);
       console.log('[Connect][Binance] Network switched to', preferred.name);
@@ -436,45 +868,35 @@ async function connectBinanceWallet() {
       console.warn('[Connect][Binance] Network switch failed:', switchErr);
       // 如果切链失败，不要阻止连接，继续尝试
     }
-
-    // 🔑 请求账户授权 + 等到账户
+    
+    // 请求账户授权
     console.log('[Connect][Binance] Requesting accounts...');
     try {
       await provider.request({ method: 'eth_requestAccounts' });
       console.log('[Connect][Binance] Account request accepted');
     } catch (requestErr) {
-      const reqErrorMsg = requestErr?.message || '';
-      const reqErrorCode = requestErr?.code;
-      console.error('[Connect][Binance] Account request error:', { code: reqErrorCode, message: reqErrorMsg });
-      
-      if (reqErrorCode === 4001 ||
-          reqErrorCode === 'ACTION_REJECTED' ||
-          reqErrorMsg.toLowerCase().includes('user rejected') ||
-          reqErrorMsg.toLowerCase().includes('user denied') ||
-          reqErrorMsg.toLowerCase().includes('rejected')) {
-        showNotification('Connection cancelled', 'info');
+      if (requestErr?.code === 4001) {
+        showNotification('Connection cancelled by user', 'info');
         return;
       }
-      throw requestErr;
+      console.warn('[Connect][Binance] eth_requestAccounts warning:', requestErr?.message);
     }
-
+    
     // 等待账户地址返回
     console.log('[Connect][Binance] Waiting for accounts...');
     const address = await waitForAccounts(provider);
     if (!address) {
-      console.error('[Connect][Binance] No address returned');
       throw new Error('Failed to get account address from Binance Wallet');
     }
     
     console.log('[Connect][Binance] Account retrieved:', address.slice(0, 6) + '...' + address.slice(-4));
-
-    // 🔑 写入状态 & 刷 UI & 广播事件
+    
+    // 写入状态 & 刷 UI & 广播事件
     if (window.walletManager) {
-      window.walletManager.walletType    = 'binance';
+      window.walletManager.walletType = 'binance';
       window.walletManager.walletAddress = address;
-      window.walletManager.isConnected   = true;
+      window.walletManager.isConnected = true;
       
-      // 🔑 从 Firestore 加载数据（如果有的话）
       try {
         await window.walletManager.fetchRemoteWalletDataIfAvailable?.();
       } catch (e) {
@@ -486,7 +908,6 @@ async function connectBinanceWallet() {
       window.walletManager.setupEventListeners?.();
       window.walletManager.updateUI?.();
       
-      // 🔑 广播钱包连接事件
       window.dispatchEvent(new CustomEvent('walletConnected', {
         detail: {
           address,
@@ -495,7 +916,6 @@ async function connectBinanceWallet() {
         }
       }));
       
-      // 🔑 更新网络徽章显示
       try {
         const chainId = await provider.request({ method: 'eth_chainId' });
         const networkInfo = mapChainIdToDisplay(chainId, 'binance');
@@ -506,41 +926,72 @@ async function connectBinanceWallet() {
         console.warn('[Connect][Binance] Failed to update network badge:', e);
       }
     }
-
-    // 🔑 关闭登录弹窗
+    
+    // 关闭登录弹窗
     const modal = document.getElementById('walletModal');
     if (modal) {
       modal.classList.remove('show');
       modal.style.display = 'none';
     }
-
+    
     showNotification('Binance Wallet connected successfully!', 'success');
-    console.log('[Connect][Binance] ✅ Success ->', address);
+    console.log('[Connect][Binance] ✅ Desktop Success ->', address);
+    
   } catch (e) {
-    console.error('[Connect][Binance] ❌ Error:', e);
+    console.error('[Connect][Binance] ❌ Desktop Error:', e);
     const errorMessage = e?.message || '';
     const errorCode = e?.code;
     
-    // 用户取消连接
     if (errorCode === 4001 ||
         errorCode === 'ACTION_REJECTED' ||
         errorMessage.toLowerCase().includes('user rejected') ||
-        errorMessage.toLowerCase().includes('user denied') ||
-        errorMessage.toLowerCase().includes('rejected')) {
+        errorMessage.toLowerCase().includes('user denied')) {
       showNotification('Connection cancelled', 'info');
       return;
     }
     
-    // 任何错误都只显示提示，不再 fallback 到 WalletConnect
     showNotification(errorMessage || 'Failed to connect Binance Wallet', 'error');
-    console.error('[Connect][Binance] Full error details:', {
-      message: errorMessage,
-      code: errorCode,
-      stack: e?.stack
-    });
   }
 }
 
+
+// ✅ 禁用旧的 Binance 自动重连逻辑 - 只清理旧标记，不再触发自动连接
+document.addEventListener('DOMContentLoaded', async () => {
+  // 延迟执行，确保所有脚本都已加载
+  await new Promise(r => setTimeout(r, 500));
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // 旧逻辑遗留：i3ac / bnc / binance / sessionStorage 标记
+    const hasLegacyFlags =
+      urlParams.has('i3ac') ||
+      urlParams.has('bnc') ||
+      urlParams.has('binance') ||
+      sessionStorage.getItem('__i3_binance_autoconnect') === '1';
+
+    if (hasLegacyFlags) {
+      console.log('[Binance] Cleaning up legacy flags (no auto-connect)');
+      
+      // 只清理，不触发 connect
+      urlParams.delete('i3ac');
+      // bnc/binance 也清掉更干净：
+      urlParams.delete('bnc');
+      urlParams.delete('binance');
+      sessionStorage.removeItem('__i3_binance_autoconnect');
+
+      // 替换 URL（避免刷新后又带着标记）
+      const clean =
+        window.location.origin +
+        window.location.pathname +
+        (urlParams.toString() ? `?${urlParams.toString()}` : '') +
+        (window.location.hash || '');
+      window.history.replaceState({}, '', clean);
+    }
+  } catch (e) {
+    console.warn('[Binance] legacy flag cleanup failed:', e);
+  }
+});
 
 /**
  * 连接 Coinbase Wallet
@@ -658,23 +1109,12 @@ async function connectCoinbaseWallet() {
 }
 
 
-// 2) WalletConnect —— 先切链 → 请求账户 → 等到账户 → 刷UI → 关弹窗
-// 🔒 WalletConnect 连接状态锁（全局变量，防止重复点击）
-window.isWalletConnectConnecting = false;
-
-// 2) WalletConnect —— 先关自家弹窗 → 发起连接(二维码) → 切链 → 要账户 → 等到账户 → 刷UI → 兜底再关
+// 2) WalletConnect —— 简化版本
 async function connectWalletConnect() {
-  // 🔒 如果正在连接中，直接返回
-  if (window.isWalletConnectConnecting) {
-    console.warn('[Connect][WalletConnect] Already connecting, please wait...');
-    showNotification('WalletConnect is connecting, please wait...', 'info');
-    return;
-  }
-
   let preferred = getPreferredNetwork();
   if (!preferred) {
-      setPreferredNetwork('ethereum'); // Default to Ethereum
-      preferred = getPreferredNetwork();
+    setPreferredNetwork('ethereum');
+    preferred = getPreferredNetwork();
   }
 
   if (!preferred || preferred.kind !== 'evm') {
@@ -683,100 +1123,49 @@ async function connectWalletConnect() {
     return;
   }
   
-  // 🔒 设置连接状态 & 重置 wallet-manager 的锁
-  window.isWalletConnectConnecting = true;
-  if (window.walletManager) {
-    window.walletManager.isConnecting = false; // 重置旧锁
-  }
-  console.log('[Connect][WalletConnect] start');
+  console.log('[Connect][WalletConnect] Starting...');
 
-  // 小工具：安全关闭你自己的登录弹窗（白色那个）
-  const safeCloseLoginModal = () => {
-    try {
-      if (typeof closeWalletModal === 'function') {
-        closeWalletModal();
-      } else {
-        const m = document.getElementById('walletModal');
-        if (m) { m.classList.remove('show'); m.style.display = 'none'; }
-      }
-      const dropdown = document.getElementById('accountDropdown');
-      if (dropdown) dropdown.classList.remove('show');
-    } catch {}
-  };
+  // 关闭钱包选择弹窗
+  try {
+    closeWalletModal?.();
+  } catch {}
 
   try {
-    if (!window.walletManager) throw new Error('Wallet manager not available');
+    if (!window.walletManager) {
+      throw new Error('Wallet manager not available');
+    }
 
-    // ✅ 先关你自己的白色登录弹窗，避免与 WalletConnect 的二维码弹窗重叠
-    safeCloseLoginModal();
-
-    // ① 发起 WalletConnect 连接（会弹出二维码）
+    // 调用 walletManager 的连接方法
     const result = await window.walletManager.connectWallet('walletconnect');
+    
     if (!result?.success) {
-      const msg = String(result?.error || 'WalletConnect failed');
-      if (/connect\(\)\s*before\s*request\(\)/i.test(msg)) {
-        console.warn('[WC] Ignored handshake noise:', msg);
-      } else {
-        throw new Error(msg);
+      throw new Error(result?.error || 'WalletConnect connection failed');
+    }
+
+    // 连接成功后切换网络
+    const provider = window.walletManager.ethereum || window.ethereum;
+    if (provider && typeof enforcePreferredEvmChain === 'function') {
+      try {
+        await enforcePreferredEvmChain(provider);
+      } catch (switchErr) {
+        console.warn('[WalletConnect] Network switch warning:', switchErr?.message);
       }
     }
 
-    // ② 拿到 provider
-    const provider = window.walletManager?.ethereum || window.ethereum;
-    if (!provider) throw new Error('WalletConnect provider not found');
-
-    // ③ 先切到你偏好的链（必要时添加链）
-    try { await enforcePreferredEvmChain(provider); }
-    catch (switchErr) {
-      console.error('[WC] enforcePreferredEvmChain error:', switchErr);
-      showNotification('Failed to switch network: ' + (switchErr?.message || switchErr), 'error');
-    }
-
-    // ④ 请求账户授权 + 等到账户（兜底保证有地址）
-    try { await provider.request({ method: 'eth_requestAccounts' }); } catch {}
-    let address = null;
-    try { address = await waitForAccounts(provider); } catch {}
-
-    // ⑤ 若 walletManager 尚未写入地址，则写入并刷新 UI & 广播事件
-    if (address && window.walletManager && !window.walletManager.walletAddress) {
-      window.walletManager.walletType = 'walletconnect';
-      window.walletManager.walletAddress = address;
-      window.walletManager.isConnected = true;
-      window.walletManager.saveToStorage?.();
-      window.walletManager.updateUI?.();
-      window.dispatchEvent(new CustomEvent('walletConnected', {
-        detail: { address, credits: window.walletManager.credits || 0, isNewUser: !window.walletManager.getWalletData?.(address) }
-      }));
-    } else {
-      // 已有地址也刷新一次 UI
-      try { window.walletManager?.updateUI?.(); } catch {}
-    }
-
-    // ⑥ 成功后兜底再关一次你的弹窗/下拉（幂等）
-    safeCloseLoginModal();
     showNotification('WalletConnect connected successfully!', 'success');
+    console.log('[Connect][WalletConnect] Success:', result.address);
 
   } catch (error) {
-    console.error('[Connect][WalletConnect] error:', error);
-    const msg = String(error?.message || error || 'Failed to connect WalletConnect');
+    console.error('[Connect][WalletConnect] Error:', error);
+    const msg = error?.message || String(error);
     
-    // 🔍 特殊处理：如果是"已在连接中"的错误，给出友好提示
-    if (msg.includes('Connection already in progress') || msg.includes('already in progress')) {
-      showNotification('WalletConnect is connecting, please wait for the QR code modal...', 'info');
-    } else if (msg.includes('User rejected') || msg.includes('User denied')) {
-      showNotification('Connection cancelled', 'info');
+    if (msg.includes('User rejected') || msg.includes('user rejected') || msg.includes('cancelled')) {
+      showNotification('Connection cancelled by user', 'info');
+    } else if (msg.includes('timeout')) {
+      showNotification('Connection timeout - please try again', 'error');
     } else {
-      showNotification('Failed to connect WalletConnect: ' + msg, 'error');
+      showNotification('WalletConnect failed: ' + msg, 'error');
     }
-
-    // 失败也兜底关一次，避免界面卡在半开状态
-    safeCloseLoginModal();
-  } finally {
-    // 🔒 无论成功或失败，都解除锁定状态（延迟 2 秒，给连接足够的时间）
-    setTimeout(() => {
-      window.isWalletConnectConnecting = false;
-      console.log('[Connect][WalletConnect] Lock released');
-    }, 2000);
   }
 }
 

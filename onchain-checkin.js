@@ -42,13 +42,28 @@ function safeNotify(msg, type = 'info', opts = {}) {
 }
 
 /**
+ * 检查 EVM 地址是否有效
+ */
+function isValidEvmAddress(addr) {
+    return typeof addr === 'string' && /^0x[a-fA-F0-9]{40}$/.test(addr);
+}
+
+/**
  * 检查是否选择了Solana链
  */
 function isSolanaSelectedInUI() {
     const sel = document.getElementById('chainSelector');
     if (!sel) return false;
     const v = (sel.value || '').toString().trim().toUpperCase();
-    return v === 'SOLANA' || v === 'SOLANA DEVNET' || v === 'SOL';
+    return (
+        v === 'SOL' ||
+        v === 'SOLANA' ||
+        v === 'SOLANA_DEVNET' ||
+        v === 'SOLANA DEVNET' ||
+        v === 'SOLANA_MAINNET' ||
+        v === 'SOLANA MAINNET' ||
+        v === 'MAINNET_SOLANA'
+    );
 }
 
 /**
@@ -235,82 +250,91 @@ async function checkBNBBalance(provider, address, minBalance = '0.00004') {
 /**
  * 显示余额不足Modal
  */
-function showInsufficientBalanceModal(currentBalance, requiredBalance) {
+function showInsufficientBalanceModal(currentBalance, requiredBalance, symbol, chainKey) {
+    const chain = String(chainKey || '').toUpperCase();
+    const sym = String(symbol || 'ETH');
+    let swapName = 'Swap to native gas token';
+    let swapDesc = `Swap tokens to ${sym}`;
+    let bridgeName = 'Bridge assets';
+    let bridgeDesc = 'Bridge from another network';
+    let depositName = 'Top up';
+    let depositDesc = `Add ${sym} to your wallet`;
+    
+    if (chain === 'BSC' || chain === 'OPBNB') {
+        swapName = 'Swap tokens to BNB';
+        swapDesc = 'Use PancakeSwap to exchange tokens';
+        bridgeName = 'Bridge from other chains';
+        bridgeDesc = 'Transfer assets from Ethereum, etc.';
+        depositName = 'Deposit from exchange';
+        depositDesc = 'Withdraw BNB from your exchange account';
+    } else if (chain === 'ETH') {
+        swapName = 'Swap tokens to ETH';
+        swapDesc = 'Use Uniswap to exchange tokens';
+        bridgeName = 'Bridge from L2 / other chains';
+        bridgeDesc = 'Move ETH to mainnet if needed';
+        depositName = 'Buy / Deposit ETH';
+        depositDesc = 'Top up ETH to pay gas';
+    } else if (chain === 'BASE') {
+        swapName = 'Swap tokens to ETH (Base)';
+        swapDesc = 'Use Uniswap on Base';
+        bridgeName = 'Bridge to Base';
+        bridgeDesc = 'Use Base Bridge to move ETH to Base';
+        depositName = 'Top up ETH on Base';
+        depositDesc = 'Ensure your wallet has ETH on Base';
+    }
+    
     let modal = document.getElementById('insufficientBalanceModal');
     
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'insufficientBalanceModal';
         modal.className = 'wallet-modal';
-        modal.innerHTML = `
-            <div class="wallet-modal-content" style="max-width: 520px;">
-                <button class="wallet-close-btn" onclick="closeInsufficientBalanceModal()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-                <div class="wallet-modal-header">
-                    <h2 class="wallet-modal-title">⚠️ Insufficient Balance</h2>
-                    <p class="wallet-modal-subtitle">Your wallet needs more BNB to complete this transaction</p>
-                </div>
-                <div style="margin: 24px 0; padding: 16px; background: #fef3c7; border-radius: 12px; border: 1px solid #fcd34d;">
-                    <p style="font-size: 14px; color: #92400e; margin: 0 0 8px 0;">
-                        <strong>Current Balance:</strong> ${currentBalance} BNB
-                    </p>
-                    <p style="font-size: 14px; color: #92400e; margin: 0;">
-                        <strong>Required:</strong> At least ${requiredBalance} BNB
-                    </p>
-                </div>
-                <p style="font-size: 14px; color: #6b7280; margin-bottom: 20px;">
-                    Please top up your balance using one of the following methods:
-                </p>
-                <div class="wallet-options">
-                    <div class="wallet-option available" onclick="redirectToSwap()">
-                        <span class="wallet-icon-wrap">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-                                <path d="M7 16V4M7 4L3 8M7 4l4 4"/>
-                                <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
-                            </svg>
-                        </span>
-                        <div class="wallet-info">
-                            <div class="wallet-name">Swap tokens to BNB</div>
-                            <div class="wallet-description">Use PancakeSwap to exchange tokens</div>
-                        </div>
-                    </div>
-                    <div class="wallet-option available" onclick="redirectToBridge()">
-                        <span class="wallet-icon-wrap">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
-                                <path d="M12 2v20M2 12h20"/>
-                                <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                        </span>
-                        <div class="wallet-info">
-                            <div class="wallet-name">Bridge from other chains</div>
-                            <div class="wallet-description">Transfer assets from Ethereum, etc.</div>
-                        </div>
-                    </div>
-                    <div class="wallet-option available" onclick="redirectToBinanceDeposit()">
-                        <span class="wallet-icon-wrap">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
-                                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                <path d="M12 8v8m-4-4h8"/>
-                            </svg>
-                        </span>
-                        <div class="wallet-info">
-                            <div class="wallet-name">Deposit from Binance</div>
-                            <div class="wallet-description">Withdraw BNB from your exchange account</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="wallet-footer" style="margin-top: 20px;">
-                    By Intelligence Cubed
-                </div>
-            </div>
-        `;
         document.body.appendChild(modal);
     }
-
+    
+    modal.innerHTML = `
+        <div class="wallet-modal-content" style="max-width: 520px;">
+            <button class="wallet-close-btn" onclick="closeInsufficientBalanceModal()">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M1 1L13 13M13 1L1 13" stroke="#374151" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <h3 style="margin: 0 0 8px 0;">Insufficient Gas Balance</h3>
+            <p style="margin: 0 0 10px 0; color: #6b7280;">
+                Current: <b>${currentBalance} ${sym}</b> &nbsp;|&nbsp; Estimated required: <b>${requiredBalance} ${sym}</b>
+            </p>
+            <p style="font-size: 13px; color: #374151; margin: 0 0 16px 0;">
+                Please top up your gas token to complete check-in.
+            </p>
+            <div class="wallet-options">
+                <div class="wallet-option available" onclick="redirectToSwap('${chain}')">
+                    <span class="wallet-icon-wrap"></span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">${swapName}</div>
+                        <div class="wallet-description">${swapDesc}</div>
+                    </div>
+                </div>
+                <div class="wallet-option available" onclick="redirectToBridge('${chain}')">
+                    <span class="wallet-icon-wrap"></span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">${bridgeName}</div>
+                        <div class="wallet-description">${bridgeDesc}</div>
+                    </div>
+                </div>
+                <div class="wallet-option available" onclick="redirectToBinanceDeposit('${chain}')">
+                    <span class="wallet-icon-wrap"></span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">${depositName}</div>
+                        <div class="wallet-description">${depositDesc}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="wallet-footer" style="margin-top: 20px;">
+                By Intelligence Cubed
+            </div>
+        </div>
+    `;
+    
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('show'), 10);
 }
@@ -331,15 +355,42 @@ function closeInsufficientBalanceModal() {
 /**
  * 跳转函数
  */
-function redirectToSwap() {
-    window.open('https://pancakeswap.finance/swap?chain=bsc', '_blank');
+function redirectToSwap(chainKey) {
+    const chain = String(chainKey || '').toUpperCase();
+    if (chain === 'BSC') {
+        window.open('https://pancakeswap.finance/swap?chain=bsc', '_blank');
+        return;
+    }
+    if (chain === 'OPBNB') {
+        window.open('https://pancakeswap.finance/swap?chain=opbnb', '_blank');
+        return;
+    }
+    if (chain === 'BASE') {
+        window.open('https://app.uniswap.org/swap?chain=base', '_blank');
+        return;
+    }
+    // ETH / default
+    window.open('https://app.uniswap.org/swap?chain=mainnet', '_blank');
 }
 
-function redirectToBridge() {
+function redirectToBridge(chainKey) {
+    const chain = String(chainKey || '').toUpperCase();
+    if (chain === 'BASE') {
+        window.open('https://bridge.base.org/', '_blank');
+        return;
+    }
+    // BSC / OPBNB / default
     window.open('https://www.bnbchain.org/en/bnb-chain-bridge', '_blank');
 }
 
-function redirectToBinanceDeposit() {
+function redirectToBinanceDeposit(chainKey) {
+    const chain = String(chainKey || '').toUpperCase();
+    if (chain === 'ETH' || chain === 'BASE') {
+        // 通用：让用户去钱包的 buy/onramp 或交易所入金
+        window.open('https://portfolio.metamask.io/buy', '_blank');
+        return;
+    }
+    // BSC / OPBNB：沿用你原来的 Binance 指引
     window.open('https://www.binance.com/en/support/faq/list/2', '_blank');
 }
 
@@ -415,6 +466,11 @@ async function executeEVMCheckIn() {
             return;
         }
 
+        if (!isValidEvmAddress(config.checkInAddress)) {
+            safeNotify(`${selectedChain}: check-in contract address is not set`, 'error');
+            return;
+        }
+
         console.log('Starting on-chain check-in on', config.chainName);
 
         // 检查当前链并显示切换提示
@@ -476,25 +532,39 @@ async function executeEVMCheckIn() {
         const signer = provider.getSigner();
         const userAddress = await signer.getAddress();
 
-        // 检查余额
-        setLoadingState(true, 'Checking balance...');
-        const balanceCheck = await checkBNBBalance(provider, userAddress, '0.00004');
-
-        if (!balanceCheck.sufficient) {
-            setLoadingState(false);
-            if (typeof closeOnChainCheckInModal === 'function') {
-                closeOnChainCheckInModal();
-            }
-            showInsufficientBalanceModal(balanceCheck.balance, balanceCheck.minRequired);
-            return;
-        }
-
-        // 创建合约实例
+        // 创建合约实例（先创建，便于估算 gas）
         const contract = new ethers.Contract(
             config.checkInAddress,
             window.CHECKIN_ABI,
             signer
         );
+
+        // 检查余额（用 gas 估算更通用，适配 BSC/opBNB/ETH/Base）
+        setLoadingState(true, 'Estimating gas & checking balance...');
+        const nativeSymbol = (config.nativeCurrency && config.nativeCurrency.symbol) ? config.nativeCurrency.symbol : 'ETH';
+        let requiredWei;
+        try {
+            const gasEstimate = await contract.estimateGas.checkIn({ value: 0 });
+            const gasPrice = await provider.getGasPrice();
+            requiredWei = gasEstimate.mul(gasPrice).mul(120).div(100); // 20% buffer
+        } catch (e) {
+            // fallback：不给你卡死，至少保证有一点 native 资产
+            requiredWei = ethers.utils.parseEther(selectedChain === 'ETH' ? '0.0002' : '0.00005');
+        }
+        const balanceWei = await provider.getBalance(userAddress);
+        if (balanceWei.lt(requiredWei)) {
+            setLoadingState(false);
+            if (typeof closeOnChainCheckInModal === 'function') {
+                closeOnChainCheckInModal();
+            }
+            showInsufficientBalanceModal(
+                ethers.utils.formatEther(balanceWei),
+                ethers.utils.formatEther(requiredWei),
+                nativeSymbol,
+                selectedChain
+            );
+            return;
+        }
 
         // 估算Gas
         try {
@@ -675,6 +745,16 @@ async function executeOnChainCheckIn() {
 
         // 3) Solana分流
         if (targetKind === 'solana') {
+            // 关键：根据 UI 选择同步 Solana cluster
+            const vUp = String(sel?.value || '').toUpperCase();
+            window.setCurrentChain?.('solana');
+            if (vUp.includes('MAINNET')) {
+                window.setSolanaCluster?.('mainnet');
+            } else {
+                // 默认按 devnet
+                window.setSolanaCluster?.('devnet');
+            }
+
             try {
                 window.openSolanaCheckinModal?.();
             } catch {}
@@ -745,18 +825,42 @@ async function executeOnChainCheckIn() {
         if (sel) {
             sel.addEventListener('change', (e) => {
                 const v = (e.target.value || '').toUpperCase();
-                if (v === 'SOLANA') window.setCurrentChain?.('solana');
-                else if (v === 'OPBNB') window.setCurrentChain?.('opbnb');
-                else window.setCurrentChain?.('bsc');
-                
+                // Solana: 额外同步 cluster（devnet/mainnet）
+                if (v === 'SOLANA_MAINNET' || v === 'SOLANA MAINNET') {
+                    window.setSolanaCluster?.('mainnet');
+                    window.setCurrentChain?.('solana');
+                } else if (v === 'SOLANA_DEVNET' || v === 'SOLANA DEVNET' || v === 'SOLANA') {
+                    window.setSolanaCluster?.('devnet');
+                    window.setCurrentChain?.('solana');
+                } else if (v === 'OPBNB') {
+                    window.setCurrentChain?.('opbnb');
+                } else if (v === 'ETH') {
+                    window.setCurrentChain?.('eth');
+                } else if (v === 'BASE') {
+                    window.setCurrentChain?.('base');
+                } else {
+                    window.setCurrentChain?.('bsc');
+                }
                 loadUserCheckInStatus();
             });
 
             // 初始同步
             const v0 = (sel.value || '').toUpperCase();
-            if (v0 === 'SOLANA') window.setCurrentChain?.('solana');
-            else if (v0 === 'OPBNB') window.setCurrentChain?.('opbnb');
-            else window.setCurrentChain?.('bsc');
+            if (v0 === 'SOLANA_MAINNET' || v0 === 'SOLANA MAINNET') {
+                window.setSolanaCluster?.('mainnet');
+                window.setCurrentChain?.('solana');
+            } else if (v0 === 'SOLANA_DEVNET' || v0 === 'SOLANA DEVNET' || v0 === 'SOLANA') {
+                window.setSolanaCluster?.('devnet');
+                window.setCurrentChain?.('solana');
+            } else if (v0 === 'OPBNB') {
+                window.setCurrentChain?.('opbnb');
+            } else if (v0 === 'ETH') {
+                window.setCurrentChain?.('eth');
+            } else if (v0 === 'BASE') {
+                window.setCurrentChain?.('base');
+            } else {
+                window.setCurrentChain?.('bsc');
+            }
         }
 
         // 初始加载状态

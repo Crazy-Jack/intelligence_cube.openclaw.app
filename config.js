@@ -4,7 +4,7 @@
 const config = {
     // I3 Proxy API Configuration (used by api-manager.js)
     proxy: {
-        apiKey: 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE',
+        apiKey: 'ak_6Dp0gVLIm1uGh_BKlU7MwwRqa1_chSTeAOnriUNSQFg',
         model: 'I3-Generic-Foundation-LLM',
         maxTokens: 4000,
         temperature: 0.7
