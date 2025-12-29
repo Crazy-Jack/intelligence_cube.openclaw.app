@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@binance/w3w-ethereum-provider": "^1.1.11",
+    "@binance/w3w-utils": "^1.1.8",
     "@coral-xyz/anchor": "^0.30.1",
     "@openzeppelin/contracts": "^5.4.0",
     "@solana/web3.js": "^1.98.4",
