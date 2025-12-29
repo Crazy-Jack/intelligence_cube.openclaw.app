@@ -58,6 +58,12 @@ async function waitForWallet() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Agent selector for User Chats tab
+    const agentSelector = document.getElementById('agentSelector');
+    if (agentSelector) {
+        agentSelector.addEventListener('change', handleAgentSelection);
+    }
+    
     // Upload area drag and drop - SIMPLE VERSION
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
@@ -133,7 +139,9 @@ function switchTab(tabName) {
     document.querySelectorAll('.pa-tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
     
     // Update tab content
     document.querySelectorAll('.pa-tab-content').forEach(content => {
@@ -454,7 +462,9 @@ async function createModel() {
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Failed to create model' }));
-            throw new Error(errorData.error || 'Failed to create model');
+            const errorMessage = errorData.error || errorData.details || 'Failed to create model';
+            console.error('❌ Backend error:', errorData);
+            throw new Error(errorMessage);
         }
         
         const model = await response.json();
@@ -1156,6 +1166,311 @@ function showNotification(message, type = 'info') {
 }
 
 // Expose functions to global scope
+// ========== User Chats Functionality ==========
+
+let selectedAgentForChat = null;
+let userChatHistory = [];
+
+// Load agents into dropdown when User Chats tab is opened
+async function loadAgentsForChat() {
+    const selector = document.getElementById('agentSelector');
+    if (!selector) return;
+    
+    try {
+        // Load models from the same source as the model list
+        await loadModels();
+        
+        // Clear existing options (except the placeholder)
+        selector.innerHTML = '<option value="">-- Select an agent to chat with --</option>';
+        
+        // Add each model as an option
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.name;
+            option.textContent = model.name;
+            selector.appendChild(option);
+        });
+        
+        console.log(`✅ Loaded ${models.length} agents for chat`);
+    } catch (error) {
+        console.error('Error loading agents for chat:', error);
+    }
+}
+
+// Handle agent selection
+function handleAgentSelection() {
+    const selector = document.getElementById('agentSelector');
+    const agentName = selector?.value;
+    const input = document.getElementById('userChatInput');
+    const sendBtn = document.getElementById('userChatSendBtn');
+    const infoDiv = document.getElementById('selectedAgentInfo');
+    const nameDiv = document.getElementById('selectedAgentName');
+    const purposeDiv = document.getElementById('selectedAgentPurpose');
+    const messagesDiv = document.getElementById('userChatMessages');
+    
+    if (!agentName) {
+        selectedAgentForChat = null;
+        if (input) input.disabled = true;
+        if (sendBtn) sendBtn.disabled = true;
+        if (infoDiv) infoDiv.style.display = 'none';
+        if (messagesDiv) {
+            messagesDiv.innerHTML = '<div style="text-align: center; color: #9ca3af; margin-top: 40px;"><p>Select an agent from the dropdown above to start chatting</p></div>';
+        }
+        return;
+    }
+    
+    // Find the selected model
+    const model = models.find(m => m.name === agentName);
+    if (!model) {
+        console.error('Selected agent not found:', agentName);
+        return;
+    }
+    
+    selectedAgentForChat = model;
+    
+    // Enable input and button
+    if (input) input.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+    
+    // Show agent info
+    if (infoDiv) infoDiv.style.display = 'block';
+    if (nameDiv) nameDiv.textContent = model.name;
+    if (purposeDiv) purposeDiv.textContent = model.purpose || 'No description available';
+    
+    // Load chat history for this agent
+    loadUserChatHistory(agentName);
+    
+    // Focus input
+    if (input) input.focus();
+}
+
+// Handle sending a chat message
+async function handleUserChatSend() {
+    if (!selectedAgentForChat) {
+        alert('Please select an agent first');
+        return;
+    }
+    
+    const input = document.getElementById('userChatInput');
+    const message = input?.value.trim();
+    
+    if (!message) return;
+    
+    // Clear input
+    if (input) input.value = '';
+    
+    // Disable input while sending
+    const sendBtn = document.getElementById('userChatSendBtn');
+    if (input) input.disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
+    
+    // Add user message to chat
+    appendUserChatMessage('user', message);
+    
+    // Add to history
+    userChatHistory.push({
+        role: 'user',
+        content: message,
+        timestamp: new Date().toISOString()
+    });
+    
+    // Show loading message
+    const loadingId = appendUserChatMessage('assistant', '');
+    const loadingEl = document.getElementById(loadingId);
+    if (loadingEl) {
+        loadingEl.innerHTML = '<span style="opacity:0.6;">Generating...</span>';
+    }
+    
+    try {
+        // Ensure API Manager is available
+        if (!window.apiManager) {
+            throw new Error('API Manager not available. Please ensure api-manager.js is loaded.');
+        }
+        
+        // Build system prompt from agent data
+        const systemPrompt = selectedAgentForChat.purpose 
+            ? `You are ${selectedAgentForChat.name}. ${selectedAgentForChat.purpose}\n\nUse Case: ${selectedAgentForChat.useCase || 'General assistance'}`
+            : `You are ${selectedAgentForChat.name}, a helpful AI assistant.`;
+        
+        // Call the backend API (backend will handle RAG automatically)
+        let fullResponse = '';
+        
+        await window.apiManager.streamModelRequest(
+            selectedAgentForChat.name, // Agent name - backend will detect it's a user agent and do RAG
+            message,
+            { systemPrompt: systemPrompt },
+            {
+                onStart() {
+                    console.log('🚀 Starting chat with agent:', selectedAgentForChat.name);
+                },
+                onDelta(delta) {
+                    fullResponse += delta;
+                    // Update UI in real-time (streaming)
+                    if (loadingEl) {
+                        loadingEl.innerHTML = renderMarkdownSafe(fullResponse, true) || '<span style="opacity:0.6;">Generating...</span>';
+                        // Auto-scroll
+                        const messagesDiv = document.getElementById('userChatMessages');
+                        if (messagesDiv) {
+                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                        }
+                    }
+                },
+                onDone(finalText) {
+                    fullResponse = finalText || fullResponse;
+                    if (loadingEl) {
+                        loadingEl.innerHTML = renderMarkdownSafe(fullResponse, false);
+                    }
+                    
+                    // Add to history
+                    userChatHistory.push({
+                        role: 'assistant',
+                        content: fullResponse,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Save history
+                    saveUserChatHistory(selectedAgentForChat.name);
+                    
+                    // Re-enable input
+                    if (input) input.disabled = false;
+                    if (sendBtn) sendBtn.disabled = false;
+                    if (input) input.focus();
+                },
+                onError(error) {
+                    console.error('Chat error:', error);
+                    if (loadingEl) {
+                        loadingEl.innerHTML = `<span style="color: #ef4444;">Error: ${escapeHtml(error.message || 'Failed to get response')}</span>`;
+                    }
+                    
+                    // Re-enable input
+                    if (input) input.disabled = false;
+                    if (sendBtn) sendBtn.disabled = false;
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error sending message:', error);
+        if (loadingEl) {
+            loadingEl.innerHTML = `<span style="color: #ef4444;">Error: ${escapeHtml(error.message || 'Failed to send message')}</span>`;
+        }
+        
+        // Re-enable input
+        if (input) input.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+    }
+}
+
+// Append message to chat
+function appendUserChatMessage(role, content) {
+    const messagesDiv = document.getElementById('userChatMessages');
+    if (!messagesDiv) return null;
+    
+    // Clear placeholder if it exists
+    if (messagesDiv.querySelector('div[style*="text-align: center"]')) {
+        messagesDiv.innerHTML = '';
+    }
+    
+    const messageId = 'userChatMsg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const messageEl = document.createElement('div');
+    messageEl.id = messageId;
+    messageEl.style.cssText = `
+        margin-bottom: 16px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        max-width: 80%;
+        word-wrap: break-word;
+        ${role === 'user' 
+            ? 'background: #8b5cf6; color: white; margin-left: auto; text-align: right;' 
+            : 'background: white; color: #374151; border: 1px solid #e5e7eb;'}
+    `;
+    
+    if (content) {
+        messageEl.innerHTML = renderMarkdownSafe(content, false);
+    }
+    
+    messagesDiv.appendChild(messageEl);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    return messageId;
+}
+
+// Load chat history for an agent
+function loadUserChatHistory(agentName) {
+    try {
+        const stored = localStorage.getItem(`userChatHistory_${agentName}`);
+        if (stored) {
+            userChatHistory = JSON.parse(stored);
+            
+            // Clear messages
+            const messagesDiv = document.getElementById('userChatMessages');
+            if (messagesDiv) messagesDiv.innerHTML = '';
+            
+            // Render messages
+            userChatHistory.forEach(msg => {
+                appendUserChatMessage(msg.role, msg.content);
+            });
+        } else {
+            userChatHistory = [];
+            const messagesDiv = document.getElementById('userChatMessages');
+            if (messagesDiv) {
+                messagesDiv.innerHTML = '<div style="text-align: center; color: #9ca3af; margin-top: 40px;"><p>Start a conversation with your agent</p></div>';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading chat history:', error);
+        userChatHistory = [];
+    }
+}
+
+// Save chat history for an agent
+function saveUserChatHistory(agentName) {
+    try {
+        localStorage.setItem(`userChatHistory_${agentName}`, JSON.stringify(userChatHistory));
+    } catch (error) {
+        console.error('Error saving chat history:', error);
+    }
+}
+
+// Helper: Escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Helper: Render markdown (simple version, similar to autorouter)
+function renderMarkdownSafe(text, isStreaming = false) {
+    let s = escapeHtml(text || '');
+    
+    // Process markdown
+    // Bold: **text**
+    s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    
+    // Code blocks: ```code```
+    s = s.replace(/```([^`]+?)```/g, '<pre style="background:#f3f4f6;padding:8px;border-radius:4px;overflow-x:auto;"><code>$1</code></pre>');
+    
+    // Inline code: `code`
+    s = s.replace(/`([^`]+?)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:3px;font-family:monospace;">$1</code>');
+    
+    // Line breaks
+    s = s.replace(/\n/g, '<br>');
+    
+    return s;
+}
+
+// Wrap switchTab to load agents when User Chats tab is opened
+const originalSwitchTab = switchTab;
+function switchTabWithAgentLoad(tabName) {
+    originalSwitchTab(tabName);
+    
+    // If switching to User Chats tab, load agents
+    const userChatsTab = document.getElementById('user-chats-tab');
+    if (userChatsTab && userChatsTab.classList.contains('active')) {
+        loadAgentsForChat();
+    }
+}
+switchTab = switchTabWithAgentLoad;
+
 window.switchTab = switchTab;
 window.openCreateModelModal = openCreateModelModal;
 window.closeCreateModelModal = closeCreateModelModal;
@@ -1167,6 +1482,8 @@ window.selectModel = selectModel;
 window.toggleModelVisibility = toggleModelVisibility;
 window.deleteModel = deleteModel;
 window.openUploadFileModal = openUploadFileModal;
+window.handleAgentSelection = handleAgentSelection;
+window.handleUserChatSend = handleUserChatSend;
 window.closeUploadFileModal = closeUploadFileModal;
 window.handleFileSelect = handleFileSelect;
 window.removeFileFromPreview = removeFileFromPreview;

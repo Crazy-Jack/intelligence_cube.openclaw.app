@@ -3,7 +3,7 @@
 
 const fetch = require('node-fetch');
 
-const BASE_URL = process.env.TEST_URL || 'http://localhost:3000';
+const BASE_URL = process.env.TEST_URL || 'http://localhost:3001';
 const I3_API_URL = 'http://34.71.119.178:8000';
 const I3_API_KEY = process.env.I3_API_KEY || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
 const ALLOYDB_PUBLIC_IP = process.env.ALLOYDB_PUBLIC_IP || '35.239.188.129';
@@ -237,7 +237,18 @@ async function testRAGFlow() {
     
     const chatData = await chatResponse.json();
     console.log('   ✅ Chat request successful');
-    console.log(`   Response length: ${chatData.choices?.[0]?.message?.content?.length || 0} characters`);
+    
+    // I3 API returns nested structure: { success: true, data: { choices: [...] } }
+    const content = chatData.data?.choices?.[0]?.message?.content || chatData.choices?.[0]?.message?.content;
+    const responseLength = content?.length || 0;
+    console.log(`   Response length: ${responseLength} characters`);
+    
+    if (responseLength > 0) {
+      console.log(`   Response preview: ${content.substring(0, 200)}...`);
+    } else {
+      console.log('   ⚠️  Response content is empty - check I3 API response structure');
+      console.log('   Full response structure:', JSON.stringify(chatData, null, 2).substring(0, 500));
+    }
     
     // Check server logs would show RAG integration
     console.log('\n   📋 Expected server logs:');

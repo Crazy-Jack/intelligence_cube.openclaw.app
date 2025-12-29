@@ -339,7 +339,7 @@ initAlloyDB().catch(err => {
 });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 console.log(`🔧 Server configuration: PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
 
@@ -1564,13 +1564,23 @@ app.post('/api/chat/completions', async (req, res) => {
     
     console.log('📡 Routing to I3 API');
     
+    // Prepare request body for I3 API
+    // If this is a user agent, replace the model name with a valid I3 model name
+    const i3RequestBody = { ...req.body };
+    if (isUserAgent(model)) {
+      // I3 API doesn't recognize user agent names - use default I3 model
+      const defaultI3Model = 'I3-Generic-Foundation-LLM';
+      console.log(`🔄 Replacing user agent model "${model}" with I3 model "${defaultI3Model}"`);
+      i3RequestBody.model = defaultI3Model;
+    }
+    
     const response = await fetch('http://34.71.119.178:8000/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'I3-API-Key': apiKey
       },
-      body: JSON.stringify(req.body)
+      body: JSON.stringify(i3RequestBody)
     });
     
     if (!response.ok) {
@@ -2193,7 +2203,14 @@ app.post('/api/personal-agent/models', async (req, res) => {
     // Use helper function to ensure correct database
     let db = admin.getFirestore();
     if (!db) {
-      return res.status(500).json({ error: 'Firestore database not initialized' });
+      console.error('❌ Firestore database is null/undefined');
+      console.error('   admin.firestoreDb:', admin.firestoreDb);
+      console.error('   admin.firestoreDbId:', admin.firestoreDbId);
+      console.error('   admin.apps.length:', admin.apps.length);
+      return res.status(500).json({ 
+        error: 'Firestore database not initialized',
+        details: 'Firebase Admin SDK may not have initialized correctly. Check server logs for initialization errors.'
+      });
     }
     
     // CRITICAL: Verify we're using the named database BEFORE writing

@@ -37,13 +37,58 @@ A modern, responsive homepage for Intelligence Cubed built with Node.js, Vite, a
 
 ## 🚦 Development
 
-### Start Development Server
+### Server Startup
+
+The application requires both a **backend server** and a **frontend server** to run:
+
+#### 1. Start Backend Server (Required)
+```bash
+# Set environment variables (optional, can also be set in config.js)
+export ALLOYDB_PUBLIC_IP=35.239.188.129
+export PORT=3001
+
+# Start the backend server
+npm start
+# or
+node serve.js
+```
+
+The backend server runs on `http://localhost:3001` and provides:
+- API endpoints for chat completions
+- User agent management (Firestore)
+- RAG file processing (AlloyDB)
+- File uploads to Google Cloud Storage
+
+#### 2. Start Frontend Server (Required)
 ```bash
 npm run dev
 # or
 yarn dev
 ```
-This will start Vite development server on `http://localhost:3000` with hot reload.
+
+The frontend server runs on `http://localhost:3002` and:
+- Serves the web application
+- Proxies `/api/*` requests to the backend on port 3001
+- Provides hot reload for development
+
+#### Quick Start (Both Servers)
+```bash
+# Terminal 1: Backend
+ALLOYDB_PUBLIC_IP=35.239.188.129 PORT=3001 node serve.js
+
+# Terminal 2: Frontend
+npm run dev
+```
+
+Then open `http://localhost:3002` in your browser.
+
+### Environment Variables
+
+Optional environment variables (can also be set in `config.js`):
+- `ALLOYDB_PUBLIC_IP` - AlloyDB public IP for RAG knowledge chunks
+- `PORT` - Backend server port (default: 3001)
+- `GEMINI_API_KEY` - Gemini API key for user agents
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Google Cloud service account key
 
 ### Build for Production
 ```bash
@@ -136,10 +181,30 @@ The primary color (#8B7CF6 - light purple) can be modified in `src/styles.css`. 
 
 ## 🌐 API Endpoints
 
-The Express.js server provides the following endpoints:
+The Express.js backend server provides the following endpoints:
 
-- `GET /` - Serve the homepage
+### Core Endpoints
 - `GET /api/health` - Health check endpoint
+- `POST /api/chat/completions` - Chat completions (supports user agents with RAG)
+- `POST /api/embeddings` - Generate embeddings for text
+
+### User Agents
+- `GET /api/user-agents` - List all user agents
+- `GET /api/user-agents/:name` - Get specific user agent by name
+
+### Personal Agent (RAG System)
+- `GET /api/personal-agent/models` - List personal agent models
+- `POST /api/personal-agent/models` - Create new model
+- `PATCH /api/personal-agent/models/:modelId` - Update model
+- `DELETE /api/personal-agent/models/:modelId` - Delete model
+- `POST /api/personal-agent/files/upload` - Upload file for RAG processing
+- `POST /api/process-rag-file` - Process uploaded file (extract, chunk, embed, store)
+- `GET /api/personal-agent/files` - List files for a model
+- `DELETE /api/personal-agent/files/:fileId` - Delete file
+
+### Models
+- `GET /api/models` - List available models
+- `GET /api/models/stats` - Get model statistics
 
 ## 🖥 Browser Support
 
