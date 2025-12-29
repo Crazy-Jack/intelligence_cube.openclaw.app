@@ -1252,7 +1252,7 @@ function getModelData(name) {
   }
 
   // ====== 与 Benchmark 一致的 Try / Add to Cart 行为 ======
-  // Try：关掉 Auto Router、写入 running 状态并跳到 index.html 或 agent-chat.html
+  // Try：关掉 Auto Router、写入 running 状态并跳到 index.html 或 personal-agent.html
   window.tryModel = function (modelName) {
     const modelData = (typeof getModelData === 'function') ? getModelData(modelName) : null;
 
@@ -1275,10 +1275,10 @@ function getModelData(name) {
       startedAt: new Date().toISOString()
     }));
 
-    // Check if this is a user-created agent - route to agent-chat.html
+    // Check if this is a user-created agent - route to personal-agent.html
     if (isUserAgent(modelName)) {
-      // Route to agent chat page for user-created agents
-      window.location.href = 'agent-chat.html?agent=' + encodeURIComponent(modelName);
+      // Route to personal agent page for user-created agents
+      window.location.href = 'personal-agent.html?agent=' + encodeURIComponent(modelName);
     } else {
       // Route to regular chat page for standard models
       window.location.href = 'index.html?tryModel=' + encodeURIComponent(modelName);

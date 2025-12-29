@@ -27,8 +27,7 @@ export default defineConfig({
         workflow: resolve(__dirname, 'workflow.html'),
         myassets: resolve(__dirname, 'myassets.html'),
         mycart: resolve(__dirname, 'mycart.html'),
-        interactive: resolve(__dirname, 'interactive.html'),
-        'agent-chat': resolve(__dirname, 'agent-chat.html')
+        interactive: resolve(__dirname, 'interactive.html')
       }
     }
   },
@@ -63,8 +62,7 @@ export default defineConfig({
           'canvas.js',
           'workflow.js',
           'myassets.js',
-          'mycart.js',
-          'agent-chat.js'
+          'mycart.js'
         ]
         
         // Copy CSS files as-is to dist root
