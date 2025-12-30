@@ -55,8 +55,15 @@
     </script>
 
     <!-- Binance Web3 Wallet SDK Provider (for QR code connection) -->
-    <!-- Using npm bundle with proper crypto polyfills -->
-    <script type="module" src="binance-sdk.js"></script>
+    <!-- Load directly from CDN - no bundling needed -->
+    <script type="module">
+      import { getProvider } from 'https://esm.sh/@binance/w3w-ethereum-provider@1.1.11';
+      
+      // Export to window for use in non-module scripts
+      window.BINANCE_W3W_GET_PROVIDER = getProvider;
+      
+      console.log('[Binance SDK] ✓ Loaded from CDN');
+    </script>
 
     
     <!-- Base Account SDK -->

@@ -76,8 +76,7 @@ export default defineConfig({
           'canvas.js',
           'workflow.js',
           'myassets.js',
-          'mycart.js',
-          'binance-sdk.js'
+          'mycart.js'
         ]
         
         // Copy CSS files as-is to dist root
