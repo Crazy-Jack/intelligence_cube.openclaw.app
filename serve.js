@@ -18,6 +18,10 @@ const multer = require('multer');
 
 console.log('✅ Dependencies loaded successfully');
 
+// I3 API Configuration
+const I3_API_BASE_URL = process.env.I3_API_BASE_URL || 'http://34.71.119.178:8000';
+const I3_API_KEY = process.env.I3_API_KEY || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
+
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   try {
@@ -218,7 +222,7 @@ try {
   throw error;
 }
 
-// Initialize Vertex AI
+// Initialize Vertex AI (kept for potential future use, but embeddings now use I3 API)
 let vertexAI = null;
 
 try {
@@ -226,7 +230,7 @@ try {
     project: 'i3-testnet',
     location: 'us-central1'
   });
-  console.log('✅ Vertex AI initialized (using gemini-embedding-001 via REST API)');
+  console.log('✅ Vertex AI initialized (embeddings now use I3 API with i3-embedding model for 1536 dimensions)');
 } catch (error) {
   console.warn('⚠️ Vertex AI initialization warning:', error.message);
 }
@@ -599,7 +603,7 @@ app.get('/api/user-agents/:name', async (req, res) => {
 app.post('/api/embeddings', async (req, res) => {
   try {
     const { model = 'i3-embedding', input } = req.body;
-    const apiKey = req.headers['i3-api-key'] || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
+    const apiKey = req.headers['i3-api-key'] || I3_API_KEY;
     
     if (!input) {
       return res.status(400).json({ error: 'Input text is required' });
@@ -607,7 +611,7 @@ app.post('/api/embeddings', async (req, res) => {
     
     console.log('🔍 Proxying embeddings request:', { model, inputLength: input.length });
     
-    const response = await fetch('http://34.71.119.178:8000/embeddings', {
+    const response = await fetch(`${I3_API_BASE_URL}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -885,7 +889,7 @@ function transformFromGeminiFormat(geminiResponse, modelName) {
 app.post('/api/chat/completions', async (req, res) => {
   try {
     const { model, messages, stream, systemInstruction } = req.body;
-    const apiKey = req.headers['i3-api-key'] || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
+    const apiKey = req.headers['i3-api-key'] || I3_API_KEY;
     
     // Check test mode from header (frontend toggle)
     // Express normalizes headers to lowercase
@@ -1467,8 +1471,8 @@ app.post('/api/chat/completions', async (req, res) => {
                   console.log('🔍 Generating embedding for user query...');
                   
                   // Generate embedding for user query using I3 API
-                  const apiKey = req.headers['i3-api-key'] || 'ak_pxOhfZtDes9R6CUyPoOGZtnr61tGJOb2CBz-HHa_VDE';
-                  const embeddingResponse = await fetch('http://34.71.119.178:8000/embeddings', {
+                  const apiKey = req.headers['i3-api-key'] || I3_API_KEY;
+                  const embeddingResponse = await fetch(`${I3_API_BASE_URL}/embeddings`, {
                     method: 'POST',
                     headers: { 
                       'Content-Type': 'application/json',
@@ -1488,11 +1492,7 @@ app.post('/api/chat/completions', async (req, res) => {
                     if (queryEmbedding && Array.isArray(queryEmbedding)) {
                       console.log(`✅ Generated query embedding (dimension: ${queryEmbedding.length})`);
                       
-                      // Truncate to 768 dimensions if needed (to match stored chunks in AlloyDB)
-                      if (queryEmbedding.length > 768) {
-                        console.log(`⚠️ Truncating query embedding from ${queryEmbedding.length} to 768 dimensions for schema compatibility`);
-                        queryEmbedding = queryEmbedding.slice(0, 768);
-                      }
+                      // No truncation needed - both model creator and user chat use 1536 dimensions
                       
                       // Search AlloyDB for similar chunks using cosine similarity
                       const similarChunks = await alloydb.searchSimilarChunks(
@@ -1574,7 +1574,23 @@ app.post('/api/chat/completions', async (req, res) => {
       i3RequestBody.model = defaultI3Model;
     }
     
-    const response = await fetch('http://34.71.119.178:8000/chat/completions', {
+    // Convert systemInstruction to system message for I3 API (OpenAI format)
+    // I3 API expects system messages in the messages array, not as a separate field
+    if (i3RequestBody.systemInstruction) {
+      console.log('🔄 Converting systemInstruction to system message in messages array');
+      const systemMessage = {
+        role: 'system',
+        content: i3RequestBody.systemInstruction
+      };
+      // Add system message at the beginning of messages array
+      i3RequestBody.messages = [systemMessage, ...(i3RequestBody.messages || [])];
+      // Remove systemInstruction field as I3 API doesn't use it
+      delete i3RequestBody.systemInstruction;
+      console.log('✅ System message added to messages array (length:', systemMessage.content.length, 'characters)');
+    }
+    
+    console.log('📤 Sending request to I3 API with', i3RequestBody.messages?.length || 0, 'messages');
+    const response = await fetch(`${I3_API_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1701,162 +1717,76 @@ function chunkText(text, chunkSize = 4000, overlap = 800) {
   return chunks;
 }
 
-// Helper: Get embedding from Vertex AI using gemini-embedding-001 (768 dimensions)
-// With retry logic for SSL/TLS errors
+// Helper: Get embedding from I3 API using i3-embedding (1536 dimensions)
+// With retry logic for API errors
 async function getEmbedding(text, maxRetries = 3) {
   let lastError = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const auth = new GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+      // Use I3 API for embeddings (consistent with user query embeddings)
+      const embeddingResponse = await fetch(`${I3_API_BASE_URL}/embeddings`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'I3-API-Key': I3_API_KEY
+        },
+        body: JSON.stringify({ 
+          model: 'i3-embedding', 
+          input: text 
+        })
       });
       
-      const client = await auth.getClient();
-      const accessToken = await client.getAccessToken();
-      
-      // Use Vertex AI REST API for gemini-embedding-001
-      // Endpoint: projects/{project}/locations/{location}/publishers/google/models/gemini-embedding-001:predict
-      const apiUrl = `https://us-central1-aiplatform.googleapis.com/v1/projects/i3-testnet/locations/us-central1/publishers/google/models/gemini-embedding-001:predict`;
-      
-      // Request body format for gemini-embedding-001
-      const requestBody = {
-        instances: [{
-          content: text
-        }],
-        parameters: {
-          outputDimensionality: 768  // Specify 768 dimensions
-        }
-      };
-      
-      // Use node-fetch with timeout and better error handling
-      const fetchOptions = {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody),
-        // Add timeout to prevent hanging
-        timeout: 30000 // 30 seconds
-      };
-      
-      let response;
-      try {
-        response = await fetch(apiUrl, fetchOptions);
-      } catch (fetchError) {
-        // Check if it's an SSL/TLS error
-        if (fetchError.message && (
-          fetchError.message.includes('EPROTO') ||
-          fetchError.message.includes('tlsv1 alert protocol version') ||
-          fetchError.message.includes('SSL') ||
-          fetchError.message.includes('TLS')
-        )) {
-          lastError = fetchError;
-          if (attempt < maxRetries) {
-            // Exponential backoff: wait 1s, 2s, 4s
-            const waitTime = Math.pow(2, attempt - 1) * 1000;
-            console.warn(`⚠️  SSL/TLS error on attempt ${attempt}/${maxRetries}, retrying in ${waitTime}ms...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue; // Retry
-          } else {
-            throw fetchError; // Max retries reached
-          }
-        } else {
-          // Not an SSL error, throw immediately
-          throw fetchError;
-        }
+      if (!embeddingResponse.ok) {
+        const errorText = await embeddingResponse.text();
+        console.error('❌ I3 API error response:', errorText);
+        throw new Error(`I3 API error: ${embeddingResponse.status} - ${errorText}`);
       }
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Vertex AI API error response:', errorText);
-        throw new Error(`Vertex AI API error: ${response.status} - ${errorText}`);
+      const embeddingData = await embeddingResponse.json();
+      // Handle I3 API response format: {success: true, data: {data: [{embedding: [...]}]}}
+      let embedding = embeddingData.data?.data?.[0]?.embedding || embeddingData.data?.[0]?.embedding;
+      
+      if (!embedding || !Array.isArray(embedding)) {
+        console.error('❌ Invalid embedding response:', JSON.stringify(embeddingData, null, 2));
+        throw new Error('Invalid response format from I3 API. Expected array of numbers.');
       }
       
-      const result = await response.json();
-    
-    // Handle gemini-embedding-001 response format
-    // Response structure: { predictions: [{ embeddings: { values: [...] } }] }
-    let embedding = null;
-    
-    if (result.predictions && result.predictions[0]) {
-      const prediction = result.predictions[0];
+      // Ensure all values are numbers
+      embedding = embedding.map(v => typeof v === 'number' ? v : parseFloat(v));
       
-      // Try different possible response formats
-      if (prediction.embeddings) {
-        if (prediction.embeddings.values) {
-          embedding = prediction.embeddings.values;
-        } else if (Array.isArray(prediction.embeddings)) {
-          embedding = prediction.embeddings;
-        } else {
-          // If embeddings is an object, try to extract values
-          embedding = prediction.embeddings;
-        }
-      } else if (prediction.values) {
-        embedding = prediction.values;
-      } else if (Array.isArray(prediction)) {
-        embedding = prediction;
+      // I3 API embedding should return 1536 dimensions
+      if (embedding.length !== 1536) {
+        console.warn(`⚠️ Expected 1536 dimensions, got ${embedding.length}. Using as-is.`);
       }
-    }
-    
-    // If embedding is still not an array, try to extract from nested structure
-    if (!Array.isArray(embedding)) {
-      // Handle structValue format (from gRPC/Protobuf)
-      if (embedding && embedding.structValue) {
-        const struct = embedding.structValue.fields;
-        if (struct.embeddings && struct.embeddings.structValue) {
-          const embStruct = struct.embeddings.structValue.fields;
-          if (embStruct.values && embStruct.values.listValue) {
-            embedding = embStruct.values.listValue.values.map(v => v.numberValue);
-          }
-        } else if (struct.values && struct.values.listValue) {
-          embedding = struct.values.listValue.values.map(v => v.numberValue);
-        }
-      }
-    }
-    
-    if (!embedding || !Array.isArray(embedding)) {
-      console.error('❌ Invalid embedding response:', JSON.stringify(result, null, 2));
-      throw new Error('Invalid response format from Vertex AI. Expected array of numbers.');
-    }
-    
-    // Ensure all values are numbers
-    embedding = embedding.map(v => typeof v === 'number' ? v : parseFloat(v));
-    
-    // gemini-embedding-001 with outputDimensionality: 768 should return 768 dimensions
-    if (embedding.length !== 768) {
-      console.warn(`⚠️ Expected 768 dimensions, got ${embedding.length}. Using as-is.`);
-    }
-    
-    // Success! Return the embedding
-    return embedding;
+      
+      // Success! Return the embedding
+      return embedding;
     } catch (error) {
       lastError = error;
       
-      // Check if it's an SSL/TLS error that we should retry
+      // Retry logic for network errors
       const errorMessage = error.message || error.toString() || '';
-      const isSSLError = (
-        errorMessage.includes('EPROTO') ||
-        errorMessage.includes('tlsv1 alert protocol version') ||
-        errorMessage.includes('SSL') ||
-        errorMessage.includes('TLS') ||
-        errorMessage.includes('protocol version')
+      const isRetryableError = (
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('ETIMEDOUT') ||
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('fetch failed')
       );
       
-      if (isSSLError && attempt < maxRetries) {
+      if (isRetryableError && attempt < maxRetries) {
         // Exponential backoff: wait 1s, 2s, 4s
         const waitTime = Math.pow(2, attempt - 1) * 1000;
-        console.warn(`⚠️  SSL/TLS error on attempt ${attempt}/${maxRetries} for embedding, retrying in ${waitTime}ms...`);
+        console.warn(`⚠️  Network error on attempt ${attempt}/${maxRetries} for embedding, retrying in ${waitTime}ms...`);
         console.warn(`   Error: ${errorMessage.substring(0, 200)}`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         continue; // Retry
       } else {
         // Not retryable or max retries reached
         if (attempt >= maxRetries) {
-          console.error(`❌ Vertex AI embedding error after ${maxRetries} attempts:`, errorMessage);
+          console.error(`❌ I3 API embedding error after ${maxRetries} attempts:`, errorMessage);
         } else {
-          console.error('❌ Vertex AI embedding error (non-retryable):', errorMessage);
+          console.error('❌ I3 API embedding error (non-retryable):', errorMessage);
         }
         throw error;
       }
@@ -3411,7 +3341,7 @@ app.post('/api/process-rag-file', async (req, res) => {
         console.log(`      Size: ${chunk.length} characters`);
         
         // Get embedding
-        console.log(`      🔍 Getting embedding from Vertex AI...`);
+        console.log(`      🔍 Getting embedding from I3 API...`);
         let embedding;
         try {
           embedding = await getEmbedding(chunk);
