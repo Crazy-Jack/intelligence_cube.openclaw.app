@@ -24,12 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
     
-    <!-- Binance W3W Utils (for deeplink / universal link) -->
-    <script type="module">
-      // 固定版本，避免未来 breaking change
-      import * as BINANCE_W3W_UTILS from 'https://esm.run/@binance/w3w-utils@1.1.8';
-      window.BINANCE_W3W_UTILS = BINANCE_W3W_UTILS;
-    </script>
+    <!-- Binance W3W Utils now bundled in binance-sdk.js (no CDN needed) -->
 
     <!-- Safe polyfills for Solana web3.js and Binance SDK (module-friendly, no globals pollution) -->
     <script type="module">
@@ -56,7 +51,7 @@
 
     <!-- Binance Web3 Wallet SDK Provider (for QR code connection) -->
     <!-- Using npm bundle with proper crypto polyfills -->
-    <script type="module" src="binance-sdk.js"></script>
+    <script type="module" src="binance-sdk.js?v=4"></script>
 
     
     <!-- Base Account SDK -->

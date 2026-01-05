@@ -2,17 +2,17 @@
 // This file will be bundled by Vite with proper crypto polyfills
 
 import { getProvider } from '@binance/w3w-ethereum-provider';
-import { utf8ToHex } from '@binance/w3w-utils';
+import * as w3wUtils from '@binance/w3w-utils';
 
 // Export to window for use in non-module scripts
 window.BINANCE_W3W_GET_PROVIDER = getProvider;
 
-// Export utility functions
-window.BINANCE_W3W_UTILS = window.BINANCE_W3W_UTILS || {};
-window.BINANCE_W3W_UTILS.utf8ToHex = utf8ToHex;
+// Export all utility functions (including utf8ToHex, getDeeplink, etc.)
+window.BINANCE_W3W_UTILS = w3wUtils;
 
 // Also export for ES module usage
-export { getProvider, utf8ToHex };
+export { getProvider };
+export * from '@binance/w3w-utils';
 
-console.log('[Binance SDK] ✓ Loaded from npm bundle (with utils)');
+console.log('[Binance SDK] ✓ Loaded from npm bundle (with all utils)');
 
