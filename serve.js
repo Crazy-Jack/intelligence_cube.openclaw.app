@@ -1467,7 +1467,7 @@ app.post('/api/chat/completions', async (req, res) => {
               const defaultPrompt = `You are ${model}. ${agent.purpose || ''}\n\nUse Case: ${agent.useCase || ''}\n\nAnswer the user's question as this specialized model would.`;
               console.log('🔄 Using default system prompt (built from purpose/useCase)');
               req.body.systemInstruction = defaultPrompt;
-              extractedSystemInstruction = defaultPrompt;
+              extractedSystemInstruction = defaultPrompt; //extractedSystemInstruction is then used to build the system prompt to pass onto I3 API
             }
             
             // RAG: Retrieve relevant knowledge chunks from AlloyDB

@@ -281,6 +281,14 @@ function renderModelDetails(model) {
                     </svg>
                     Edit
                 </button>
+                <button class="pa-btn-secondary" disabled style="margin-right: 8px; opacity: 0.5; cursor: not-allowed; background: #9ca3af; border-color: #9ca3af; color: #fff;" title="Coming soon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    Finetune
+                </button>
                 <label class="pa-toggle">
                     <input type="checkbox" ${model.isPublic ? 'checked' : ''} 
                            onchange="toggleModelVisibility('${model.id}', this.checked)">
