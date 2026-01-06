@@ -41,7 +41,18 @@ export default defineConfig({
         workflow: resolve(__dirname, 'workflow.html'),
         myassets: resolve(__dirname, 'myassets.html'),
         mycart: resolve(__dirname, 'mycart.html'),
-        interactive: resolve(__dirname, 'interactive.html')
+        interactive: resolve(__dirname, 'interactive.html'),
+        // Bundle binance-sdk separately so npm imports get resolved
+        'binance-sdk': resolve(__dirname, 'binance-sdk.js')
+      },
+      output: {
+        // Keep binance-sdk.js name for HTML compatibility
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'binance-sdk') {
+            return 'binance-sdk.js'
+          }
+          return 'assets/[name]-[hash].js'
+        }
       }
     }
   },
@@ -52,11 +63,22 @@ export default defineConfig({
       name: 'preserve-assets',
       transformIndexHtml(html) {
         // This plugin ensures CSS and JS files are referenced directly, not bundled
-        return html
+        let result = html
           .replace(/href="\/assets\/styles-[^"]+\.css"/g, 'href="styles.css"')
           .replace(/href="\/assets\/account-dropdown-[^"]+\.css"/g, 'href="account-dropdown.css"')
           .replace(/crossorigin href="styles\.css"/g, 'href="styles.css"')
           .replace(/crossorigin href="account-dropdown\.css"/g, 'href="account-dropdown.css"')
+        
+        // Inject the bundled binance-sdk.js script before </head>
+        // This is needed because Vite removes the original script tag when processing as entry
+        if (!result.includes('src="/binance-sdk.js"') && !result.includes("src='binance-sdk.js'")) {
+          result = result.replace(
+            '</head>',
+            '    <script type="module" src="/binance-sdk.js"></script>\n</head>'
+          )
+        }
+        
+        return result
       }
     },
     {
@@ -77,6 +99,7 @@ export default defineConfig({
           'workflow.js',
           'myassets.js',
           'mycart.js'
+          // binance-sdk.js is now bundled via rollup input, not copied
         ]
         
         // Copy CSS files as-is to dist root

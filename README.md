@@ -148,6 +148,119 @@ The Express.js server provides the following endpoints:
 - Safari (latest)
 - Edge (latest)
 
+## ☁️ Deploy to Google Cloud Run
+
+### Prerequisites
+
+1. **Google Cloud Account** with billing enabled
+2. **Google Cloud CLI** installed ([Download here](https://cloud.google.com/sdk/docs/install))
+
+### Step-by-Step Deployment
+
+#### 1. Install Google Cloud CLI
+
+**Windows (PowerShell as Administrator):**
+```powershell
+(New-Object Net.WebClient).DownloadFile("https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe", "$env:Temp\GoogleCloudSDKInstaller.exe")
+& $env:Temp\GoogleCloudSDKInstaller.exe
+```
+
+**macOS:**
+```bash
+brew install --cask google-cloud-sdk
+```
+
+**Linux:**
+```bash
+curl https://sdk.cloud.google.com | bash
+```
+
+#### 2. Initialize and Authenticate
+
+```bash
+# Log in to Google Cloud
+gcloud auth login
+
+# Set your project (create one at https://console.cloud.google.com if needed)
+gcloud config set project YOUR_PROJECT_ID
+
+# Enable required APIs
+gcloud services enable run.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
+gcloud services enable artifactregistry.googleapis.com
+```
+
+#### 3. Build the Frontend
+
+```bash
+# Install dependencies
+npm install
+
+# Build the production bundle (important!)
+npm run build
+```
+
+#### 4. Deploy to Cloud Run
+
+```bash
+gcloud run deploy i3-app \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --quiet
+```
+
+The deployment will:
+- Build a Docker image using the `Dockerfile`
+- Push it to Google Container Registry
+- Deploy to Cloud Run
+
+After deployment, you'll see a URL like:
+```
+Service URL: https://i3-app-XXXX.us-central1.run.app
+```
+
+### Important Notes
+
+1. **Always run `npm run build` before deploying** - This creates the bundled `dist/` folder that gets served in production.
+
+2. **WalletConnect Domain Whitelist** - If using WalletConnect, add your deployed domain to the allowed domains at [WalletConnect Cloud](https://cloud.walletconnect.com).
+
+3. **Environment Variables** - The `Dockerfile` sets `NODE_ENV=production` automatically.
+
+### Updating the Deployment
+
+To deploy updates:
+
+```bash
+# Rebuild frontend
+npm run build
+
+# Redeploy
+gcloud run deploy i3-app --source . --region us-central1 --allow-unauthenticated --quiet
+```
+
+### Troubleshooting
+
+**"Permission denied" errors:**
+```bash
+# Get your project number
+PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
+
+# Grant necessary permissions
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/storage.objectViewer"
+
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/logging.logWriter"
+```
+
+**"gcloud not found" after installation:**
+- Restart your terminal/PowerShell
+- Or run: `$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")`
+
 ## 📄 License
 
 MIT License - see LICENSE file for details. 
