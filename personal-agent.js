@@ -413,10 +413,14 @@ function openCreateModelModal() {
         document.getElementById('modelNameInput').value = '';
         document.getElementById('modelPurposeInput').value = '';
         document.getElementById('modelUseCaseInput').value = '';
+        document.getElementById('modelSystemPromptInput').value = '';
         document.getElementById('modelCategoryInput').value = '';
         document.getElementById('modelIndustryInput').value = '';
         document.getElementById('modelTokenPriceInput').value = '2'; // Default value
         document.getElementById('modelIsPublicInput').checked = false;
+        
+        // Update default prompt preview
+        updateCreateModelDefaultPromptPreview();
     }
 }
 
@@ -426,6 +430,61 @@ function closeCreateModelModal() {
     if (modal) {
         modal.classList.remove('show');
     }
+}
+
+// Update default prompt preview for Create Model modal
+function updateCreateModelDefaultPromptPreview() {
+    const preview = document.getElementById('createModelDefaultPromptPreview');
+    if (!preview) return;
+    
+    const name = document.getElementById('modelNameInput')?.value.trim() || '{Model Name}';
+    const purpose = document.getElementById('modelPurposeInput')?.value.trim() || '{Purpose}';
+    const useCase = document.getElementById('modelUseCaseInput')?.value.trim() || '{Use Case}';
+    
+    preview.textContent = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nAnswer the user's question as this specialized model would.`;
+}
+
+// Update default prompt preview for Edit Model modal
+function updateEditModelDefaultPromptPreview() {
+    const preview = document.getElementById('editModelDefaultPromptPreview');
+    if (!preview) return;
+    
+    const modal = document.getElementById('editModelModal');
+    const modelId = modal?.dataset.modelId;
+    const model = models.find(m => m.id === modelId);
+    const name = model?.name || '{Model Name}';
+    const purpose = document.getElementById('editModelPurposeInput')?.value.trim() || '{Purpose}';
+    const useCase = document.getElementById('editModelUseCaseInput')?.value.trim() || '{Use Case}';
+    
+    preview.textContent = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nAnswer the user's question as this specialized model would.`;
+}
+
+// Set up event listeners for dynamic preview updates
+function setupPromptPreviewListeners() {
+    // Create Model modal listeners
+    const createFields = ['modelNameInput', 'modelPurposeInput', 'modelUseCaseInput'];
+    createFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', updateCreateModelDefaultPromptPreview);
+        }
+    });
+    
+    // Edit Model modal listeners
+    const editFields = ['editModelPurposeInput', 'editModelUseCaseInput'];
+    editFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', updateEditModelDefaultPromptPreview);
+        }
+    });
+}
+
+// Initialize listeners when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupPromptPreviewListeners);
+} else {
+    setupPromptPreviewListeners();
 }
 
 // Create model
@@ -454,6 +513,7 @@ async function createModel() {
                 isPublic: document.getElementById('modelIsPublicInput').checked,
                 purpose: document.getElementById('modelPurposeInput').value.trim() || null,
                 useCase: document.getElementById('modelUseCaseInput').value.trim() || null,
+                systemPrompt: document.getElementById('modelSystemPromptInput').value.trim() || null,
                 category: document.getElementById('modelCategoryInput').value.trim() || null,
                 industry: document.getElementById('modelIndustryInput').value.trim() || null,
                 tokenPrice: tokenPrice
@@ -568,6 +628,7 @@ function openEditModelModal(modelId) {
         // Populate form with current model data
         document.getElementById('editModelPurposeInput').value = model.purpose || '';
         document.getElementById('editModelUseCaseInput').value = model.useCase || '';
+        document.getElementById('editModelSystemPromptInput').value = model.systemPrompt || '';
         document.getElementById('editModelCategoryInput').value = model.category || '';
         document.getElementById('editModelIndustryInput').value = model.industry || '';
         document.getElementById('editModelTokenPriceInput').value = model.tokenPrice !== null && model.tokenPrice !== undefined ? model.tokenPrice : '2';
@@ -575,6 +636,9 @@ function openEditModelModal(modelId) {
         // Store modelId for update function
         modal.dataset.modelId = modelId;
         modal.classList.add('show');
+        
+        // Update default prompt preview with actual model name
+        updateEditModelDefaultPromptPreview();
     }
 }
 
@@ -613,6 +677,7 @@ async function updateModel() {
                 ownerAddress: currentWalletAddress.toLowerCase(),
                 purpose: document.getElementById('editModelPurposeInput').value.trim() || null,
                 useCase: document.getElementById('editModelUseCaseInput').value.trim() || null,
+                systemPrompt: document.getElementById('editModelSystemPromptInput').value.trim() || null,
                 category: document.getElementById('editModelCategoryInput').value.trim() || null,
                 industry: document.getElementById('editModelIndustryInput').value.trim() || null,
                 tokenPrice: tokenPrice
@@ -1376,12 +1441,12 @@ function appendUserChatMessage(role, content) {
     messageEl.style.cssText = `
         margin-bottom: 16px;
         padding: 12px 16px;
-        border-radius: 12px;
-        max-width: 80%;
+        max-width: 75%;
+        width: fit-content;
         word-wrap: break-word;
         ${role === 'user' 
-            ? 'background: #8b5cf6; color: white; margin-left: auto; text-align: right;' 
-            : 'background: white; color: #374151; border: 1px solid #e5e7eb;'}
+            ? 'background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; margin-left: auto; margin-right: 0; border-radius: 18px 18px 4px 18px;' 
+            : 'background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; margin-right: auto; margin-left: 0; border-radius: 18px 18px 18px 4px;'}
     `;
     
     if (content) {

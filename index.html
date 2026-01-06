@@ -730,12 +730,12 @@
             background:rgba(0,0,0,0.5); 
             z-index:998; 
         }
-        .chat-messages { flex:1; padding:16px; overflow-y:auto; overflow-x:visible; background:#ffffff; scroll-behavior:smooth; width:100%; }
-        .message { max-width:100%; width:100%; margin:0 auto 14px; line-height:1.6; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; white-space:pre-wrap; padding:8px 12px; box-sizing:border-box; overflow:visible; display:block; }
-        .message, .message *, .message a, .message code, .message strong, .message p, .message div, .message span { word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:pre-wrap !important; max-width:100% !important; overflow:visible !important; display:block; }
-        .message.user { background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.15); color:#1f2937; border-radius:12px; }
-        .message.assistant { background:#ffffff; border:1px solid rgba(16,185,129,.28); color:#0f172a; border-radius:12px; }
-        .message.system { background:linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); border:1px solid rgba(59,130,246,.25); color:#1e3a8a; border-radius:12px; padding:8px 12px; }
+        .chat-messages { flex:1; padding:16px; overflow-y:auto; overflow-x:hidden; background:#ffffff; scroll-behavior:smooth; width:100%; display:flex !important; flex-direction:column !important; }
+        .message { max-width:75% !important; width:fit-content !important; margin-bottom:14px; line-height:1.6; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; white-space:pre-wrap; padding:12px 16px; box-sizing:border-box; }
+        .message *, .message a, .message code, .message strong, .message p, .message div, .message span { word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:pre-wrap !important; }
+        .message.user { background:linear-gradient(135deg, #8b5cf6, #7c3aed) !important; border:none !important; color:#ffffff !important; border-radius:18px 18px 4px 18px !important; align-self:flex-end !important; margin-left:auto !important; margin-right:0 !important; }
+        .message.assistant { background:#f3f4f6 !important; border:1px solid #e5e7eb !important; color:#1f2937 !important; border-radius:18px 18px 18px 4px !important; align-self:flex-start !important; margin-right:auto !important; margin-left:0 !important; }
+        .message.system { background:linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%) !important; border:1px solid rgba(59,130,246,.25) !important; color:#1e3a8a !important; border-radius:12px !important; padding:12px 16px; align-self:center !important; max-width:90% !important; text-align:center; }
         .message.system.needs-rerun { background:linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%); border-color:#fca5a5; }
         .chat-composer { padding:12px 16px; border-top:1px solid #e5e7eb; display:flex; gap:10px; background:#f9fafb; }
         .chat-input { flex:1; background:#ffffff; color:#1f2937; border:1px solid #d1d5db; border-radius:12px; padding:8px 12px; }
@@ -4049,7 +4049,13 @@
                         console.log('🤖 Auto Router: Displaying message:', message);
                         appendMessageDark("system", message);
                         
-                        systemPrompt = `You are ${selectedModel.name}. ${selectedModel.purpose}\n\nUse Case: ${selectedModel.useCase}\n\nAnswer the user's question as this specialized model would.`;
+                        // Use custom system prompt if available, otherwise build from purpose/useCase
+                        if (selectedModel.systemPrompt) {
+                            systemPrompt = selectedModel.systemPrompt;
+                            console.log('🤖 Using custom system prompt for', selectedModel.name);
+                        } else {
+                            systemPrompt = `You are ${selectedModel.name}. ${selectedModel.purpose}\n\nUse Case: ${selectedModel.useCase}\n\nAnswer the user's question as this specialized model would.`;
+                        }
                     } else {
                         console.log('🤖 Auto Router: selectedModel is null/undefined');
                     }

@@ -1455,6 +1455,20 @@ app.post('/api/chat/completions', async (req, res) => {
             console.log(`✅ Found user agent in Firestore: ${model} → modelId: ${agentModelId}`);
             console.log(`   Purpose: ${agent.purpose || 'N/A'}`);
             console.log(`   Use Case: ${agent.useCase || 'N/A'}`);
+            console.log(`   Custom System Prompt: ${agent.systemPrompt ? 'Yes (' + agent.systemPrompt.length + ' chars)' : 'No'}`);
+            
+            // If agent has a custom system prompt, use it instead of the frontend-generated one
+            if (agent.systemPrompt) {
+              console.log('🔄 Using custom system prompt from Firestore');
+              req.body.systemInstruction = agent.systemPrompt;
+              extractedSystemInstruction = agent.systemPrompt;
+            } else {
+              // Build default system prompt from purpose and useCase
+              const defaultPrompt = `You are ${model}. ${agent.purpose || ''}\n\nUse Case: ${agent.useCase || ''}\n\nAnswer the user's question as this specialized model would.`;
+              console.log('🔄 Using default system prompt (built from purpose/useCase)');
+              req.body.systemInstruction = defaultPrompt;
+              extractedSystemInstruction = defaultPrompt;
+            }
             
             // RAG: Retrieve relevant knowledge chunks from AlloyDB
             if (alloydb && alloydb.isAlloyDBConnected()) {
@@ -2119,7 +2133,7 @@ app.get('/api/personal-agent/test-firestore', async (req, res) => {
 // Create a new model
 app.post('/api/personal-agent/models', async (req, res) => {
   try {
-    const { name, ownerAddress, isPublic, purpose, useCase, category, industry, tokenPrice } = req.body;
+    const { name, ownerAddress, isPublic, purpose, useCase, systemPrompt, category, industry, tokenPrice } = req.body;
     
     if (!name || !ownerAddress) {
       return res.status(400).json({ error: 'Name and ownerAddress are required' });
@@ -2192,6 +2206,7 @@ app.post('/api/personal-agent/models', async (req, res) => {
       hiddenPurpose: null,
       useCase: useCase || null,
       hiddenUseCase: null,
+      systemPrompt: systemPrompt || null, // Custom system prompt for the agent
       category: category || null,
       industry: industry || null,
       tokenPrice: tokenPrice !== null && tokenPrice !== undefined ? tokenPrice : 2, // Default to 2 if not provided
@@ -2346,6 +2361,7 @@ app.patch('/api/personal-agent/models/:modelId', async (req, res) => {
       isPublic: updates.isPublic,
       purpose: updates.purpose,
       useCase: updates.useCase,
+      systemPrompt: updates.systemPrompt,
       category: updates.category,
       industry: updates.industry,
       tokenPrice: updates.tokenPrice !== undefined ? updates.tokenPrice : undefined,
