@@ -1,36 +1,73 @@
 ﻿rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 钱包集合 - 开发期临时放开，生产环境需要更严格规则
-    match /wallets/{addr} {
-      allow read, write: if true; // 开发期临时放开
+    // ============================================================
+    // 🔒 钱包集合 - 严格权限控制
+    // ============================================================
+    match /wallets/{address} {
+      // ✅ 前端可读（获取余额、签到数据等）
+      allow read: if request.auth != null;
+      
+      // ❌ 前端禁止写（所有修改必须通过后端 Cloud Function）
+      allow write: if false;
+      
+      // ✅ 仅限后端服务账户写入（通过 setCustomClaims 验证）
+      allow write: if request.auth.token.admin == true;
+      
+      // 交易/签到历史子集合
+      match /transactions/{docId} {
+        allow read: if request.auth != null;
+        allow write: if false;  // 仅后端可写
+        allow write: if request.auth.token.admin == true;
+      }
     }
     
-    // 用户集合 - 只有认证用户才能访问自己的数据
+    // ============================================================
+    // 用户集合 - 基于 UID 的权限
+    // ============================================================
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
       
       // 用户钱包子集合
       match /wallets/{addr} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;  // 禁止前端修改
       }
     }
 
-    // 新增：基于钱包地址的用户档案（开发期开放，生产需收紧）
-    match /users_by_wallet/{addr} {
-      allow read, write: if true; // DEV ONLY
+    // ============================================================
+    // 基于钱包地址的用户档案
+    // ============================================================
+    match /users_by_wallet/{address} {
+      allow read: if request.auth != null;
+      allow write: if false;  // 仅后端可写
+      allow write: if request.auth.token.admin == true;
     }
 
-    // 交易记录集合
+    // ============================================================
+    // 全局交易记录（审计日志）
+    // ============================================================
     match /transactions/{transactionId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow write: if false;  // 仅后端可写
+      allow write: if request.auth.token.admin == true;
     }
 
+    // ============================================================
+    // 上传文件存储
+    // ============================================================
     match /uploads/{uid}/{filename} {
+      allow read: if true;  // 公开可读
       allow write: if request.auth != null && request.auth.uid == uid;
-      allow read: if true; // or restrict
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
     
+    // ============================================================
+    // Admin 配置（邮箱列表等）
+    // ============================================================
+    match /admin/config {
+      allow read: if request.auth != null;
+      allow write: if false;  // 仅后端管理员可写
+    }
   }
 }

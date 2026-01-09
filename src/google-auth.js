@@ -63,27 +63,16 @@ class GoogleAuthManager {
   }
 
   async handleDailyCheckin() {
-    if (!this.currentUser || !this.userData) {
-      console.error('No user logged in');
-      return;
-    }
-
-    try {
-      const newCredits = (this.userData.credits || 0) + 30;
-      await updateUserCredits(this.currentUser.uid, newCredits);
-      
-      // Update local data
-      this.userData.credits = newCredits;
-      
-      // Update UI
-      this.updateCreditsDisplay(newCredits);
-      
-      // Show success message
-      this.showCheckinSuccess();
-      
-      console.log('Daily check-in successful, credits updated to:', newCredits);
-    } catch (error) {
-      console.error('Error during daily check-in:', error);
+    // 代理到全局 handleDailyCheckin 函数（在 HTML 中定义）
+    if (typeof window.handleDailyCheckin === 'function') {
+      try {
+        await window.handleDailyCheckin();
+      } catch (error) {
+        console.error('Error during daily check-in:', error);
+        this.showCheckinError();
+      }
+    } else {
+      console.error('Global handleDailyCheckin function not available');
       this.showCheckinError();
     }
   }
@@ -158,7 +147,7 @@ class GoogleAuthManager {
   }
 
   showCheckinSuccess() {
-    // Create and show success notification
+    // 创建并显示成功通知
     const notification = document.createElement('div');
     notification.style.cssText = `
       position: fixed;
@@ -172,11 +161,11 @@ class GoogleAuthManager {
       font-size: 14px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     `;
-    notification.textContent = '✅ Daily check-in successful! +30 Credits';
+    notification.textContent = '✅ Daily check-in successful!';
     
     document.body.appendChild(notification);
     
-    // Remove after 3 seconds
+    // 3 秒后移除
     setTimeout(() => {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification);

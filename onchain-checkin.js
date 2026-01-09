@@ -439,10 +439,9 @@ async function updateFirebaseAfterOnChainCheckIn(credits, txHash, streak) {
             });
         }
 
-        // 同步到本地
+        // 同步到本地内存
         if (window.walletManager) {
             window.walletManager.credits = (window.walletManager.credits || 0) + credits;
-            window.walletManager.saveToStorage();
         }
 
         console.log('Firebase updated after on-chain check-in');
@@ -668,30 +667,19 @@ function applySolanaPostSuccessUI({ reward = 30 } = {}) {
     if (streakEl) streakEl.textContent = `${num(streakEl) + 1} days`;
     if (totalEl) totalEl.textContent = String(num(totalEl) + 1);
 
-    // 3) 本地credits统计
-    const getNum = (k) => Number(localStorage.getItem(k) || '0');
-    const setNum = (k, v) => localStorage.setItem(k, String(v));
+    // 3) 同步到 Firebase（使用 increment 原子操作）
+    if (window.walletManager) {
+        window.walletManager.credits = (window.walletManager.credits || 0) + reward;
+    }
 
-    const newCredits = getNum('user_credits') + reward;
-    setNum('user_credits', newCredits);
-    setNum('total_earned', getNum('total_earned') + reward);
-    setNum('total_checkins', getNum('total_checkins') + 1);
-
-    // 4) 交易明细
+    // 异步更新 Firebase（不阻塞UI）
     try {
-        const arr = JSON.parse(localStorage.getItem('credit_transactions') || '[]');
-        arr.unshift({ 
-            type: 'checkin', 
-            chain: 'solana-devnet', 
-            amount: reward, 
-            ts: Date.now() 
-        });
-        localStorage.setItem('credit_transactions', JSON.stringify(arr.slice(0, 200)));
+        updateFirebaseAfterOnChainCheckIn(reward, '', 0).catch(err => 
+            console.warn('[Solana] Failed to update Firebase:', err)
+        );
     } catch {}
 
-    // 5) 刷新总积分显示
-    const totalCreditsEl = document.getElementById('totalCredits');
-    if (totalCreditsEl) totalCreditsEl.textContent = String(newCredits);
+    // 4) 更新总积分显示
 
     // 6) 标记今日已签
     try {

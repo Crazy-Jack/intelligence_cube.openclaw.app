@@ -988,6 +988,8 @@
     </script>
 
     <script src="wallet-manager.js"></script>
+    <script src="credit-api-wrapper.js"></script>
+    <script src="unified-spend-credits.js"></script>
 	<script src="wallet-integration.js"></script>
     <script src="onchain-checkin.js"></script>
         <!-- Follow X Modal -->
@@ -1393,101 +1395,19 @@
             try {
                 // 1. 检查钱包连接
                 if (!window.walletManager || !window.walletManager.isConnected) {
-                    alert('Please connect your MetaMask wallet to claim the daily check-in bonus.');
+                    alert('Please connect your wallet to claim the daily check-in bonus.');
                     return;
                 }
 
-                // 2. 判断是否为 Admin
+                // 2. 后台检查是否为 Admin（无 UI 提示）
                 const isAdminUser = window.isAdmin && window.isAdmin();
                 
                 if (isAdminUser) {
-                    // ===== Admin 用户 → 执行完整的本地签到 + Firebase 同步 =====
+                    // ✨ Admin 用户 → 直接获得 10000 credits
                     console.log('🔑 Admin user detected, executing local check-in');
-                    
-                    const address = (window.walletManager.walletAddress || '').toLowerCase();
-                    
-                    if (window.firebaseDb && address) {
-                        const { doc, getDoc, setDoc, updateDoc, serverTimestamp } = 
-                            await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-
-                        const walletRef = doc(window.firebaseDb, 'wallets', address);
-                        const snap = await getDoc(walletRef);
-
-                        let lastCheckinAt = null;
-                        let remoteTotalCheckins = 0;
-                        
-                        if (snap.exists()) {
-                            const data = snap.data() || {};
-                            lastCheckinAt = data.lastCheckinAt || null;
-                            remoteTotalCheckins = Number(data.totalCheckins || 0);
-                        } else {
-                            await setDoc(walletRef, {
-                                address: address,
-                                createdAt: serverTimestamp(),
-                                totalCheckins: 0
-                            }, { merge: true });
-                        }
-
-                        // 同步远端时间戳到本地
-                        if (lastCheckinAt && typeof lastCheckinAt.toMillis === 'function') {
-                            try { 
-                                localStorage.setItem('last_checkin_at', String(lastCheckinAt.toMillis())); 
-                            } catch (_) {}
-                        }
-
-                        // 执行本地签到
-                        const result = window.walletManager.dailyCheckin();
-                        if (!result || !result.success) {
-                            alert(result?.error || '签到失败，请稍后重试');
-                            return;
-                        }
-
-                        // 同步到 Firestore
-                        try {
-                            await updateDoc(walletRef, {
-                                lastCheckinAt: serverTimestamp(),
-                                totalCheckins: remoteTotalCheckins + 1,
-                                credits: window.walletManager.credits,
-                                lastUpdated: serverTimestamp(),
-                                lastCheckinType: 'local-admin'
-                            });
-                        } catch (e) {
-                            console.warn('⚠️ 更新 Firestore 失败（可忽略）：', e);
-                        }
-
-                        // 同步到 users_by_wallet
-                        try {
-                            const walletUserRef = doc(window.firebaseDb, 'users_by_wallet', address);
-                            await setDoc(walletUserRef, {
-                                lastCheckinAt: serverTimestamp(),
-                                totalCheckins: remoteTotalCheckins + 1,
-                                lastUpdated: serverTimestamp()
-                            }, { merge: true });
-                        } catch (e) {
-                            console.warn('⚠️ 同步失败（可忽略）：', e);
-                        }
-
-                        // 如果有 Google 账户，同步到 users/<uid>
-                        if (window.currentUser && window.currentUser.uid) {
-                            try {
-                                const userRef = doc(window.firebaseDb, 'users', window.currentUser.uid);
-                                await updateDoc(userRef, { lastUpdated: serverTimestamp() });
-                            } catch (e) {
-                                console.warn('⚠️ 同步到 users 失败（可忽略）：', e);
-                            }
-                        }
-
-                        return;
-                    }
-
-                    // Firebase 不可用时的降级处理
-                    const result = window.walletManager.dailyCheckin();
-                    if (!result || !result.success) {
-                        alert(result?.error || '签到失败，请稍后重试');
-                    }
-                    
+                    await executeAdminCheckin();
                 } else {
-                    // ===== 普通用户 → 打开链上签到 Modal =====
+                    // 普通用户 → 打开链上签到 Modal
                     console.log('👤 Regular user detected, opening on-chain check-in modal');
                     
                     if (typeof window.openOnChainCheckInModal === 'function') {
@@ -1503,10 +1423,76 @@
                 }
                 
             } catch (error) {
-                console.error('签到失败:', error);
-                alert('签到失败: ' + error.message);
+                console.error('Daily check-in error:', error);
+                alert('Check-in failed: ' + error.message);
             }
         };
+
+        // ✨ 新增：Admin Check In 函数（直接获得 10000 credits）
+        async function executeAdminCheckin() {
+            try {
+                const address = (window.walletManager.walletAddress || '').toLowerCase();
+                
+                if (!window.firebaseDb || !address) {
+                    alert('Firebase or wallet address not available');
+                    return;
+                }
+
+                const { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment } = 
+                    await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+                const walletRef = doc(window.firebaseDb, 'wallets', address);
+                const snap = await getDoc(walletRef);
+
+                let remoteTotalCheckins = 0;
+                
+                if (snap.exists()) {
+                    const data = snap.data() || {};
+                    remoteTotalCheckins = Number(data.totalCheckins || 0);
+                } else {
+                    // 首次签到，创建文档
+                    await setDoc(walletRef, {
+                        address: address,
+                        createdAt: serverTimestamp(),
+                        totalCheckins: 0,
+                        credits: 0
+                    }, { merge: true });
+                }
+
+                // 💰 Admin 直接获得 10000 credits
+                const adminReward = 10000;
+                
+                // 1️⃣ 更新内存
+                window.walletManager.credits += adminReward;
+                window.walletManager.updateUI();
+                
+                // 2️⃣ 原子操作：写入 Firebase
+                try {
+                    await updateDoc(walletRef, {
+                        credits: increment(adminReward),
+                        lastCheckinAt: serverTimestamp(),
+                        totalCheckins: increment(1),
+                        currentStreak: remoteTotalCheckins + 1,
+                        lastUpdated: serverTimestamp(),
+                        lastCheckinType: 'local-admin'
+                    });
+                    console.log(`✅ Admin check-in successful: +${adminReward} credits`);
+                } catch (e) {
+                    console.error('❌ Failed to update Firebase:', e);
+                    // 回滚内存
+                    window.walletManager.credits -= adminReward;
+                    window.walletManager.updateUI();
+                    throw e;
+                }
+
+                // 3️⃣ UI 反馈
+                alert(`✅ Check-in successful! +${adminReward} I3 tokens earned`);
+                
+            } catch (error) {
+                console.error('Admin check-in failed:', error);
+                alert('Check-in failed: ' + error.message);
+            }
+        }
 
         // Global helper: clear ALL local data (localStorage and sessionStorage) ONLY.
         // Does not sign out or disconnect wallet. Backward compatible signature.
