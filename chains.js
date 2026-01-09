@@ -1,20 +1,42 @@
-// chains.js — 统一管理 EVM & Solana 的“当前链”与元数据
+// chains.js — 统一管理 EVM & Solana 的"当前链"与元数据
 
 export const EVM_CHAINS = [
-  { key: 'bsc',   type: 'evm', chainIdHex: '0x38', displayName: 'BNB Chain' },
-  { key: 'opbnb', type: 'evm', chainIdHex: '0xcc', displayName: 'opBNB' },
+  { key: 'bsc',   type: 'evm', chainIdHex: '0x38',   displayName: 'BNB Chain' },
+  { key: 'opbnb', type: 'evm', chainIdHex: '0xcc',   displayName: 'opBNB' },
+  { key: 'eth',   type: 'evm', chainIdHex: '0x1',    displayName: 'Ethereum' },
+  { key: 'base',  type: 'evm', chainIdHex: '0x2105', displayName: 'Base' },
 ];
+
+function normalizeSolanaCluster(raw) {
+  const v = String(raw || '').toLowerCase().trim();
+  if (!v) return 'devnet';
+  if (v === 'mainnet-beta' || v === 'mainnet' || v === 'mainnetbeta') return 'mainnet';
+  if (v === 'testnet') return 'testnet';
+  return 'devnet';
+}
+
+const SOLANA_PROGRAM_ID_BY_CLUSTER = {
+  mainnet: 'YourSolanaMainnetProgramId',  // 🔴 部署后填写你的 Solana Mainnet Program ID
+  devnet:  'HDNJ2F8CMHksj2EzuutDZiHrduCyi4KLZGabpdCs5BfZ',  // 你现有的 devnet Program ID
+  testnet: undefined,  // 如果有 testnet 部署可以填写
+};
+
+const DEFAULT_SOLANA_PROGRAM_ID =
+  (window?.ENV?.SOLANA_PROGRAM_ID) || 'HDNJ2F8CMHksj2EzuutDZiHrduCyi4KLZGabpdCs5BfZ';
+
+const _solCluster = normalizeSolanaCluster(localStorage.getItem('solanaCluster') || (window?.ENV?.SOLANA_CLUSTER) || 'devnet');
+const _solProgramId = SOLANA_PROGRAM_ID_BY_CLUSTER[_solCluster] || DEFAULT_SOLANA_PROGRAM_ID;
 
 export const SOLANA = {
   key: 'solana',
   type: 'solana',
-  cluster: (window?.ENV?.SOLANA_CLUSTER) || 'devnet',
+  cluster: _solCluster,
   endpointByCluster: {
     mainnet: 'https://api.mainnet-beta.solana.com',
     devnet:  'https://api.devnet.solana.com',
     testnet: 'https://api.testnet.solana.com',
   },
-  programId: (window?.ENV?.SOLANA_PROGRAM_ID) || 'HDNJ2F8CMHksj2EzuutDZiHrduCyi4KLZGabpdCs5BfZ',
+  programId: _solProgramId,
   idlPath: '/solana-idl.json',
   explorerByCluster: {
     mainnet: 'https://explorer.solana.com',
@@ -49,6 +71,17 @@ export function solanaExplorerTx(sig) {
   return `${base}/tx/${sig}`;
 }
 
+export function setSolanaCluster(clusterRaw) {
+  const c = normalizeSolanaCluster(clusterRaw);
+  SOLANA.cluster = c;
+  localStorage.setItem('solanaCluster', c);
+  // 同步 programId（允许你为 mainnet/devnet 配不同 programId）
+  const pid = SOLANA_PROGRAM_ID_BY_CLUSTER[c] || (window?.ENV?.SOLANA_PROGRAM_ID) || SOLANA.programId;
+  SOLANA.programId = pid;
+  window.dispatchEvent(new CustomEvent('solanaClusterChanged', { detail: { cluster: c } }));
+}
+
 // 让非模块脚本也能用
 window.setCurrentChain  = setCurrentChain;
 window.isSolanaSelected = isSolanaSelected;
+window.setSolanaCluster = setSolanaCluster;

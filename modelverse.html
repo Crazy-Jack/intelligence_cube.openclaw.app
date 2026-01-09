@@ -26,6 +26,10 @@
 
     <script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
     
+    <!-- Binance Web3 Wallet SDK Provider (for QR code connection) -->
+    <!-- Using npm bundle with proper crypto polyfills -->
+    <script type="module" src="binance-sdk.js?v=4"></script>
+    
     <!-- Base Account SDK -->
     <script src="https://unpkg.com/@base-org/account/dist/base-account.min.js"></script>
     
@@ -338,7 +342,7 @@
 		  opacity: 0;
 		  pointer-events: none;
 		  transition: opacity .25s ease;
-		  z-index: 9999;
+		  z-index: 10010;
 		}
 		.network-modal.show {
 		  opacity: 1;
@@ -430,9 +434,9 @@
 		.network-badge__icon{ width:20px; height:20px; object-fit:contain; display:block }
 		.network-badge__text{ font-size:14px; font-weight:600; letter-spacing:.2px }
 		.network-badge__caret{ width:16px; height:16px; opacity:.6 }
-		@media (max-width: 768px){
+		/* @media (max-width: 768px){
 		  .network-badge{ display:none !important; }
-		}
+		} */
 
     </style>
 </head>
@@ -622,6 +626,8 @@
     }
     </script>
     <script type="module">
+        import AppKit from "https://unpkg.com/@reown/appkit@1.8.4/dist/index.js?module";
+
         import googleAuthManager from './src/google-auth.js';
         window.googleAuthManager = googleAuthManager;
         window.handleGoogleSignIn = () => googleAuthManager.signIn();
@@ -866,7 +872,7 @@
                 <!-- Tab Switcher -->
                 <div class="modelverse-tab-switcher">
                     <button class="modelverse-tab-btn active" data-tab="local" onclick="switchModelverseTab('local')">Intelligence Cubed Models</button>
-                    <button class="modelverse-tab-btn" data-tab="hf" onclick="switchModelverseTab('hf')">Hugging Face Models</button>
+                    <button class="modelverse-tab-btn" data-tab="hf" onclick="switchModelverseTab('hf')">Public Owned Models</button>
                 </div>
 
                 <!-- Local Models Panel -->
@@ -916,7 +922,7 @@
                             "
                             onchange="performCategorySearch()"
                         >
-                            <option value="">Please Select a Category</option>
+                            <option value="">None</option>
                             <option value="text-classification">Text Classification</option>
                             <option value="token-classification">Token Classification</option>
                             <option value="question-answering">Question Answering</option>
@@ -963,6 +969,9 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Pagination Controls -->
+                    <div id="hfPaginationContainer" style="display: none; margin-top: 16px;"></div>
 
                     <!-- Mobile Model List View (HF) -->
                     <div class="mobile-models-list" id="hfMobileModelsList">
@@ -1411,7 +1420,7 @@
           if (modelData && modelData._hf) {
             const baseModel = safeText(modelData.baseModel || modelData.category || '-');
             const author = safeText(modelData.author || '-');
-            const downloads = formatStat(modelData.downloads);
+            const downloads = modelData.downloads === 0 || !Number.isFinite(Number(modelData.downloads)) ? 'N/A' : formatStat(modelData.downloads);
             const likes = formatStat(modelData.likes);
             const lastUpdated = formatDateInline(modelData.lastModified);
             metricsSection = `
@@ -1566,6 +1575,13 @@
         document.addEventListener('DOMContentLoaded', function() {
             generateModelTable();
             generateMobileModelList(); // 同时生成手机端列表
+                        // Append Hugging Face models (metadata view + disabled actions) - Page 1
+            try {
+              if (window.appendHuggingFaceModels) window.appendHuggingFaceModels(1, true);
+              if (window.appendHuggingFaceModelsToMobile) window.appendHuggingFaceModelsToMobile(1, true);
+            } catch (e) {
+              console.warn('Appending HF models failed', e);
+            }
             initMobileSearchResults(); // 初始化手机端搜索结果显示
           });
 
@@ -1734,6 +1750,12 @@
           border:1px solid #e5e7eb;
           border-radius: 12px; padding: 20px;
           display:flex; flex-direction:column; align-items:center; justify-content:center;
+          min-width: 220px;
+        }
+        .mvpro-chart canvas{
+          width: 180px !important;
+          height: 180px !important;
+          aspect-ratio: 1 / 1;
         }
         .mvpro-chart-title{ font-weight: 700; margin-bottom: 16px; color: #1f2937; }
         .mvpro-legend{ display:flex; gap: 18px; margin-top: 12px; color: #6b7280; font-size: 13px; }
@@ -1762,9 +1784,128 @@
         /* Scroll lock for page */
         body.mvpro-lock{ overflow: hidden; }
 
-        /* Responsive tweak: stack columns on small screens (still static content) */
+        /* Responsive tweak: stack columns on small screens */
         @media (max-width: 920px){
           .mvpro-body{ grid-template-columns: 1fr; }
+          .mvpro-chart{ order: 2; } /* Show chart last on mobile */
+        }
+        
+        /* Mobile-specific styles */
+        @media screen and (max-width: 640px){
+          .mvpro-overlay{
+            padding: 0;
+          }
+          
+          .mvpro-card{
+            width: 100vw !important;
+            max-width: 100vw !important;
+            height: 100vh;
+            max-height: 100vh;
+            border-radius: 0;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+          }
+          
+          .mvpro-header{
+            padding: 16px;
+            border-radius: 0;
+            flex-shrink: 0;
+          }
+          
+          .mvpro-title{
+            font-size: 18px;
+          }
+          
+          .mvpro-body{
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 16px;
+          }
+          
+          .mvpro-info{
+            order: 1;
+          }
+          
+          .mvpro-chart{
+            order: 2;
+            padding: 16px;
+            min-width: unset;
+            width: 100%;
+          }
+          
+          .mvpro-chart canvas{
+            width: 140px !important;
+            height: 140px !important;
+          }
+          
+          .mvpro-chart-title{
+            font-size: 14px;
+            margin-bottom: 12px;
+          }
+          
+          .mvpro-legend{
+            flex-direction: column;
+            gap: 8px;
+            font-size: 12px;
+          }
+          
+          .mvpro-kpis{
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+          }
+          
+          .mvpro-kpi{
+            padding: 10px 12px;
+          }
+          
+          .mvpro-kpi .lbl{
+            font-size: 11px;
+          }
+          
+          .mvpro-kpi .val{
+            font-size: 14px;
+          }
+          
+          .mvpro-pills{
+            gap: 8px;
+          }
+          
+          .mvpro-pill{
+            padding: 6px 10px;
+            font-size: 12px;
+          }
+          
+          .mvpro-label{
+            font-size: 11px;
+          }
+          
+          .mvpro-text{
+            font-size: 13px;
+          }
+          
+          .mvpro-actions{
+            flex-wrap: wrap;
+            padding: 12px 16px 16px;
+            gap: 8px;
+            border-radius: 0;
+            flex-shrink: 0;
+          }
+          
+          .mvpro-btn{
+            flex: 1 1 auto;
+            min-width: calc(50% - 4px);
+            padding: 12px 14px;
+            font-size: 14px;
+            text-align: center;
+          }
+          
+          .mvpro-btn:last-child{
+            flex-basis: 100%;
+          }
         }
 
         /* Follow X Modal */
@@ -1998,7 +2139,7 @@
 
                 <aside class="mvpro-chart">
                     <div class="mvpro-chart-title">Public Share Purchased</div>
-                    <canvas id="shareChart" width="220" height="220"></canvas>
+                    <canvas id="shareChart" width="180" height="180" style="width:180px;height:180px;aspect-ratio:1/1;"></canvas>
                     <div class="mvpro-legend">
                         <div class="item"><span class="mvpro-dot p"></span>Purchased (%)</div>
                         <div class="item"><span class="mvpro-dot r"></span>Remaining (%)</div>
@@ -2999,8 +3140,8 @@
                 <!-- Binance Wallet 选项 -->
                 <div class="wallet-option available" onclick="connectBinanceWallet()">
                     <span class="wallet-icon-wrap">
-                        <!-- 你自己的官方 SVG/PNG -->
-                        <img src="svg/binance.svg" alt="Binance Wallet">
+                        <!-- 使用 binance_wallet.jpeg 作为图标 -->
+                        <img src="png/binance_wallet.jpeg" alt="Binance Wallet">
                     </span>
                     <div class="wallet-info">
                         <div class="wallet-name">Binance Wallet</div>
@@ -3055,10 +3196,13 @@
 
             <div style="margin: 20px 0;">
                 <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Select Network</label>
-                <select id="chainSelector" style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                <select id="chainSelector" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
                     <option value="BSC">BNB Smart Chain (BSC)</option>
                     <option value="OPBNB">opBNB Mainnet</option>
-                    <option value="SOLANA">Solana Devnet</option>
+                    <option value="ETH">Ethereum Mainnet</option>
+                    <option value="BASE">Base Mainnet</option>
+                    <option value="SOLANA_DEVNET">Solana Devnet</option>
+                    <option value="SOLANA_MAINNET">Solana Mainnet</option>
                 </select>
             </div>
 
@@ -3405,6 +3549,11 @@
         #chainSelector {
             padding: 12px !important;
             font-size: 14px !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background-color: #fff !important;
+            color: #374151 !important;
         }
     }
 

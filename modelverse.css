@@ -489,10 +489,27 @@
     display: flex;
 }
 
-/* When content is full-width, use block layout */
+/* When content is full-width, use block layout + 中间手机卡片效果 */
 body:has(.modelverse-content.full-width) .main-layout,
 .main-layout.full-width-layout {
     display: block;
+    width: 100%;
+    max-width: 100%;    /* 桌面端全宽显示 */
+    margin: 0 auto;     /* 居中 */
+    padding: 16px;      /* 两边留白 */
+}
+
+/* 仅在移动端限制宽度 */
+@media (max-width: 768px) {
+    .main-layout.full-width-layout {
+        max-width: 450px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .main-layout.full-width-layout {
+        padding: 24px 0 32px; /* 大屏时上下多一点呼吸感，两侧靠 body 背景 */
+    }
 }
 
 .modelverse-container {
@@ -518,6 +535,22 @@ body:has(.modelverse-content.full-width) .main-layout,
     
     .mobile-models-list {
         padding: 12px;
+    }
+    
+    /* Make top bar elements fit in one row on phones */
+    .header .network-badge {
+        padding: 4px 8px !important;
+        height: 28px !important;
+        gap: 6px !important;
+        white-space: nowrap !important;
+    }
+    .header .network-badge__text {
+        font-size: 12px !important;
+        font-weight: 600 !important;
+    }
+    .header .header-right {
+        min-width: 0;
+        gap: 6px;
     }
 }
 

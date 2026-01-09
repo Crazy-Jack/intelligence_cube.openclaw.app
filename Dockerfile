@@ -16,8 +16,9 @@ COPY . .
 # Expose port 8080 (Cloud Run requirement)
 EXPOSE 8080
 
-# Set environment variable for port
+# Set environment variables
 ENV PORT=8080
+ENV NODE_ENV=production
 
 # Start the Express server
 CMD ["npm", "start"]

@@ -12,6 +12,12 @@ body {
     color: #333;
     line-height: 1.4;
     min-height: 100vh;
+    /* 移动端优化 */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    /* 确保在真机上正确显示 */
+    width: 100%;
+    overflow-x: hidden;
 }
 
 /* Top Banner */
@@ -197,7 +203,8 @@ body {
 /* Main Layout */
 .main-layout {
     display: flex;
-    height: calc(100vh - 56px);
+    /* 用 min-height 避免 100vh 在移动端地址栏伸缩时造成跳动 */
+    min-height: calc(100vh - 56px);
 }
 
 /* Sidebar */
@@ -712,18 +719,23 @@ input:checked + .slider:before {
         gap: 12px;
         padding: 8px 0;
         min-height: 56px;
+        /* Stack into two rows: logo row then controls row */
+        flex-direction: column;
+        align-items: stretch;
     }
     
     .header-left {
         gap: 12px;
-        flex: 1;
+        flex: 0 0 auto;
         display: flex;
         align-items: center;
+        justify-content: flex-start;
+        width: 100%;
     }
     
     .logo-image {
-        height: 32px;
-        max-width: 140px;
+        height: 36px;
+        max-width: 160px;
     }
     
     .nav-menu {
@@ -736,7 +748,17 @@ input:checked + .slider:before {
     
     .header-right {
         gap: 6px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        position: static;
+        left: auto;
+        top: auto;
+        transform: none;
+        translate: none;
+        justify-content: center;
+        z-index: 1;
+        min-width: 0;
+        width: 100%;
+        margin-top: 2px;
     }
     
     .discover-btn,
@@ -844,8 +866,8 @@ input:checked + .slider:before {
     }
     
     .logo-image {
-        height: 28px;
-        max-width: 120px;
+        height: 32px;
+        max-width: 140px;
     }
     
     .header-right {
@@ -961,7 +983,7 @@ input:checked + .slider:before {
     }
     
     .logo-image {
-        height: 24px;
+        height: 28px;
     }
     
     .terminal-title {

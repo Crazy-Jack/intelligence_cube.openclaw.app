@@ -48,7 +48,7 @@
           <div class="task-item" id="taskFollowX">
             <div class="task-info">
               <div class="task-icon">
-                <img src="svg/X.svg" alt="X" />
+                <img src="svg/x.svg" alt="X" />
               </div>
 
               <div class="task-details">

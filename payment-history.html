@@ -25,6 +25,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
     
+    <!-- Binance Web3 Wallet SDK Provider (for QR code connection) -->
+    <!-- Using npm bundle with proper crypto polyfills -->
+    <script type="module" src="binance-sdk.js?v=4"></script>
+    
     <!-- Base Account SDK -->
     <script src="https://unpkg.com/@base-org/account/dist/base-account.min.js"></script>
     
@@ -337,7 +341,7 @@
 		  opacity: 0;
 		  pointer-events: none;
 		  transition: opacity .25s ease;
-		  z-index: 9999;
+		  z-index: 10010;
 		}
 		.network-modal.show {
 		  opacity: 1;
@@ -429,9 +433,9 @@
 		.network-badge__icon{ width:20px; height:20px; object-fit:contain; display:block }
 		.network-badge__text{ font-size:14px; font-weight:600; letter-spacing:.2px }
 		.network-badge__caret{ width:16px; height:16px; opacity:.6 }
-		@media (max-width: 768px){
+		/* @media (max-width: 768px){
 		  .network-badge{ display:none !important; }
-		}
+		} */
 
         /* Follow X Modal */
         .follow-x-modal {
@@ -1984,8 +1988,8 @@
                 <!-- Binance Wallet 选项 -->
                 <div class="wallet-option available" onclick="connectBinanceWallet()">
                     <span class="wallet-icon-wrap">
-                        <!-- 你自己的官方 SVG/PNG -->
-                        <img src="svg/binance.svg" alt="Binance Wallet">
+                        <!-- 使用 binance_wallet.jpeg 作为图标 -->
+                        <img src="png/binance_wallet.jpeg" alt="Binance Wallet">
                     </span>
                     <div class="wallet-info">
                         <div class="wallet-name">Binance Wallet</div>
@@ -2040,10 +2044,13 @@
 
             <div style="margin: 20px 0;">
                 <label style="display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Select Network</label>
-                <select id="chainSelector" style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                <select id="chainSelector" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
                     <option value="BSC">BNB Smart Chain (BSC)</option>
                     <option value="OPBNB">opBNB Mainnet</option>
-                    <option value="SOLANA">Solana Devnet</option>
+                    <option value="ETH">Ethereum Mainnet</option>
+                    <option value="BASE">Base Mainnet</option>
+                    <option value="SOLANA_DEVNET">Solana Devnet</option>
+                    <option value="SOLANA_MAINNET">Solana Mainnet</option>
                 </select>
             </div>
 

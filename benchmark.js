@@ -44,8 +44,8 @@ function sanitizeUrl(u) {
     return s || null;
 }
 
-// HF benchmark settings & caches
-const HF_BENCHMARK_LIMIT = 50; // number of HF benchmark items to account for
+// HF benchmark settings & caches (disabled - showing only Intelligence Cubed models)
+const HF_BENCHMARK_LIMIT = 0; // HuggingFace models disabled
 let hfBenchmarkListCache = null; // cached list from HF (array)
 let hfBenchmarkDetailsCache = {}; // id -> {api, readme, normalized}
 
@@ -102,12 +102,13 @@ function loadModelBenchmark() {
         return;
     }
     
-    const allModels = getTopModelsByScore(100);
-    // Compute total items/pages including the HF retrieval limit without fetching immediately
-    PAGINATION_CONFIG.modelBenchmark.totalItems = allModels.length + HF_BENCHMARK_LIMIT;
-    PAGINATION_CONFIG.modelBenchmark.totalPages = Math.ceil(PAGINATION_CONFIG.modelBenchmark.totalItems / PAGINATION_CONFIG.modelBenchmark.itemsPerPage);
+    const allModels = getTopModelsByScore(600);  // Show all models (up to 600)
+    // Fixed total count of 506 for Intelligence Cubed models (no HuggingFace)
+    const I3_TOTAL_MODELS = 506;
+    PAGINATION_CONFIG.modelBenchmark.totalItems = I3_TOTAL_MODELS;
+    PAGINATION_CONFIG.modelBenchmark.totalPages = Math.ceil(I3_TOTAL_MODELS / PAGINATION_CONFIG.modelBenchmark.itemsPerPage);
 
-    console.log(`🏆 模型基准测试：本地 ${allModels.length} 个模型，预估 HF 附加 ${HF_BENCHMARK_LIMIT} 个，总计 ${PAGINATION_CONFIG.modelBenchmark.totalItems} 个，${PAGINATION_CONFIG.modelBenchmark.totalPages} 页`);
+    console.log(`🏆 模型基准测试：${allModels.length} 个本地模型，显示总计 ${I3_TOTAL_MODELS} 个，${PAGINATION_CONFIG.modelBenchmark.totalPages} 页`);
 
     displayModelBenchmarkPage(1);
     setupTooltips();
@@ -124,67 +125,15 @@ function loadModelBenchmark() {
     }
 }
 
-// 显示模型基准测试指定页面
-async function displayModelBenchmarkPage(page) {
+// 显示模型基准测试指定页面 (Intelligence Cubed models only, no HuggingFace)
+function displayModelBenchmarkPage(page) {
     PAGINATION_CONFIG.modelBenchmark.currentPage = page;
 
-    const allModels = getTopModelsByScore(100);
-    const originalCount = allModels.length;
+    const allModels = getTopModelsByScore(600);  // Show all local models
     const startIndex = (page - 1) * PAGINATION_CONFIG.modelBenchmark.itemsPerPage;
-    const endIndex = startIndex + PAGINATION_CONFIG.modelBenchmark.itemsPerPage;
+    const endIndex = Math.min(startIndex + PAGINATION_CONFIG.modelBenchmark.itemsPerPage, allModels.length);
 
-    // If the requested page falls entirely within local models
-    if (endIndex <= originalCount) {
-        const pageModels = allModels.slice(startIndex, endIndex);
-        populateBenchmarkTable(pageModels);
-        addPagination('modelBenchmark');
-        return;
-    }
-
-    // Otherwise, we need to include HF benchmark entries for the overflow region
-    const pageModels = [];
-    // include any remaining local models on this page
-    if (startIndex < originalCount) {
-        pageModels.push(...allModels.slice(startIndex, originalCount));
-    }
-
-    // Determine HF slice indexes (relative to HF list)
-    const hfStart = Math.max(0, startIndex - originalCount);
-    const hfEnd = endIndex - originalCount; // exclusive
-
-    // Fetch HF list lazily if not cached
-    if (!hfBenchmarkListCache) {
-        hfBenchmarkListCache = await fetchHuggingFaceModelsBenchmark(HF_BENCHMARK_LIMIT);
-    }
-    const hfIds = hfBenchmarkListCache.map(m => m.modelId || m.id || m.model || (m.repository && m.repository.name)).filter(Boolean);
-
-    // Slice the HF ids for this page
-    const pageHfIds = hfIds.slice(hfStart, hfEnd);
-
-    // Fetch detailed normalized cards for these HF ids
-    const hfDetails = await fetchAllModelCardsBenchmark(pageHfIds, 6);
-
-    // Convert HF details to model-like objects and append
-    for (const id of pageHfIds) {
-        const hf = hfDetails[id];
-        const normalized = hf && hf.normalized ? hf.normalized : null;
-        if (normalized) MODEL_DATA[id] = normalized; // cache for modal
-        const modelObj = {
-            name: id,
-            category: normalized ? normalized.category : '-',
-            industry: normalized ? normalized.industry : '-',
-            tokenPrice: '-',
-            sharePrice: '-',
-            change: '-',
-            // ensure numeric 0 default when downloads/usage not available
-            usage: (normalized && typeof normalized.usage !== 'undefined') ? normalized.usage : 0,
-            compatibility: '-',
-            totalScore: '-',
-            _hf: true
-        };
-        pageModels.push(modelObj);
-    }
-
+    const pageModels = allModels.slice(startIndex, endIndex);
     populateBenchmarkTable(pageModels);
     addPagination('modelBenchmark');
 }
@@ -361,8 +310,8 @@ function generatePeerBenchmarkData() {
         return [];
     }
     
-    // 从 MODEL_DATA 中选择更多模型（增加到 50 个）
-    const modelEntries = Object.entries(MODEL_DATA).slice(0, 50);
+    // 从 MODEL_DATA 中选择所有模型
+    const modelEntries = Object.entries(MODEL_DATA);
     console.log('Selected models:', modelEntries.length);
     
     const peerData = modelEntries.map(([modelName, modelData], index) => {
@@ -1497,7 +1446,7 @@ function sortBenchmarkTable(sortBy) {
 // 应用所有筛选条件
 function applyAllFilters() {
     if (originalModelsData.length === 0) {
-        originalModelsData = getTopModelsByScore(100);
+        originalModelsData = getTopModelsByScore(600);  // Show all models (up to 600)
     }
     
     let filteredData = [...originalModelsData];
