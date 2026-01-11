@@ -1566,8 +1566,11 @@ async function loadPublicAgents() {
         const data = await response.json();
         publicAgents = data.agents || [];
         
+        // Sort by accessCount descending (most used first)
+        publicAgents.sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0));
+        
         renderPublicAgentsList(publicAgents);
-        console.log(`✅ Loaded ${publicAgents.length} public agents`);
+        console.log(`✅ Loaded ${publicAgents.length} public agents (sorted by uses)`);
     } catch (error) {
         console.error('Error loading public agents:', error);
         listDiv.innerHTML = '<div class="pa-empty-state"><p>Failed to load Agentverse</p></div>';
@@ -1586,8 +1589,14 @@ function renderPublicAgentsList(agents) {
     
     listDiv.innerHTML = agents.map(agent => `
         <div class="pa-model-item" onclick="viewPublicAgentDetails('${agent.modelId}')" style="cursor: pointer;">
-            <div class="pa-model-item-header">
+            <div class="pa-model-item-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <h3 class="pa-model-item-name">${escapeHtml(agent.name || 'Unnamed Agent')}</h3>
+                <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    ${agent.accessCount || 0}
+                </span>
             </div>
             <div class="pa-model-item-meta" style="margin-bottom: 8px;">
                 <span class="pa-model-item-badge public">Public</span>
