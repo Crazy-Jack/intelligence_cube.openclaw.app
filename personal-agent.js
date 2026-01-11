@@ -1,4 +1,4 @@
-// Personal Agent - Model Creator and RAG Infrastructure
+// Personal Agent - Agent Creator and RAG Infrastructure
 
 // Global state
 let currentWalletAddress = null;
@@ -163,8 +163,8 @@ async function loadModels() {
         console.log(`📋 Loading models for wallet: ${currentWalletAddress}`);
         const response = await fetch(`/api/personal-agent/models?ownerAddress=${encodeURIComponent(currentWalletAddress.toLowerCase())}`);
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to load models' }));
-            throw new Error(errorData.error || 'Failed to load models');
+            const errorData = await response.json().catch(() => ({ error: 'Failed to load agents' }));
+            throw new Error(errorData.error || 'Failed to load agents');
         }
         const data = await response.json();
         models = data.models || [];
@@ -172,7 +172,7 @@ async function loadModels() {
         renderModelList();
     } catch (error) {
         console.error('❌ Error loading models:', error);
-        showNotification('Failed to load models: ' + error.message, 'error');
+        showNotification('Failed to load agents: ' + error.message, 'error');
     }
 }
 
@@ -182,7 +182,7 @@ function renderModelList() {
     if (!modelList) return;
     
     if (models.length === 0) {
-        modelList.innerHTML = '<div class="pa-empty-state"><p>No models yet. Create your first model!</p></div>';
+        modelList.innerHTML = '<div class="pa-empty-state"><p>No agents yet. Create your first agent!</p></div>';
         return;
     }
     
@@ -200,7 +200,7 @@ function renderModelList() {
                                 : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'}
                         </svg>
                     </button>
-                    <button class="pa-model-item-action" onclick="deleteModel('${model.id}')" title="Delete model">
+                    <button class="pa-model-item-action" onclick="deleteModel('${model.id}')" title="Delete agent">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -245,15 +245,15 @@ async function loadModelDetails(modelId) {
                     renderModelDetails(foundModel);
                     await loadModelFiles(modelId);
                 } else {
-                    showNotification('Model not found', 'error');
+                    showNotification('Agent not found', 'error');
                 }
             } else {
-                showNotification('Failed to load model details', 'error');
+                showNotification('Failed to load agent details', 'error');
             }
         }
     } catch (error) {
         console.error('Error loading model details:', error);
-        showNotification('Failed to load model details', 'error');
+        showNotification('Failed to load agent details', 'error');
     }
 }
 
@@ -300,6 +300,7 @@ function renderModelDetails(model) {
                     </svg>
                     Finetune
                 </button>
+                <span style="font-size: 13px; color: #6b7280; margin-right: 6px;">Public?</span>
                 <label class="pa-toggle">
                     <input type="checkbox" ${model.isPublic ? 'checked' : ''} 
                            onchange="toggleModelVisibility('${model.id}', this.checked)">
@@ -424,7 +425,7 @@ function setupInlinePromptPreviewListeners() {
 async function saveInlineModelChanges() {
     const modelId = window.currentInlineEditModelId;
     if (!modelId) {
-        alert('No model selected');
+        alert('No agent selected');
         return;
     }
     
@@ -478,7 +479,7 @@ async function saveInlineModelChanges() {
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to update model');
+            throw new Error(error.error || 'Failed to update agent');
         }
         
         console.log('✅ Model updated successfully:', await response.json());
@@ -495,7 +496,7 @@ async function saveInlineModelChanges() {
             }, 2000);
         }
         
-        showNotification('Model updated successfully', 'success');
+        showNotification('Agent updated successfully', 'success');
         
         // Reload models list to reflect changes in sidebar
         await loadModels();
@@ -663,7 +664,7 @@ async function createModel() {
     
     const name = document.getElementById('modelNameInput').value.trim();
     if (!name) {
-        showNotification('Please enter a model name', 'error');
+        showNotification('Please enter an agent name', 'error');
         return;
     }
     
@@ -688,15 +689,15 @@ async function createModel() {
         });
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to create model' }));
-            const errorMessage = errorData.error || errorData.details || 'Failed to create model';
+            const errorData = await response.json().catch(() => ({ error: 'Failed to create agent' }));
+            const errorMessage = errorData.error || errorData.details || 'Failed to create agent';
             console.error('❌ Backend error:', errorData);
             throw new Error(errorMessage);
         }
         
         const model = await response.json();
-        console.log('✅ Model created successfully:', model);
-        showNotification('Model created successfully', 'success');
+        console.log('✅ Agent created successfully:', model);
+        showNotification('Agent created successfully', 'success');
         closeCreateModelModal();
         
         // Reload models list to include the new model
@@ -708,7 +709,7 @@ async function createModel() {
         }
     } catch (error) {
         console.error('Error creating model:', error);
-        showNotification('Failed to create model: ' + error.message, 'error');
+        showNotification('Failed to create agent: ' + error.message, 'error');
     }
 }
 
@@ -727,24 +728,24 @@ async function toggleModelVisibility(modelId, isPublic) {
         });
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to update model' }));
-            throw new Error(errorData.error || 'Failed to update model');
+            const errorData = await response.json().catch(() => ({ error: 'Failed to update agent' }));
+            throw new Error(errorData.error || 'Failed to update agent');
         }
         
-        showNotification(`Model set to ${isPublic ? 'public' : 'private'}`, 'success');
+        showNotification(`Agent set to ${isPublic ? 'public' : 'private'}`, 'success');
         await loadModels();
         if (currentModelId === modelId) {
             await loadModelDetails(modelId);
         }
     } catch (error) {
         console.error('Error updating model visibility:', error);
-        showNotification('Failed to update model visibility: ' + error.message, 'error');
+        showNotification('Failed to update agent visibility: ' + error.message, 'error');
     }
 }
 
-// Delete model
+// Delete agent
 async function deleteModel(modelId) {
-    if (!confirm('Are you sure you want to delete this model? This will also delete all associated files.')) {
+    if (!confirm('Are you sure you want to delete this agent? This will also delete all associated files.')) {
         return;
     }
     
@@ -756,17 +757,17 @@ async function deleteModel(modelId) {
         });
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to delete model' }));
-            throw new Error(errorData.error || 'Failed to delete model');
+            const errorData = await response.json().catch(() => ({ error: 'Failed to delete agent' }));
+            throw new Error(errorData.error || 'Failed to delete agent');
         }
         
-        showNotification('Model deleted successfully', 'success');
+        showNotification('Agent deleted successfully', 'success');
         currentModelId = null;
         await loadModels();
-        document.getElementById('model-details').innerHTML = '<div class="pa-empty-state"><p>Select a model to view details and manage files</p></div>';
+        document.getElementById('model-details').innerHTML = '<div class="pa-empty-state"><p>Select an agent to view details and manage files</p></div>';
     } catch (error) {
-        console.error('Error deleting model:', error);
-        showNotification('Failed to delete model: ' + error.message, 'error');
+        console.error('Error deleting agent:', error);
+        showNotification('Failed to delete agent: ' + error.message, 'error');
     }
 }
 
@@ -780,13 +781,13 @@ function openEditModelModal(modelId) {
     // Find the model data
     const model = models.find(m => m.id === modelId);
     if (!model) {
-        showNotification('Model not found', 'error');
+        showNotification('Agent not found', 'error');
         return;
     }
     
     // Check ownership
     if (model.ownerAddress && model.ownerAddress.toLowerCase() !== currentWalletAddress.toLowerCase()) {
-        showNotification('You do not have permission to edit this model', 'error');
+        showNotification('You do not have permission to edit this agent', 'error');
         return;
     }
     
@@ -827,7 +828,7 @@ async function updateModel() {
     
     const modal = document.getElementById('editModelModal');
     if (!modal || !modal.dataset.modelId) {
-        showNotification('Model ID not found', 'error');
+        showNotification('Agent ID not found', 'error');
         return;
     }
     
@@ -852,13 +853,13 @@ async function updateModel() {
         });
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to update model' }));
-            throw new Error(errorData.error || 'Failed to update model');
+            const errorData = await response.json().catch(() => ({ error: 'Failed to update agent' }));
+            throw new Error(errorData.error || 'Failed to update agent');
         }
         
         const updatedModel = await response.json();
         console.log('✅ Model updated successfully:', updatedModel);
-        showNotification('Model updated successfully', 'success');
+        showNotification('Agent updated successfully', 'success');
         closeEditModelModal();
         
         // Reload models list and refresh details
@@ -868,7 +869,7 @@ async function updateModel() {
         }
     } catch (error) {
         console.error('Error updating model:', error);
-        showNotification('Failed to update model: ' + error.message, 'error');
+        showNotification('Failed to update agent: ' + error.message, 'error');
     }
 }
 
@@ -877,7 +878,7 @@ async function updateModel() {
 // Open upload file modal
 function openUploadFileModal() {
     if (!currentModelId) {
-        showNotification('Please select a model first', 'error');
+        showNotification('Please select an agent first', 'error');
         return;
     }
     
@@ -1005,7 +1006,7 @@ function removeFileFromPreview(index) {
 // Upload files
 async function uploadFiles() {
     if (!currentModelId) {
-        showNotification('Please select a model first', 'error');
+        showNotification('Please select an agent first', 'error');
         return;
     }
     
@@ -1405,28 +1406,316 @@ let userChatHistory = [];
 
 // Load agents into dropdown when User Chats tab is opened
 async function loadAgentsForChat() {
-    const selector = document.getElementById('agentSelector');
-    if (!selector) return;
-    
     try {
         // Load models from the same source as the model list
         await loadModels();
         
-        // Clear existing options (except the placeholder)
-        selector.innerHTML = '<option value="">-- Select an agent to chat with --</option>';
+        // Also load public agents if not already loaded
+        if (publicAgents.length === 0) {
+            try {
+                const response = await fetch('/api/user-agents?publicOnly=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    publicAgents = data.agents || [];
+                }
+            } catch (e) {
+                console.warn('Could not load public agents:', e);
+            }
+        }
         
-        // Add each model as an option
-        models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model.name;
-            option.textContent = model.name;
-            selector.appendChild(option);
-        });
+        // Render sidebar
+        renderAgentSidebar();
         
-        console.log(`✅ Loaded ${models.length} agents for chat`);
+        console.log(`✅ Loaded ${models.length} own agents + ${publicAgents.length} public agents for chat`);
     } catch (error) {
         console.error('Error loading agents for chat:', error);
     }
+}
+
+// Render agent sidebar
+function renderAgentSidebar() {
+    const myAgentsList = document.getElementById('myAgentsSidebarList');
+    const publicAgentsList = document.getElementById('publicAgentsSidebarList');
+    const myAgentsSection = document.getElementById('myAgentsSidebarSection');
+    const publicAgentsSection = document.getElementById('publicAgentsSidebarSection');
+    
+    if (!myAgentsList || !publicAgentsList) return;
+    
+    // Render my agents
+    if (models.length > 0) {
+        myAgentsSection.style.display = 'block';
+        myAgentsList.innerHTML = models.map(model => `
+            <div class="agent-sidebar-item ${selectedAgentForChat?.name === model.name ? 'active' : ''}" 
+                 onclick="selectAgentFromSidebar('${escapeHtml(model.name)}', 'my')"
+                 data-agent-name="${escapeHtml(model.name)}">
+                <div class="agent-sidebar-avatar">${escapeHtml((model.name || 'A')[0].toUpperCase())}</div>
+                <div class="agent-sidebar-info">
+                    <div class="agent-sidebar-name">${escapeHtml(model.name || 'Unnamed')}</div>
+                    <div class="agent-sidebar-purpose">${escapeHtml(model.purpose?.slice(0, 40) || 'No description')}${model.purpose?.length > 40 ? '...' : ''}</div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        myAgentsSection.style.display = 'block';
+        myAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">No agents yet</div>';
+    }
+    
+    // Filter public agents (exclude own)
+    const otherPublicAgents = publicAgents.filter(agent => {
+        if (!currentWalletAddress) return true;
+        return agent.ownerAddress?.toLowerCase() !== currentWalletAddress.toLowerCase();
+    });
+    
+    // Render public agents
+    if (otherPublicAgents.length > 0) {
+        publicAgentsSection.style.display = 'block';
+        publicAgentsList.innerHTML = otherPublicAgents.map(agent => `
+            <div class="agent-sidebar-item ${selectedAgentForChat?.name === agent.name ? 'active' : ''}" 
+                 onclick="selectAgentFromSidebar('${escapeHtml(agent.name)}', 'public')"
+                 data-agent-name="${escapeHtml(agent.name)}">
+                <div class="agent-sidebar-avatar public">${escapeHtml((agent.name || 'A')[0].toUpperCase())}</div>
+                <div class="agent-sidebar-info">
+                    <div class="agent-sidebar-name">${escapeHtml(agent.name || 'Unnamed')}</div>
+                    <div class="agent-sidebar-purpose">${escapeHtml(agent.purpose?.slice(0, 40) || 'No description')}${agent.purpose?.length > 40 ? '...' : ''}</div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        publicAgentsSection.style.display = 'block';
+        publicAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">No agents in Agentverse</div>';
+    }
+}
+
+// Select agent from sidebar
+function selectAgentFromSidebar(agentName, type) {
+    // Find the agent
+    let agent = null;
+    if (type === 'my') {
+        agent = models.find(m => m.name === agentName);
+    } else {
+        agent = publicAgents.find(a => a.name === agentName);
+    }
+    
+    if (!agent) {
+        // Fallback: check both arrays
+        agent = models.find(m => m.name === agentName) || publicAgents.find(a => a.name === agentName);
+    }
+    
+    if (!agent) {
+        showNotification('Agent not found', 'error');
+        return;
+    }
+    
+    selectedAgentForChat = agent;
+    
+    // Update sidebar active state
+    document.querySelectorAll('.agent-sidebar-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.agentName === agentName) {
+            item.classList.add('active');
+        }
+    });
+    
+    // Update header
+    const header = document.getElementById('selectedAgentHeader');
+    const avatar = document.getElementById('selectedAgentAvatar');
+    const nameEl = document.getElementById('selectedAgentName');
+    const purposeEl = document.getElementById('selectedAgentPurpose');
+    
+    if (header) header.style.display = 'block';
+    if (avatar) avatar.textContent = (agent.name || 'A')[0].toUpperCase();
+    if (nameEl) nameEl.textContent = agent.name;
+    if (purposeEl) purposeEl.textContent = agent.purpose || 'No description available';
+    
+    // Enable chat input
+    const input = document.getElementById('userChatInput');
+    const sendBtn = document.getElementById('userChatSendBtn');
+    if (input) {
+        input.disabled = false;
+        input.placeholder = `Message ${agent.name}...`;
+        input.focus();
+    }
+    if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.style.opacity = '1';
+    }
+    
+    // Load chat history
+    loadUserChatHistory(agentName);
+    
+    console.log(`✅ Selected agent: ${agentName}`);
+}
+
+// ========== Public Agents Functionality ==========
+
+let publicAgents = [];
+
+// Load public agents
+async function loadPublicAgents() {
+    const listDiv = document.getElementById('public-agents-list');
+    if (!listDiv) return;
+    
+    listDiv.innerHTML = '<div class="pa-empty-state"><p>Loading Agentverse...</p></div>';
+    
+    try {
+        const response = await fetch('/api/user-agents?publicOnly=true');
+        if (!response.ok) {
+            throw new Error('Failed to load public agents');
+        }
+        
+        const data = await response.json();
+        publicAgents = data.agents || [];
+        
+        renderPublicAgentsList(publicAgents);
+        console.log(`✅ Loaded ${publicAgents.length} public agents`);
+    } catch (error) {
+        console.error('Error loading public agents:', error);
+        listDiv.innerHTML = '<div class="pa-empty-state"><p>Failed to load Agentverse</p></div>';
+    }
+}
+
+// Render public agents list
+function renderPublicAgentsList(agents) {
+    const listDiv = document.getElementById('public-agents-list');
+    if (!listDiv) return;
+    
+    if (agents.length === 0) {
+        listDiv.innerHTML = '<div class="pa-empty-state"><p>No agents in the Agentverse yet. Be the first to share an agent!</p></div>';
+        return;
+    }
+    
+    listDiv.innerHTML = agents.map(agent => `
+        <div class="pa-model-item" onclick="viewPublicAgentDetails('${agent.modelId}')" style="cursor: pointer;">
+            <div class="pa-model-item-header">
+                <h3 class="pa-model-item-name">${escapeHtml(agent.name || 'Unnamed Agent')}</h3>
+            </div>
+            <div class="pa-model-item-meta" style="margin-bottom: 8px;">
+                <span class="pa-model-item-badge public">Public</span>
+                <span style="font-size: 12px; color: #9ca3af;">by ${escapeHtml(agent.ownerAddress ? agent.ownerAddress.slice(0, 6) + '...' + agent.ownerAddress.slice(-4) : 'Unknown')}</span>
+            </div>
+            ${agent.purpose ? `<p style="font-size: 13px; color: #6b7280; margin-bottom: 8px; line-height: 1.4;">${escapeHtml(agent.purpose)}</p>` : ''}
+            ${agent.category ? `<span style="display: inline-block; background: #f3f4f6; color: #374151; font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-right: 4px;">${escapeHtml(agent.category)}</span>` : ''}
+            ${agent.industry ? `<span style="display: inline-block; background: #f3f4f6; color: #374151; font-size: 11px; padding: 2px 8px; border-radius: 4px;">${escapeHtml(agent.industry)}</span>` : ''}
+        </div>
+    `).join('');
+}
+
+// View public agent details (read-only dashboard)
+function viewPublicAgentDetails(modelId) {
+    const agent = publicAgents.find(a => a.modelId === modelId);
+    if (!agent) {
+        showNotification('Agent not found', 'error');
+        return;
+    }
+    
+    // Check if this is the user's own agent
+    const isOwner = currentWalletAddress && 
+                    agent.ownerAddress?.toLowerCase() === currentWalletAddress.toLowerCase();
+    
+    // Show the agent details modal/panel
+    showPublicAgentDetailsPanel(agent, isOwner);
+}
+
+// Show public agent details panel
+function showPublicAgentDetailsPanel(agent, isOwner) {
+    // Create or get the modal
+    let modal = document.getElementById('publicAgentDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'publicAgentDetailsModal';
+        modal.className = 'pa-modal-overlay';
+        document.body.appendChild(modal);
+    }
+    
+    const ownerDisplay = agent.ownerAddress 
+        ? agent.ownerAddress.slice(0, 6) + '...' + agent.ownerAddress.slice(-4) 
+        : 'Unknown';
+    
+    modal.innerHTML = `
+        <div class="pa-modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+            <div class="pa-modal-header">
+                <h2>${escapeHtml(agent.name || 'Unnamed Agent')}</h2>
+                <button class="pa-modal-close" onclick="closePublicAgentDetailsModal()">&times;</button>
+            </div>
+            
+            <div style="padding: 0 24px 24px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <span class="pa-model-item-badge public">Public</span>
+                    <span style="font-size: 13px; color: #6b7280;">Created by ${ownerDisplay}</span>
+                    ${isOwner ? '<span style="background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 2px 8px; border-radius: 4px;">You own this agent</span>' : ''}
+                </div>
+                
+                ${agent.category || agent.industry ? `
+                    <div style="margin-bottom: 16px;">
+                        ${agent.category ? `<span style="display: inline-block; background: #f3f4f6; color: #374151; font-size: 12px; padding: 4px 10px; border-radius: 4px; margin-right: 6px;">${escapeHtml(agent.category)}</span>` : ''}
+                        ${agent.industry ? `<span style="display: inline-block; background: #f3f4f6; color: #374151; font-size: 12px; padding: 4px 10px; border-radius: 4px;">${escapeHtml(agent.industry)}</span>` : ''}
+                    </div>
+                ` : ''}
+                
+                ${agent.purpose ? `
+                    <div style="margin-bottom: 16px;">
+                        <h4 style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Purpose</h4>
+                        <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">${escapeHtml(agent.purpose)}</p>
+                    </div>
+                ` : ''}
+                
+                ${agent.useCase ? `
+                    <div style="margin-bottom: 16px;">
+                        <h4 style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Use Case</h4>
+                        <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">${escapeHtml(agent.useCase)}</p>
+                    </div>
+                ` : ''}
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Token Price</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.tokenPrice ?? 'N/A'}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Number of Uses</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;">${agent.accessCount ?? 0}</div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button class="pa-btn-primary" onclick="chatWithPublicAgent('${escapeHtml(agent.name)}'); closePublicAgentDetailsModal();" style="flex: 1;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Chat with this Agent
+                    </button>
+                    ${isOwner ? `
+                        <button class="pa-btn-secondary" onclick="closePublicAgentDetailsModal(); switchTab('model-creator'); setTimeout(() => selectModel('${agent.modelId}'), 100);">
+                            Edit
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('show');
+}
+
+// Close public agent details modal
+function closePublicAgentDetailsModal() {
+    const modal = document.getElementById('publicAgentDetailsModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Chat with a public agent
+function chatWithPublicAgent(agentName) {
+    // Switch to User Chats tab
+    switchTab('user-chats');
+    
+    // Wait for tab to load, then select the agent from sidebar
+    setTimeout(() => {
+        // Find agent type (check if it's in publicAgents)
+        const isPublic = publicAgents.some(a => a.name === agentName);
+        selectAgentFromSidebar(agentName, isPublic ? 'public' : 'my');
+    }, 150);
 }
 
 // Handle agent selection
@@ -1451,10 +1740,15 @@ function handleAgentSelection() {
         return;
     }
     
-    // Find the selected model
-    const model = models.find(m => m.name === agentName);
+    // Find the selected model (check both user's models and public agents)
+    let model = models.find(m => m.name === agentName);
+    if (!model) {
+        // Also check public agents array for access with public agents
+        model = publicAgents.find(a => a.name === agentName);
+    }
     if (!model) {
         console.error('Selected agent not found:', agentName);
+        showNotification('Agent not found. Try refreshing the page.', 'error');
         return;
     }
     
@@ -1763,7 +2057,7 @@ function renderMarkdownWithLatex(text) {
     return html;
 }
 
-// Wrap switchTab to load agents when User Chats tab is opened
+// Wrap switchTab to load agents when User Chats or Public Agents tab is opened
 const originalSwitchTab = switchTab;
 function switchTabWithAgentLoad(tabName) {
     originalSwitchTab(tabName);
@@ -1772,6 +2066,12 @@ function switchTabWithAgentLoad(tabName) {
     const userChatsTab = document.getElementById('user-chats-tab');
     if (userChatsTab && userChatsTab.classList.contains('active')) {
         loadAgentsForChat();
+    }
+    
+    // If switching to Public Agents tab, load public agents
+    const publicAgentsTab = document.getElementById('public-agents-tab');
+    if (publicAgentsTab && publicAgentsTab.classList.contains('active')) {
+        loadPublicAgents();
     }
 }
 switchTab = switchTabWithAgentLoad;
@@ -1790,6 +2090,11 @@ window.saveInlineModelChanges = saveInlineModelChanges;
 window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
+window.loadPublicAgents = loadPublicAgents;
+window.chatWithPublicAgent = chatWithPublicAgent;
+window.selectAgentFromSidebar = selectAgentFromSidebar;
+window.viewPublicAgentDetails = viewPublicAgentDetails;
+window.closePublicAgentDetailsModal = closePublicAgentDetailsModal;
 window.closeUploadFileModal = closeUploadFileModal;
 window.handleFileSelect = handleFileSelect;
 window.removeFileFromPreview = removeFileFromPreview;

@@ -790,10 +790,13 @@
         <!-- Tabs -->
         <div class="pa-tabs">
             <button class="pa-tab active" onclick="switchTab('model-creator')">
-                Model Creator
+                Agent Creator
             </button>
             <button class="pa-tab" onclick="switchTab('user-chats')">
                 User Chats
+            </button>
+            <button class="pa-tab" onclick="switchTab('public-agents')">
+                Agentverse
             </button>
         </div>
 
@@ -803,13 +806,13 @@
                 <!-- Left: Model List -->
                 <div class="pa-left-panel">
                     <div class="pa-panel-header">
-                        <h2>My Models</h2>
+                        <h2>My Agents</h2>
                         <button class="pa-btn-primary" onclick="openCreateModelModal()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
-                            New Model
+                            New Agent
                         </button>
                     </div>
                     <div id="model-list" class="pa-model-list">
@@ -833,45 +836,95 @@
 
         <!-- User Chats Tab -->
         <div id="user-chats-tab" class="pa-tab-content">
-            <div style="display: flex; flex-direction: column; height: 100%;">
-                <!-- Agent Selector -->
-                <div style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Select Agent:</label>
-                    <select id="agentSelector" style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #374151; font-size: 14px;">
-                        <option value="">-- Select an agent to chat with --</option>
-                    </select>
-                    <div id="selectedAgentInfo" style="margin-top: 12px; padding: 12px; background: #f9fafb; border-radius: 8px; display: none;">
-                        <div style="font-weight: 600; color: #374151; margin-bottom: 4px;" id="selectedAgentName"></div>
-                        <div style="font-size: 13px; color: #6b7280;" id="selectedAgentPurpose"></div>
+            <div style="display: flex; height: 100%;">
+                <!-- Agent Sidebar -->
+                <div id="agentSidebar" style="width: 260px; border-right: 1px solid #e5e7eb; background: #f9fafb; display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff;">
+                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: #374151;">Agents</h3>
+                    </div>
+                    <div id="agentSidebarList" style="flex: 1; overflow-y: auto; padding: 8px;">
+                        <!-- My Agents Section -->
+                        <div id="myAgentsSidebarSection">
+                            <div style="padding: 8px 12px; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">My Agents</div>
+                            <div id="myAgentsSidebarList"></div>
+                        </div>
+                        <!-- Agentverse Section -->
+                        <div id="publicAgentsSidebarSection" style="margin-top: 8px;">
+                            <div style="padding: 8px 12px; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">Agentverse</div>
+                            <div id="publicAgentsSidebarList"></div>
+                        </div>
                     </div>
                 </div>
                 
-                <!-- Chat Messages -->
-                <div id="userChatMessages" style="flex: 1; overflow-y: auto; padding: 20px; background: #f9fafb; display: flex; flex-direction: column;">
-                    <div style="text-align: center; color: #9ca3af; margin-top: 40px;">
-                        <p>Select an agent from the dropdown above to start chatting</p>
+                <!-- Chat Area -->
+                <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                    <!-- Selected Agent Header -->
+                    <div id="selectedAgentHeader" style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff; display: none;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px;" id="selectedAgentAvatar"></div>
+                            <div>
+                                <div style="font-weight: 600; color: #111827;" id="selectedAgentName"></div>
+                                <div style="font-size: 13px; color: #6b7280;" id="selectedAgentPurpose"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Messages -->
+                    <div id="userChatMessages" style="flex: 1; overflow-y: auto; padding: 20px; background: #f9fafb; display: flex; flex-direction: column;">
+                        <div style="text-align: center; color: #9ca3af; margin-top: 40px;">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" style="margin: 0 auto 12px;">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <p style="margin: 0;">Select an agent from the sidebar to start chatting</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Input -->
+                    <div id="chatInputArea" style="padding: 16px; border-top: 1px solid #e5e7eb; background: #fff;">
+                        <div style="display: flex; gap: 8px; align-items: flex-end;">
+                            <input 
+                                id="userChatInput" 
+                                type="text" 
+                                placeholder="Select an agent to start chatting..." 
+                                style="flex: 1; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;"
+                                onkeypress="if(event.key==='Enter') handleUserChatSend()"
+                                disabled
+                            />
+                            <button 
+                                id="userChatSendBtn"
+                                onclick="handleUserChatSend()" 
+                                style="padding: 12px 24px; background: #8b5cf6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; opacity: 0.5;"
+                                disabled
+                            >
+                                Send
+                            </button>
+                        </div>
                     </div>
                 </div>
-                
-                <!-- Chat Input -->
-                <div style="padding: 16px; border-top: 1px solid #e5e7eb; background: #fff;">
-                    <div style="display: flex; gap: 8px; align-items: flex-end;">
-                        <input 
-                            id="userChatInput" 
-                            type="text" 
-                            placeholder="Ask your agent anything..." 
-                            style="flex: 1; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;"
-                            onkeypress="if(event.key==='Enter') handleUserChatSend()"
-                            disabled
-                        />
-                        <button 
-                            id="userChatSendBtn"
-                            onclick="handleUserChatSend()" 
-                            style="padding: 12px 24px; background: #8b5cf6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;"
-                            disabled
-                        >
-                            Send
-                        </button>
+            </div>
+            <!-- Hidden select for compatibility -->
+            <select id="agentSelector" style="display: none;"></select>
+        </div>
+    </div>
+
+        <!-- Agentverse Tab -->
+        <div id="public-agents-tab" class="pa-tab-content">
+            <div style="padding: 24px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="font-size: 20px; font-weight: 600; color: #111827; margin: 0;">Agentverse</h2>
+                    <button class="pa-btn-secondary" onclick="loadPublicAgents()" style="display: flex; align-items: center; gap: 6px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+                <p style="color: #6b7280; font-size: 14px; margin-bottom: 20px;">Discover and chat with agents shared by the community.</p>
+                <div id="public-agents-list" class="pa-model-list">
+                    <div class="pa-empty-state">
+                        <p>Loading agents...</p>
                     </div>
                 </div>
             </div>
@@ -882,12 +935,12 @@
     <div id="createModelModal" class="pa-modal-overlay">
         <div class="pa-modal-content">
             <div class="pa-modal-header">
-                <h2>Create New Model</h2>
+                <h2>Create New Agent</h2>
                 <button class="pa-modal-close" onclick="closeCreateModelModal()">&times;</button>
             </div>
             <div class="pa-modal-body">
                 <div class="pa-form-group">
-                    <label>Model Name *</label>
+                    <label>Agent Name *</label>
                     <input type="text" id="modelNameInput" placeholder="Enter model name" required>
                 </div>
                 <div class="pa-form-group">
@@ -904,7 +957,7 @@
                     <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">This prompt will be sent to the AI when users chat with your agent.</small>
                     <details style="margin-top: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px;">
                         <summary style="cursor: pointer; color: #374151; font-size: 13px; font-weight: 500;">Preview default prompt (if left empty)</summary>
-                        <pre id="createModelDefaultPromptPreview" style="margin-top: 8px; padding: 10px; background: #1f2937; color: #e5e7eb; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">You are {Model Name}. {Purpose}
+                        <pre id="createModelDefaultPromptPreview" style="margin-top: 8px; padding: 10px; background: #1f2937; color: #e5e7eb; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">You are {Agent Name}. {Purpose}
 
 Use Case: {Use Case}
 
@@ -938,11 +991,11 @@ Answer the user's question as this specialized model would.</pre>
         </div>
     </div>
 
-    <!-- Edit Model Modal -->
+    <!-- Edit Agent Modal -->
     <div id="editModelModal" class="pa-modal-overlay">
         <div class="pa-modal-content">
             <div class="pa-modal-header">
-                <h2>Edit Model</h2>
+                <h2>Edit Agent</h2>
                 <button class="pa-modal-close" onclick="closeEditModelModal()">&times;</button>
             </div>
             <div class="pa-modal-body">
@@ -960,7 +1013,7 @@ Answer the user's question as this specialized model would.</pre>
                     <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">This prompt will be sent to the AI when users chat with your agent.</small>
                     <details style="margin-top: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px;">
                         <summary style="cursor: pointer; color: #374151; font-size: 13px; font-weight: 500;">Preview default prompt (if left empty)</summary>
-                        <pre id="editModelDefaultPromptPreview" style="margin-top: 8px; padding: 10px; background: #1f2937; color: #e5e7eb; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">You are {Model Name}. {Purpose}
+                        <pre id="editModelDefaultPromptPreview" style="margin-top: 8px; padding: 10px; background: #1f2937; color: #e5e7eb; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">You are {Agent Name}. {Purpose}
 
 Use Case: {Use Case}
 

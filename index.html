@@ -4054,7 +4054,7 @@
                             systemPrompt = selectedModel.systemPrompt;
                             console.log('🤖 Using custom system prompt for', selectedModel.name);
                         } else {
-                            systemPrompt = `You are ${selectedModel.name}. ${selectedModel.purpose}\n\nUse Case: ${selectedModel.useCase}\n\nAnswer the user's question as this specialized model would.`;
+                        systemPrompt = `You are ${selectedModel.name}. ${selectedModel.purpose}\n\nUse Case: ${selectedModel.useCase}\n\nAnswer the user's question as this specialized model would.`;
                         }
                     } else {
                         console.log('🤖 Auto Router: selectedModel is null/undefined');
