@@ -138,7 +138,7 @@ async function getUserAgentByName(name) {
       .where('name', '==', name)
       .limit(1);
     
-    const snapshot = await nameQuery.get();
+    const snapshot = await nameQuery.get(); //Query firestore
     
     if (snapshot.empty) {
       console.log(`⚠️ No user model found with name: ${name}`);

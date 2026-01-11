@@ -1457,6 +1457,23 @@ app.post('/api/chat/completions', async (req, res) => {
             console.log(`   Use Case: ${agent.useCase || 'N/A'}`);
             console.log(`   Custom System Prompt: ${agent.systemPrompt ? 'Yes (' + agent.systemPrompt.length + ' chars)' : 'No'}`);
             
+            // Increment access count for this model (fire-and-forget, don't block the request)
+            try {
+              const db = admin.getFirestore();
+              if (db) {
+                db.collection('models').doc(agentModelId).update({
+                  accessCount: admin.firestore.FieldValue.increment(1),
+                  lastAccessedAt: admin.firestore.FieldValue.serverTimestamp()
+                }).then(() => {
+                  console.log(`📊 Incremented accessCount for ${model}`);
+                }).catch(err => {
+                  console.warn(`⚠️ Failed to increment accessCount: ${err.message}`);
+                });
+              }
+            } catch (accessCountError) {
+              console.warn(`⚠️ Could not increment accessCount: ${accessCountError.message}`);
+            }
+            
             // If agent has a custom system prompt, use it instead of the frontend-generated one
             if (agent.systemPrompt) {
               console.log('🔄 Using custom system prompt from Firestore');
@@ -2218,6 +2235,8 @@ app.post('/api/personal-agent/models', async (req, res) => {
       compatibility: null,
       totalScore: null,
       paperLink: null,
+      accessCount: 0, // Track number of times this model is accessed
+      lastAccessedAt: null, // Timestamp of last access
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };

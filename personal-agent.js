@@ -257,16 +257,26 @@ async function loadModelDetails(modelId) {
     }
 }
 
-// Render model details
+// Render model details with inline editing
 function renderModelDetails(model) {
     const detailsPanel = document.getElementById('model-details');
     if (!detailsPanel) return;
     
+    // Store current model ID for inline save
+    window.currentInlineEditModelId = model.id;
+    
+    // Build default system prompt for preview
+    const defaultSystemPrompt = `You are ${model.name || 'this agent'}. ${model.purpose || ''}\n\nUse Case: ${model.useCase || ''}\n\nAnswer the user's question as this specialized model would.`;
+    
     detailsPanel.innerHTML = `
         <div class="pa-model-details-header">
-            <div>
-                <h2 class="pa-model-details-title">${escapeHtml(model.name || 'Unnamed Model')}</h2>
-                <div class="pa-model-details-meta">
+            <div style="flex: 1;">
+                <input type="text" id="inlineName" value="${escapeHtml(model.name || '')}" 
+                       style="font-size: 24px; font-weight: 700; color: #111827; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; width: 100%; background: transparent; transition: all 0.2s;"
+                       onfocus="this.style.border='1px solid #8b5cf6'; this.style.background='#fff';"
+                       onblur="this.style.border='1px solid transparent'; this.style.background='transparent';"
+                       placeholder="Agent Name">
+                <div class="pa-model-details-meta" style="margin-top: 4px;">
                     <span class="pa-model-item-badge ${model.isPublic ? 'public' : 'private'}">
                         ${model.isPublic ? 'Public' : 'Private'}
                     </span>
@@ -274,12 +284,13 @@ function renderModelDetails(model) {
                 </div>
             </div>
             <div class="pa-model-details-actions">
-                <button class="pa-btn-secondary" onclick="openEditModelModal('${model.id}')" style="margin-right: 8px;">
+                <button class="pa-btn-primary" onclick="saveInlineModelChanges()" style="margin-right: 8px;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
                     </svg>
-                    Edit
+                    Save
                 </button>
                 <button class="pa-btn-secondary" disabled style="margin-right: 8px; opacity: 0.5; cursor: not-allowed; background: #9ca3af; border-color: #9ca3af; color: #fff;" title="Coming soon">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -297,40 +308,56 @@ function renderModelDetails(model) {
             </div>
         </div>
         
-        ${model.category ? `
-            <div style="margin-bottom: 16px;">
-                <h3 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Category</h3>
-                <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">${escapeHtml(model.category)}</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div>
+                <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Category</label>
+                <input type="text" id="inlineCategory" value="${escapeHtml(model.category || '')}" 
+                       placeholder="e.g., Finance, Healthcare..."
+                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
+                       onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
             </div>
-        ` : ''}
+            <div>
+                <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Industry</label>
+                <input type="text" id="inlineIndustry" value="${escapeHtml(model.industry || '')}" 
+                       placeholder="e.g., Technology, Education..."
+                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
+                       onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
+            </div>
+        </div>
         
-        ${model.industry ? `
-            <div style="margin-bottom: 16px;">
-                <h3 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Industry</h3>
-                <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">${escapeHtml(model.industry)}</p>
-            </div>
-        ` : ''}
+        <div style="margin-bottom: 16px;">
+            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Token Price</label>
+            <input type="number" id="inlineTokenPrice" value="${model.tokenPrice !== null && model.tokenPrice !== undefined ? model.tokenPrice : ''}" 
+                   placeholder="Price per interaction"
+                   style="width: 120px; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
+                   onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
+        </div>
         
-        ${model.tokenPrice !== null && model.tokenPrice !== undefined ? `
-            <div style="margin-bottom: 16px;">
-                <h3 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Token Price</h3>
-                <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">${escapeHtml(model.tokenPrice)}</p>
-            </div>
-        ` : ''}
+        <div style="margin-bottom: 16px;">
+            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Purpose</label>
+            <textarea id="inlinePurpose" rows="2" placeholder="What does this agent do?"
+                      style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: vertical; transition: border-color 0.2s;"
+                      onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">${escapeHtml(model.purpose || '')}</textarea>
+        </div>
         
-        ${model.purpose ? `
-            <div style="margin-bottom: 16px;">
-                <h3 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Purpose</h3>
-                <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">${escapeHtml(model.purpose)}</p>
-            </div>
-        ` : ''}
+        <div style="margin-bottom: 16px;">
+            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Use Case</label>
+            <textarea id="inlineUseCase" rows="2" placeholder="How should users interact with this agent?"
+                      style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: vertical; transition: border-color 0.2s;"
+                      onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">${escapeHtml(model.useCase || '')}</textarea>
+        </div>
         
-        ${model.useCase ? `
-            <div style="margin-bottom: 16px;">
-                <h3 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px;">Use Case</h3>
-                <p style="font-size: 14px; color: #6b7280; line-height: 1.6;">${escapeHtml(model.useCase)}</p>
-            </div>
-        ` : ''}
+        <div style="margin-bottom: 16px;">
+            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">System Prompt (Optional)</label>
+            <textarea id="inlineSystemPrompt" rows="4" placeholder="Custom system prompt. Leave empty to use the default prompt shown below."
+                      style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; font-family: monospace; resize: vertical; transition: border-color 0.2s;"
+                      onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'"
+                      oninput="updateInlineDefaultPromptPreview()">${escapeHtml(model.systemPrompt || '')}</textarea>
+            <details style="margin-top: 8px;">
+                <summary style="font-size: 12px; color: #6b7280; cursor: pointer;">Preview default prompt (if left empty)</summary>
+                <pre id="inlineDefaultPromptPreview" style="margin-top: 8px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; color: #6b7280; white-space: pre-wrap; word-break: break-word;">${escapeHtml(defaultSystemPrompt)}</pre>
+            </details>
+        </div>
         
         <div class="pa-files-section">
             <div class="pa-files-header">
@@ -349,7 +376,139 @@ function renderModelDetails(model) {
                 </div>
             </div>
         </div>
+        
+        <div style="margin-top: 24px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+                <span style="font-size: 13px; font-weight: 600; color: #374151;">Number of Uses</span>
+                <span style="font-size: 20px; font-weight: 700; color: #8b5cf6; margin-left: auto;">
+                    ${model.accessCount !== null && model.accessCount !== undefined ? model.accessCount : 0}
+                </span>
+            </div>
+        </div>
     `;
+    
+    // Setup live preview update for default prompt
+    setupInlinePromptPreviewListeners();
+}
+
+// Update the default prompt preview based on inline fields
+function updateInlineDefaultPromptPreview() {
+    const name = document.getElementById('inlineName')?.value || 'this agent';
+    const purpose = document.getElementById('inlinePurpose')?.value || '';
+    const useCase = document.getElementById('inlineUseCase')?.value || '';
+    const previewEl = document.getElementById('inlineDefaultPromptPreview');
+    
+    if (previewEl) {
+        const defaultPrompt = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nAnswer the user's question as this specialized model would.`;
+        previewEl.textContent = defaultPrompt;
+    }
+}
+
+// Setup listeners for live preview updates
+function setupInlinePromptPreviewListeners() {
+    const nameInput = document.getElementById('inlineName');
+    const purposeInput = document.getElementById('inlinePurpose');
+    const useCaseInput = document.getElementById('inlineUseCase');
+    
+    [nameInput, purposeInput, useCaseInput].forEach(el => {
+        if (el) {
+            el.addEventListener('input', updateInlineDefaultPromptPreview);
+        }
+    });
+}
+
+// Save inline model changes
+async function saveInlineModelChanges() {
+    const modelId = window.currentInlineEditModelId;
+    if (!modelId) {
+        alert('No model selected');
+        return;
+    }
+    
+    // Try to get wallet address from multiple sources
+    const walletAddress = currentWalletAddress || 
+                          (window.walletManager && window.walletManager.walletAddress) ||
+                          localStorage.getItem('connectedWallet');
+    
+    if (!walletAddress) {
+        alert('Wallet not connected. Please connect your wallet first.');
+        return;
+    }
+    
+    // Update the global variable if we found it
+    if (!currentWalletAddress && walletAddress) {
+        currentWalletAddress = walletAddress;
+    }
+    
+    console.log('💾 Saving model with wallet:', walletAddress);
+    
+    const name = document.getElementById('inlineName')?.value?.trim();
+    const category = document.getElementById('inlineCategory')?.value?.trim();
+    const industry = document.getElementById('inlineIndustry')?.value?.trim();
+    const tokenPrice = document.getElementById('inlineTokenPrice')?.value;
+    const purpose = document.getElementById('inlinePurpose')?.value?.trim();
+    const useCase = document.getElementById('inlineUseCase')?.value?.trim();
+    const systemPrompt = document.getElementById('inlineSystemPrompt')?.value?.trim();
+    
+    if (!name) {
+        alert('Agent name is required');
+        return;
+    }
+    
+    const updateData = {
+        ownerAddress: walletAddress.toLowerCase(),
+        name,
+        category: category || null,
+        industry: industry || null,
+        tokenPrice: tokenPrice ? parseFloat(tokenPrice) : null,
+        purpose: purpose || null,
+        useCase: useCase || null,
+        systemPrompt: systemPrompt || null
+    };
+    
+    try {
+        const response = await fetch(`/api/personal-agent/models/${modelId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update model');
+        }
+        
+        console.log('✅ Model updated successfully:', await response.json());
+        
+        // Show success feedback
+        const saveBtn = document.querySelector('.pa-model-details-actions .pa-btn-primary');
+        if (saveBtn) {
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Saved!`;
+            saveBtn.style.background = '#10b981';
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.style.background = '';
+            }, 2000);
+        }
+        
+        showNotification('Model updated successfully', 'success');
+        
+        // Reload models list to reflect changes in sidebar
+        await loadModels();
+        
+        // Refresh current model details if this model is selected
+        if (currentModelId === modelId) {
+            await loadModelDetails(modelId);
+        }
+        
+    } catch (error) {
+        console.error('Error saving model:', error);
+        showNotification('Failed to save changes: ' + error.message, 'error');
+    }
 }
 
 // Load model files from backend API
@@ -1511,24 +1670,97 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Helper: Render markdown (simple version, similar to autorouter)
+// Helper: Render markdown with LaTeX support (using marked + KaTeX)
 function renderMarkdownSafe(text, isStreaming = false) {
-    let s = escapeHtml(text || '');
+    if (!text) return '';
     
-    // Process markdown
-    // Bold: **text**
-    s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    // During streaming, show raw text for performance
+    if (isStreaming) {
+        return escapeHtml(text).replace(/\n/g, '<br>');
+    }
     
-    // Code blocks: ```code```
-    s = s.replace(/```([^`]+?)```/g, '<pre style="background:#f3f4f6;padding:8px;border-radius:4px;overflow-x:auto;"><code>$1</code></pre>');
+    // Full render with markdown + LaTeX
+    return renderMarkdownWithLatex(text);
+}
+
+// Full markdown + LaTeX renderer (only used on complete)
+function renderMarkdownWithLatex(text) {
+    if (!text) return '';
     
-    // Inline code: `code`
-    s = s.replace(/`([^`]+?)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:3px;font-family:monospace;">$1</code>');
+    // Check if libraries are loaded
+    const hasMarked = typeof marked !== 'undefined';
+    const hasKatex = typeof katex !== 'undefined';
     
-    // Line breaks
-    s = s.replace(/\n/g, '<br>');
+    // Fallback if libraries not loaded
+    if (!hasMarked) {
+        console.warn('marked.js not loaded, using basic rendering');
+        let s = escapeHtml(text);
+        s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/```([^`]+?)```/g, '<pre style="background:#f3f4f6;padding:8px;border-radius:4px;overflow-x:auto;"><code>$1</code></pre>');
+        s = s.replace(/`([^`]+?)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:3px;font-family:monospace;">$1</code>');
+        s = s.replace(/\n/g, '<br>');
+        return s;
+    }
     
-    return s;
+    let processedText = text;
+    const latexBlocks = [];
+    
+    // Protect LaTeX from markdown parser
+    // Block LaTeX: $$...$$ or \[...\]
+    processedText = processedText.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => {
+        latexBlocks.push({ type: 'block', latex: latex.trim() });
+        return `%%LATEX_BLOCK_${latexBlocks.length - 1}%%`;
+    });
+    processedText = processedText.replace(/\\\[([\s\S]+?)\\\]/g, (_, latex) => {
+        latexBlocks.push({ type: 'block', latex: latex.trim() });
+        return `%%LATEX_BLOCK_${latexBlocks.length - 1}%%`;
+    });
+    
+    // Inline LaTeX: $...$ or \(...\)
+    processedText = processedText.replace(/\$([^$\n]+?)\$/g, (_, latex) => {
+        latexBlocks.push({ type: 'inline', latex: latex.trim() });
+        return `%%LATEX_INLINE_${latexBlocks.length - 1}%%`;
+    });
+    processedText = processedText.replace(/\\\(([\s\S]+?)\\\)/g, (_, latex) => {
+        latexBlocks.push({ type: 'inline', latex: latex.trim() });
+        return `%%LATEX_INLINE_${latexBlocks.length - 1}%%`;
+    });
+    
+    // Parse markdown
+    let html = marked.parse(processedText);
+    
+    // Restore LaTeX with KaTeX rendering
+    if (hasKatex && latexBlocks.length > 0) {
+        latexBlocks.forEach((item, i) => {
+            try {
+                const rendered = katex.renderToString(item.latex, { 
+                    throwOnError: false,
+                    displayMode: item.type === 'block'
+                });
+                const placeholder = item.type === 'block' 
+                    ? `%%LATEX_BLOCK_${i}%%` 
+                    : `%%LATEX_INLINE_${i}%%`;
+                html = html.replace(placeholder, rendered);
+            } catch (e) {
+                console.warn('KaTeX render error:', e);
+                // Show raw LaTeX on error
+                const placeholder = item.type === 'block' 
+                    ? `%%LATEX_BLOCK_${i}%%` 
+                    : `%%LATEX_INLINE_${i}%%`;
+                html = html.replace(placeholder, `<code>${escapeHtml(item.latex)}</code>`);
+            }
+        });
+    } else if (latexBlocks.length > 0) {
+        // No KaTeX, show raw LaTeX in code blocks
+        latexBlocks.forEach((item, i) => {
+            const placeholder = item.type === 'block' 
+                ? `%%LATEX_BLOCK_${i}%%` 
+                : `%%LATEX_INLINE_${i}%%`;
+            html = html.replace(placeholder, `<code>${escapeHtml(item.latex)}</code>`);
+        });
+    }
+    
+    return html;
 }
 
 // Wrap switchTab to load agents when User Chats tab is opened
@@ -1554,6 +1786,7 @@ window.updateModel = updateModel;
 window.selectModel = selectModel;
 window.toggleModelVisibility = toggleModelVisibility;
 window.deleteModel = deleteModel;
+window.saveInlineModelChanges = saveInlineModelChanges;
 window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
