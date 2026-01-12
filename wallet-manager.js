@@ -917,6 +917,8 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 				  this.walletType = localStorage.getItem('wallet_type') || 'metamask';
 				  this.loadWalletSpecificData();
 				  console.log(`🔄 Restored wallet session: ${this.walletAddress} with ${this.credits} I3 tokens`);
+				  // Immediately update UI with restored state (before async Firestore sync)
+				  this.updateUI();
 				  // Immediately reconcile with Firestore so server-side credit changes reflect after refresh
 				  try {
 					  if (typeof this.fetchRemoteWalletDataIfAvailable === 'function') {
@@ -924,7 +926,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 							  console.log('🔁 Reconciled with Firestore after restore. Credits now:', this.credits);
 							  this.loadWalletSpecificData();
 							  this.saveToStorage();
-							  this.updateUI();
+							  this.updateUI(); // Update UI again after Firestore sync completes
 							  try { window.dispatchEvent(new CustomEvent('walletUpdated', { detail: { address: this.walletAddress, credits: this.credits } })); } catch (_) {}
 						  });
 					  }

@@ -1861,7 +1861,9 @@ async function handleDailyCheckin() {
                 if (typeof window.loadUserCheckInStatus === 'function') {
                     window.loadUserCheckInStatus(); // 移除了 await
                 }
+                console.log('[handleDailyCheckin] Calling openOnChainCheckInModal()...');
                 window.openOnChainCheckInModal();
+                console.log('[handleDailyCheckin] openOnChainCheckInModal() call completed');
             } else {
                 console.error('On-chain check-in modal function not found');
                 showNotification('Check-in feature not available', 'error');
@@ -2948,17 +2950,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ===== 链上签到 Modal 控制函数 =====
 function openOnChainCheckInModal() {
+    console.log('[openOnChainCheckInModal] Function called');
     const modal = document.getElementById('onChainCheckInModal');
     if (!modal) {
-        console.error('On-chain check-in modal not found');
+        console.error('[openOnChainCheckInModal] On-chain check-in modal not found in DOM');
         return;
     }
+    console.log('[openOnChainCheckInModal] Modal element found');
     
     // 检查钱包连接
-    if (!window.walletManager || !window.walletManager.isConnected) {
+    if (!window.walletManager) {
+        console.error('[openOnChainCheckInModal] walletManager not found');
         showNotification('Please connect your wallet first', 'error');
         return;
     }
+    if (!window.walletManager.isConnected) {
+        console.error('[openOnChainCheckInModal] Wallet not connected, isConnected:', window.walletManager.isConnected);
+        showNotification('Please connect your wallet first', 'error');
+        return;
+    }
+    console.log('[openOnChainCheckInModal] Wallet is connected, opening modal');
     
     modal.style.display = 'flex';
         // —— 插入开始：打开时根据本地状态初始化 UI —— 
@@ -3004,6 +3015,7 @@ function openOnChainCheckInModal() {
 		}
 		// —— 插入结束 —— 
     modal.classList.add('show');
+    console.log('[openOnChainCheckInModal] Modal show class added, modal should be visible now');
 }
 
 function closeOnChainCheckInModal() {
