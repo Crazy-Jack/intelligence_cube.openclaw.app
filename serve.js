@@ -1457,7 +1457,7 @@ app.post('/api/chat/completions', async (req, res) => {
             console.log(`   Use Case: ${agent.useCase || 'N/A'}`);
             console.log(`   Custom System Prompt: ${agent.systemPrompt ? 'Yes (' + agent.systemPrompt.length + ' chars)' : 'No'}`);
             
-            // Increment access count for this model (fire-and-forget, don't block the request)
+            // Increment access count for this model
             try {
               const db = admin.getFirestore();
               if (db) {
