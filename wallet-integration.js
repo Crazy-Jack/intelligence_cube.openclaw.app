@@ -76,6 +76,37 @@
   }
 })();
 
+// ===== Preferred Network (pre-connect) =====
+// Declare I3_NETWORKS at the top to ensure it's available before any function uses it
+const I3_NETWORKS = {
+  ethereum: { kind:'evm', key:'ethereum', name:'Ethereum', icon:'svg/chains/ethereum.svg', chainId:'0x1' },
+  bnb:      { kind:'evm', key:'bnb',      name:'BNB Chain', icon:'svg/chains/bnb.svg',      chainId:'0x38' },
+  base:     { kind:'evm', key:'base',     name:'Base',      icon:'svg/chains/base.svg',     chainId:'0x2105' },
+  arbitrum: { kind:'evm', key:'arbitrum', name:'Arbitrum One', icon:'svg/chains/arbitrum.svg', chainId:'0xa4b1' },
+  zksync:   { kind:'evm', key:'zksync',   name:'ZKsync Era',   icon:'svg/chains/zksync.svg',   chainId:'0x144' },
+  'polygon-zkevm': { kind:'evm', key:'polygon-zkevm', name:'Polygon zkEVM', icon:'svg/chains/polygon-zkevm.svg', chainId:'0x44d' },
+  optimism: { kind:'evm', key:'optimism', name:'Optimism', icon:'svg/chains/optimism.svg', chainId:'0xa' },
+  opbnb: { kind:'evm', key:'opbnb', name:'opBNB', icon:'svg/chains/opbnb.svg', chainId:'0xcc' },
+  solana:   { kind:'solana', key:'solana', name:'Solana (Devnet)', icon:'svg/chains/solana.svg', network:'devnet' },
+};
+
+function getPreferredNetwork() {
+  try {
+    const raw = localStorage.getItem('i3_preferred_network');
+    const data = raw ? JSON.parse(raw) : null;
+    if (data && I3_NETWORKS[data.key]) return I3_NETWORKS[data.key];
+  } catch {}
+  // Return null if no preference is set (do not force switch to BNB)
+  return null; 
+}
+
+function setPreferredNetwork(key) {
+  const n = I3_NETWORKS[key] || I3_NETWORKS.ethereum;
+  localStorage.setItem('i3_preferred_network', JSON.stringify({ key: n.key }));
+  // 刷新徽章
+  renderNetworkBadge({ name: n.name, icon: n.icon });
+}
+
 /**
  * 显示钱包选择模态框 - 新增功能
  */
@@ -1841,25 +1872,21 @@ async function handleDailyCheckin() {
             return;
         }
 
-        // 2. 判断是否为 Admin
+        // 2. 判断是否为 Admin（无 UI 提示）
         const isAdminUser = window.isAdmin && window.isAdmin();
         
         if (isAdminUser) {
-            // Admin 用户 → 检查后执行本地签到
-            if (!window.walletManager.canCheckinToday()) {
-                showNotification('Already checked in today! Come back tomorrow.', 'error');
-                return;
-            }
-            console.log('Admin user detected, executing local check-in');
-            executeLocalCheckin();
+            // ✨ Admin 用户 → 直接获得 10000 credits
+            console.log('🔑 Admin user detected, executing local check-in');
+            await executeAdminCheckinIntegration();
         } else {
-            // 普通用户 → 直接打开链上签到 Modal
-            console.log('Regular user detected, opening on-chain check-in modal');
+            // 普通用户 → 打开链上签到 Modal
+            console.log('👤 Regular user detected, opening on-chain check-in modal');
             
             if (typeof window.openOnChainCheckInModal === 'function') {
-                // ⚠️ 关键修改：移除 await，不等待加载完成
+                // 先加载用户状态
                 if (typeof window.loadUserCheckInStatus === 'function') {
-                    window.loadUserCheckInStatus(); // 移除了 await
+                    await window.loadUserCheckInStatus();
                 }
                 console.log('[handleDailyCheckin] Calling openOnChainCheckInModal()...');
                 window.openOnChainCheckInModal();
@@ -1874,75 +1901,68 @@ async function handleDailyCheckin() {
         showNotification('Failed to process check-in: ' + error.message, 'error');
     }
 }
+
 /**
- * 执行本地签到(仅 Admin 用户)
+ * 执行 Admin 本地签到（直接获得 10000 credits）
+ * ✅ 更新（P1）：使用后端 Cloud Function 验证 Admin 身份并执行签到
  */
-async function executeLocalCheckin() {
+async function executeAdminCheckinIntegration() {
     try {
         const address = (window.walletManager.walletAddress || '').toLowerCase();
-
-        // Firebase 同步(如果可用)
-        if (window.firebaseDb) {
-            const { doc, getDoc, setDoc, updateDoc, serverTimestamp } = 
-                await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-
-            const walletRef = doc(window.firebaseDb, 'wallets', address);
-            const snap = await getDoc(walletRef);
-
-            let remoteTotalCheckins = 0;
-            let lastCheckinAt = null;
-            
-            if (snap.exists()) {
-                const data = snap.data() || {};
-                lastCheckinAt = data.lastCheckinAt || null;
-                remoteTotalCheckins = Number(data.totalCheckins || 0);
-            } else {
-                await setDoc(walletRef, { 
-                    address: address, 
-                    createdAt: serverTimestamp(), 
-                    totalCheckins: 0 
-                }, { merge: true });
-            }
-
-            // 同步时间戳到本地
-            if (lastCheckinAt && typeof lastCheckinAt.toMillis === 'function') {
-                try { 
-                    localStorage.setItem('last_checkin_at', String(lastCheckinAt.toMillis())); 
-                } catch (_) {}
-            }
-
-            // 执行本地签到
-            const result = window.walletManager.dailyCheckin();
-            if (!result || !result.success) {
-                showNotification(result?.error || 'Check-in failed', 'error');
-                return;
-            }
-
-            // 同步到 Firestore
-            try {
-                await updateDoc(walletRef, {
-                    lastCheckinAt: serverTimestamp(),
-                    totalCheckins: remoteTotalCheckins + 1,
-                    credits: window.walletManager.credits,
-                    lastUpdated: serverTimestamp(),
-                    lastCheckinType: 'local-admin'
-                });
-            } catch (e) {
-                console.warn('Failed to sync to Firestore:', e);
-            }
-
-            showNotification(`Check-in successful! +${result.reward} I3 tokens`, 'success');
-        } else {
-            // Firebase 不可用时的降级处理
-            const result = window.walletManager.dailyCheckin();
-            if (result && result.success) {
-                showNotification(`Check-in successful! +${result.reward} I3 tokens`, 'success');
-            } else {
-                showNotification(result?.error || 'Check-in failed', 'error');
-            }
+        
+        if (!address) {
+            showNotification('Wallet address not available', 'error');
+            return;
         }
+
+        // ✅ P0 修复：先获得签名
+        let signature;
+        try {
+            signature = await window.walletManager.signMessage(`Check-in at ${Date.now()}`);
+        } catch (e) {
+            showNotification('Failed to sign message: ' + e.message, 'error');
+            return;
+        }
+
+        // ✅ P1 修复：调用后端 Cloud Function（adminQuickCheckin）
+        // 这确保只有真正的 Admin 才能添加 10000 credits
+        if (!window.creditAPI) {
+            showNotification('Credit API not loaded. Please refresh the page.', 'error');
+            return;
+        }
+
+        console.log('[Admin Check-in] Calling backend adminQuickCheckin for:', address);
+        
+        const result = await window.creditAPI.adminQuickCheckin(address, signature);
+        
+        if (!result.success) {
+            showNotification(
+                `❌ Admin check-in failed: ${result.message || 'Unknown error'}`, 
+                'error'
+            );
+            console.error('[Admin Check-in] Backend error:', result);
+            return;
+        }
+
+        // ✅ 更新内存中的 credits
+        if (typeof result.creditsAdded === 'number' && result.creditsAdded > 0) {
+            window.walletManager.credits = result.creditsAdded;
+            window.walletManager.updateUI();
+            
+            console.log(`✅ Admin check-in successful: +${result.creditsAdded} credits`);
+            showNotification(
+                `✅ Check-in successful! +${result.creditsAdded} I3 tokens earned (from backend)`, 
+                'success'
+            );
+        } else {
+            showNotification(
+                `⚠️ Check-in completed but no credits added. You may not have admin permissions.`,
+                'warning'
+            );
+        }
+        
     } catch (error) {
-        console.error('Local check-in error:', error);
+        console.error('Admin check-in failed:', error);
         showNotification('Check-in failed: ' + error.message, 'error');
     }
 }
@@ -2901,37 +2921,6 @@ const makeRow = (net) => {
 
   // 展示
   requestAnimationFrame(() => modal.classList.add('show'));
-}
-
-
-// ===== Preferred Network (pre-connect) =====
-const I3_NETWORKS = {
-  ethereum: { kind:'evm', key:'ethereum', name:'Ethereum', icon:'svg/chains/ethereum.svg', chainId:'0x1' },
-  bnb:      { kind:'evm', key:'bnb',      name:'BNB Chain', icon:'svg/chains/bnb.svg',      chainId:'0x38' },
-  base:     { kind:'evm', key:'base',     name:'Base',      icon:'svg/chains/base.svg',     chainId:'0x2105' },
-  arbitrum: { kind:'evm', key:'arbitrum', name:'Arbitrum One', icon:'svg/chains/arbitrum.svg', chainId:'0xa4b1' },
-  zksync:   { kind:'evm', key:'zksync',   name:'ZKsync Era',   icon:'svg/chains/zksync.svg',   chainId:'0x144' },
-  'polygon-zkevm': { kind:'evm', key:'polygon-zkevm', name:'Polygon zkEVM', icon:'svg/chains/polygon-zkevm.svg', chainId:'0x44d' },
-  optimism: { kind:'evm', key:'optimism', name:'Optimism', icon:'svg/chains/optimism.svg', chainId:'0xa' },
-  opbnb: { kind:'evm', key:'opbnb', name:'opBNB', icon:'svg/chains/opbnb.svg', chainId:'0xcc' },
-  solana:   { kind:'solana', key:'solana', name:'Solana (Devnet)', icon:'svg/chains/solana.svg', network:'devnet' },
-};
-
-function getPreferredNetwork() {
-  try {
-    const raw = localStorage.getItem('i3_preferred_network');
-    const data = raw ? JSON.parse(raw) : null;
-    if (data && I3_NETWORKS[data.key]) return I3_NETWORKS[data.key];
-  } catch {}
-  // Return null if no preference is set (do not force switch to BNB)
-  return null; 
-}
-
-function setPreferredNetwork(key) {
-  const n = I3_NETWORKS[key] || I3_NETWORKS.ethereum;
-  localStorage.setItem('i3_preferred_network', JSON.stringify({ key: n.key }));
-  // 刷新徽章
-  renderNetworkBadge({ name: n.name, icon: n.icon });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
