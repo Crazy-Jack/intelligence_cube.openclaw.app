@@ -796,26 +796,14 @@ async function connectBinanceWallet() {
   // ============================================================
   // 🔑 DApp Browser: Use injected provider directly
   // ============================================================
-  debugLog('=== connectBinanceWallet() called ===', 'info');
-  debugLog(`Step 1: Checking detectBinanceDappBrowser() [CACHED]...`, 'info');
-  
   // Check if we're in Binance DApp browser (uses cached result from page load)
   const isBinanceDappBrowser = detectBinanceDappBrowser();
   
-  debugLog(`Step 2: isBinanceDappBrowser (cached) = ${isBinanceDappBrowser}`, isBinanceDappBrowser ? 'success' : 'warn');
-  debugLog(`Step 2b: window.ethereum exists = ${!!window.ethereum}`, 'info');
-  debugLog(`Step 2c: window.ethereum.isBinance (current) = ${window.ethereum?.isBinance}`, 'info');
-  debugLog(`Step 2d: Cached provider exists = ${!!getCachedBinanceProvider()}`, 'info');
-  
   if (isBinanceDappBrowser) {
-    debugLog('Step 3: ✅ ENTERING DApp browser direct connection path', 'success');
-    
     // Use the CACHED provider (saved at page load before other SDKs overwrote it)
     const provider = getCachedBinanceProvider() || window.ethereum;
-    debugLog(`Step 3b: Using provider: ${provider === getCachedBinanceProvider() ? 'CACHED' : 'window.ethereum'}`, 'info');
     
     if (!provider || typeof provider.request !== 'function') {
-      debugLog('Step 3c: ERROR - No valid provider available!', 'error');
       showNotification('Provider not available', 'error');
       return { success: false, error: 'No provider' };
     }
@@ -823,55 +811,42 @@ async function connectBinanceWallet() {
     // Close wallet modal first
     try { 
       closeWalletModal?.(); 
-      debugLog('Step 4: Wallet modal closed', 'info');
     } catch (e) {
-      debugLog(`Step 4: closeWalletModal error (non-fatal): ${e.message}`, 'warn');
+      // Ignore errors
     }
     
     try {
-      debugLog('Step 5: Calling provider.request({ method: eth_requestAccounts })...', 'info');
-      
       // Wallet connection using the CACHED provider
       const accounts = await provider.request({ 
         method: 'eth_requestAccounts' 
       });
       
-      debugLog(`Step 6: eth_requestAccounts returned: ${JSON.stringify(accounts)}`, 'success');
-      
       if (!accounts || accounts.length === 0) {
-        debugLog('Step 6b: ERROR - No accounts returned!', 'error');
         throw new Error('No accounts returned from wallet');
       }
       
       const address = accounts[0];
-      debugLog(`Step 7: Got address: ${address}`, 'success');
       
       // Get chain ID
-      debugLog('Step 8: Getting chainId...', 'info');
       const chainId = await provider.request({ method: 'eth_chainId' });
-      debugLog(`Step 9: chainId = ${chainId}`, 'success');
       
       // Update wallet manager
-      debugLog('Step 10: Updating walletManager...', 'info');
       if (window.walletManager) {
         window.walletManager.ethereum = provider;  // Use cached provider
         window.walletManager.walletType = 'binance';
         window.walletManager.walletAddress = address;
         window.walletManager.isConnected = true;
-        debugLog('Step 11: walletManager state updated', 'success');
 
         try {
           await window.walletManager.fetchRemoteWalletDataIfAvailable?.();
-          debugLog('Step 12: Remote data fetched', 'info');
         } catch (e) {
-          debugLog(`Step 12: fetchRemoteWalletDataIfAvailable error: ${e.message}`, 'warn');
+          console.warn('[Connect][Binance] Failed to fetch remote data:', e);
         }
 
         window.walletManager.loadWalletSpecificData?.();
         window.walletManager.saveToStorage?.();
         window.walletManager.setupEventListeners?.();
         window.walletManager.updateUI?.();
-        debugLog('Step 13: walletManager UI updated', 'success');
 
         window.dispatchEvent(new CustomEvent('walletConnected', {
           detail: {
@@ -880,7 +855,6 @@ async function connectBinanceWallet() {
             isNewUser: !window.walletManager.getWalletData?.(address)
           }
         }));
-        debugLog('Step 14: walletConnected event dispatched', 'success');
 
         // Update network badge
         try {
@@ -888,23 +862,15 @@ async function connectBinanceWallet() {
           if (networkInfo) {
             renderNetworkBadge(networkInfo);
           }
-          debugLog('Step 15: Network badge updated', 'success');
         } catch (e) {
-          debugLog(`Step 15: Network badge error: ${e.message}`, 'warn');
+          console.warn('[Connect][Binance] Failed to update network badge:', e);
         }
-      } else {
-        debugLog('Step 10b: WARNING - window.walletManager is null!', 'warn');
       }
 
       showNotification('Binance Wallet connected!', 'success');
-      debugLog('🎉 CONNECTION SUCCESSFUL!', 'success');
       return { success: true, address };
 
     } catch (error) {
-      debugLog(`❌ ERROR in DApp browser connection: ${error.message}`, 'error');
-      debugLog(`Error code: ${error?.code}`, 'error');
-      debugLog(`Error stack: ${error?.stack}`, 'error');
-      
       if (error?.code === 4001 || error?.message?.toLowerCase().includes('user rejected')) {
         showNotification('Connection cancelled by user', 'info');
       } else {
@@ -914,12 +880,9 @@ async function connectBinanceWallet() {
     }
     
     // IMPORTANT: Never fall through to SDK if we're in DApp browser
-    debugLog('⚠️ Reached fallback return - this should not happen!', 'error');
     return { success: false, error: 'DApp browser connection failed' };
   }
   // ============================================================
-
-  debugLog('Step 3: ❌ NOT in DApp browser - will use SDK/deeplink path', 'warn');
 
   // ---- Mobile: Use W3W Provider to auto-jump to Binance Wallet app ----
   const isMobile = isMobileDevice();
@@ -2591,59 +2554,6 @@ async function attemptDappBrowserAutoConnect() {
     }
 }
 
-// ===== Debug Overlay =====
-function createDebugOverlay() {
-  // Check if already exists
-  if (document.getElementById('debug-overlay')) return;
-  
-  const overlay = document.createElement('div');
-  overlay.id = 'debug-overlay';
-  overlay.style.cssText = `
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    max-height: 200px;
-    overflow-y: auto;
-    background: rgba(0, 0, 0, 0.9);
-    color: #00ff00;
-    font-family: monospace;
-    font-size: 12px;
-    padding: 10px;
-    z-index: 999999;
-    border-top: 2px solid #00ff00;
-  `;
-  overlay.innerHTML = '<div style="color: #ffff00; margin-bottom: 5px;">🔍 DEBUG OVERLAY</div>';
-  document.body.appendChild(overlay);
-}
-
-function debugLog(message, type = 'info') {
-  const overlay = document.getElementById('debug-overlay');
-  if (!overlay) {
-    createDebugOverlay();
-  }
-  
-  const logDiv = document.getElementById('debug-overlay');
-  if (logDiv) {
-    const timestamp = new Date().toLocaleTimeString();
-    const colors = {
-      'info': '#00ff00',
-      'warn': '#ffff00', 
-      'error': '#ff4444',
-      'success': '#00ffff'
-    };
-    const color = colors[type] || '#00ff00';
-    const entry = document.createElement('div');
-    entry.style.cssText = `color: ${color}; margin: 2px 0; word-wrap: break-word;`;
-    entry.textContent = `[${timestamp}] ${message}`;
-    logDiv.appendChild(entry);
-    logDiv.scrollTop = logDiv.scrollHeight;
-  }
-  
-  // Also log to console
-  console.log(`[DEBUG] ${message}`);
-}
-
 // ===== DApp Browser Detection with Caching =====
 // Cache the detection result AND the original provider at page load
 // because other SDKs may overwrite window.ethereum later
@@ -2696,58 +2606,10 @@ function getCachedBinanceProvider() {
   return _cachedOriginalProvider;
 }
 
-// Show visual indicator when DApp browser is detected
-function showDappBrowserIndicator() {
-  // Create debug overlay first
-  createDebugOverlay();
-  
-  debugLog('Starting DApp browser detection...', 'info');
-  debugLog(`window.ethereum exists: ${!!window.ethereum}`, 'info');
-  debugLog(`window.ethereum.isBinance: ${window.ethereum?.isBinance}`, 'info');
-  debugLog(`window.ethereum.isMetaMask: ${window.ethereum?.isMetaMask}`, 'info');
-  debugLog(`typeof window.ethereum.request: ${typeof window.ethereum?.request}`, 'info');
-  
-  const isDetected = detectBinanceDappBrowser();
-  debugLog(`detectBinanceDappBrowser() returned: ${isDetected}`, isDetected ? 'success' : 'warn');
-
-  if (isDetected) {
-    // Create a visible banner at the top of the page
-    const banner = document.createElement('div');
-    banner.id = 'dapp-browser-indicator';
-    banner.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-      color: white;
-      padding: 12px 20px;
-      text-align: center;
-      font-weight: 600;
-      font-size: 16px;
-      z-index: 100000;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      border-bottom: 2px solid #b45309;
-    `;
-    banner.textContent = '🎯 Binance DApp Browser Detected!';
-    document.body.insertBefore(banner, document.body.firstChild);
-    
-    // Adjust body padding to account for banner
-    document.body.style.paddingTop = '50px';
-    
-    debugLog('✅ DApp browser banner displayed', 'success');
-  } else {
-    debugLog('⚠️ NOT detected as DApp browser', 'warn');
-  }
-}
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Wallet integration script loaded');
-    
-    // Show DApp browser indicator
-    showDappBrowserIndicator();
-    
     checkWalletManager();
     
     // Cross-page reconcile: if Firebase is ready and wallet connected, hydrate from Firestore
@@ -2794,9 +2656,6 @@ window.isMobileDevice = isMobileDevice;
 window.isRealMobileDevice = isRealMobileDevice;
 // 导出 DApp 浏览器检测函数
 window.detectBinanceDappBrowser = detectBinanceDappBrowser;
-// 导出调试函数
-window.debugLog = debugLog;
-window.createDebugOverlay = createDebugOverlay;
 
 
 console.log('✅ Wallet integration functions loaded successfully');
