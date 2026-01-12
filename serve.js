@@ -240,95 +240,101 @@ let dbPool = null;
 
 async function initAlloyDB() {
   try {
-    // AlloyDB connection using Public IP (since public IP is enabled)
-    let publicIP = process.env.ALLOYDB_PUBLIC_IP;
+    // AlloyDB connection - prioritize private IP for secure VPC connection
+    // Private IP is used for Cloud Run via VPC Connector
+    // Public IP is fallback for local development
+    const dbHost = process.env.ALLOYDB_PRIVATE_IP || process.env.ALLOYDB_PUBLIC_IP || process.env.DB_HOST;
     
-    if (!publicIP) {
-      console.log('⚠️ ALLOYDB_PUBLIC_IP not set');
-      console.log('💡 Please set the AlloyDB public IP address (IP only, no port):');
-      console.log('   export ALLOYDB_PUBLIC_IP=35.239.188.129');
-      console.log('💡 You can find the public IP in Google Cloud Console:');
-      console.log('   AlloyDB > Clusters > personal-agent-cluster > Instances > personal-agent-cluster-primary');
-      throw new Error('ALLOYDB_PUBLIC_IP environment variable is required');
+    if (!dbHost) {
+      console.log('⚠️ ALLOYDB_PRIVATE_IP or ALLOYDB_PUBLIC_IP not set');
+      console.log('💡 For Cloud Run deployment (recommended):');
+      console.log('   export ALLOYDB_PRIVATE_IP');
+      console.log('💡 For local development with public IP:');
+      console.log('   export ALLOYDB_PUBLIC_IP');
+      throw new Error('ALLOYDB_PRIVATE_IP or ALLOYDB_PUBLIC_IP environment variable is required');
     }
     
-    // Extract IP address if port is included (e.g., "35.239.188.129:5432" -> "35.239.188.129")
-    if (publicIP.includes(':')) {
-      const originalIP = publicIP;
-      publicIP = publicIP.split(':')[0];
-      console.log(`ℹ️  Extracted IP from "${originalIP}" -> "${publicIP}" (port will be 5432)`);
+    // Extract IP address if port is included 
+    let cleanHost = dbHost;
+    if (dbHost.includes(':')) {
+      cleanHost = dbHost.split(':')[0];
+      console.log(`ℹ️  Extracted IP from "${dbHost}" -> "${cleanHost}" (port will be 5432)`);
     }
     
-    // Check if IP looks like a private IP (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
-    const isPrivateIP = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(publicIP);
+    // Detect connection type (private IP vs public IP)
+    const isPrivateIP = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(cleanHost);
+    
     if (isPrivateIP) {
-      console.warn('⚠️ WARNING: The IP address appears to be a private IP:', publicIP);
-      console.warn('   Private IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x) cannot be accessed from outside the VPC');
-      console.warn('   Please check the AlloyDB instance for the correct PUBLIC IP address');
-      console.warn('   Public IPs typically start with 34.x.x.x, 35.x.x.x, or other public ranges');
+      console.log(`🔒 Connecting to AlloyDB via private IP: ${cleanHost}:5432`);
+      console.log('   Using secure VPC connection (recommended for Cloud Run)');
+    } else {
+      console.log(`🔌 Connecting to AlloyDB via public IP: ${cleanHost}:5432`);
+      console.log('   ⚠️  Consider using private IP (ALLOYDB_PRIVATE_IP) for better security');
     }
     
-    console.log(`🔌 Connecting to AlloyDB at ${publicIP}:5432...`);
-    
-    // Test connection first
-    const testPool = new Pool({
-      host: publicIP,
+    // Configure connection pool
+    const poolConfig = {
+      host: cleanHost,
       port: 5432,
       database: 'postgres',
       user: 'postgres',
-      password: 'u6fF4uvXqvN?S]:q',
+      password: process.env.DB_PASSWORD,
       ssl: {
-        rejectUnauthorized: false  // AlloyDB uses SSL for public connections
+        rejectUnauthorized: false  // Google Cloud internal networks use SSL but don't require strict verification
       },
-      max: 5,
+      max: 10,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 15000
-    });
+      connectionTimeoutMillis: isPrivateIP ? 5000 : 15000  // Private IP is faster (internal network)
+    };
+    
+    if (!poolConfig.password) {
+      throw new Error('DB_PASSWORD environment variable is required. Please set it before starting the server.');
+    }
+    
+    // Test connection first
+    console.log(`🧪 Testing connection to AlloyDB...`);
+    const testPool = new Pool(poolConfig);
     
     try {
-      const testResult = await testPool.query('SELECT NOW(), version()');
-      console.log('✅ AlloyDB connection test successful');
+      const testResult = await testPool.query('SELECT NOW() as now, version(), inet_server_addr() as server_ip');
+      console.log('✅ AlloyDB connection test successful!');
       console.log(`   Database time: ${testResult.rows[0].now}`);
-      console.log(`   PostgreSQL version: ${testResult.rows[0].version.split(' ')[0]} ${testResult.rows[0].version.split(' ')[1]}`);
-      testPool.end();
+      console.log(`   Database server IP: ${testResult.rows[0].server_ip}`);
+      console.log(`   PostgreSQL: ${testResult.rows[0].version.split(' ')[0]} ${testResult.rows[0].version.split(' ')[1]}`);
+      await testPool.end();
     } catch (testError) {
-      testPool.end();
+      await testPool.end();
       console.error('❌ AlloyDB connection test failed:', testError.message);
       console.error('   Error code:', testError.code);
       
-      if (testError.code === 'ECONNREFUSED') {
+      if (testError.code === 'ETIMEDOUT') {
         console.error('');
-        console.error('💡 Troubleshooting steps:');
-        console.error('   1. Verify the IP address is correct (should be PUBLIC IP, not private)');
-        console.error('   2. Check if AlloyDB instance has Public IP enabled');
-        console.error('   3. Verify your IP is in the authorized networks list');
-        console.error('   4. Check firewall rules allow connections on port 5432');
-        console.error('   5. Try: gcloud alloydb instances describe personal-agent-cluster-primary \\');
-        console.error('        --cluster=personal-agent-cluster --region=us-central1 \\');
-        console.error('        --format="value(ipAddress)"');
+        console.error('💡 Connection timeout troubleshooting:');
+        if (isPrivateIP) {
+          console.error('   For private IP connections from Cloud Run:');
+          console.error('   1. Ensure VPC Connector is created and attached to Cloud Run service');
+          console.error('   2. Check firewall rule allows traffic from VPC Connector to AlloyDB (port 5432)');
+          console.error('   3. Verify VPC Connector IP range');
+          console.error('   See deployment guide for VPC Connector setup');
+        } else {
+          console.error('   For public IP connections:');
+          console.error('   1. Verify public IP is enabled on AlloyDB instance');
+          console.error('   2. Check authorized networks list includes your IP');
+          console.error('   3. Verify firewall rules allow connections on port 5432');
+        }
       }
       
       throw testError;
     }
     
     // Create main connection pool
-    dbPool = new Pool({
-      host: publicIP,
-      port: 5432,
-      database: 'postgres',
-      user: 'postgres',
-      password: 'u6fF4uvXqvN?S]:q',
-      ssl: {
-        rejectUnauthorized: false
-      },
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 15000
-    });
+    dbPool = new Pool(poolConfig);
     
-    // Test the main pool
-    const result = await dbPool.query('SELECT NOW()');
-    console.log('✅ AlloyDB connection pool ready:', result.rows[0].now);
+    // Verify the main pool
+    const result = await dbPool.query('SELECT NOW() as now');
+    console.log('✅ AlloyDB connection pool ready');
+    console.log(`   Connection type: ${isPrivateIP ? 'Private IP (VPC)' : 'Public IP'}`);
+    console.log(`   Database time: ${result.rows[0].now}`);
     
   } catch (error) {
     console.error('❌ AlloyDB connection error:', error.message);
@@ -339,7 +345,7 @@ async function initAlloyDB() {
 // Initialize AlloyDB on startup (non-blocking)
 initAlloyDB().catch(err => {
   console.error('⚠️ AlloyDB initialization failed, will retry on first API request:', err.message);
-  console.log('💡 Make sure to set ALLOYDB_PUBLIC_IP environment variable');
+  console.log('💡 Make sure to set ALLOYDB_PRIVATE_IP (for Cloud Run) or ALLOYDB_PUBLIC_IP (for local dev)');
 });
 
 const app = express();
@@ -462,11 +468,16 @@ let alloydb = null;
 try {
   alloydb = require('./src/alloydb-connection.js');
   
-  // Try public IP connection first (if set), otherwise try Auth Proxy
+  // Try private IP first (Cloud Run), then public IP (local dev), then Auth Proxy
+  const privateIP = process.env.ALLOYDB_PRIVATE_IP;
   const publicIP = process.env.ALLOYDB_PUBLIC_IP || process.env.ALLOYDB_HOST;
   const useAlloyDBAuthProxy = process.env.USE_ALLOYDB_AUTH_PROXY === 'true';
   
-  if (publicIP) {
+  if (privateIP) {
+    // Use private IP connection (recommended for Cloud Run)
+    alloydb.initializeAlloyDB({ host: privateIP });
+    console.log(`🔒 Connecting to AlloyDB via private IP: ${privateIP}`);
+  } else if (publicIP) {
     // Use direct connection via public IP
     alloydb.initializeAlloyDB({ host: publicIP });
     console.log(`🔌 Connecting to AlloyDB via public IP: ${publicIP}`);
@@ -484,16 +495,17 @@ try {
     if (alloydb.isAlloyDBConnected()) {
       console.log('✅ AlloyDB connection initialized');
     } else {
-      console.log('⚠️ AlloyDB not connected. Set ALLOYDB_PUBLIC_IP or USE_ALLOYDB_AUTH_PROXY=true');
-      if (!publicIP && !useAlloyDBAuthProxy) {
-        console.log('   Option 1: Set ALLOYDB_PUBLIC_IP=35.239.188.129 for direct connection');
-        console.log('   Option 2: Set USE_ALLOYDB_AUTH_PROXY=true and start the proxy');
+      console.log('⚠️ AlloyDB not connected. Set ALLOYDB_PRIVATE_IP, ALLOYDB_PUBLIC_IP, or USE_ALLOYDB_AUTH_PROXY=true');
+      if (!privateIP && !publicIP && !useAlloyDBAuthProxy) {
+        console.log('   Option 1 (recommended): Set ALLOYDB_PRIVATE_IP for VPC connection');
+        console.log('   Option 2: Set ALLOYDB_PUBLIC_IP for direct connection');
+        console.log('   Option 3: Set USE_ALLOYDB_AUTH_PROXY=true and start the proxy');
       }
     }
   }, 1000);
 } catch (error) {
   console.warn('⚠️ AlloyDB connection not available:', error.message);
-  console.warn('   To enable: Set ALLOYDB_PUBLIC_IP or USE_ALLOYDB_AUTH_PROXY=true');
+  console.warn('   To enable: Set ALLOYDB_PRIVATE_IP (for Cloud Run) or ALLOYDB_PUBLIC_IP (for local dev)');
 }
 
 app.get('/api/user-agents', async (req, res) => {
