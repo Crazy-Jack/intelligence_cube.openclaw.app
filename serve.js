@@ -2977,6 +2977,84 @@ app.get('/api/personal-agent/files', async (req, res) => {
   }
 });
 
+// Download file - generate signed URL for file access
+app.get('/api/personal-agent/files/:fileId/download', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    
+    console.log(`📥 Generating download URL for file: ${fileId}`);
+    
+    // Get file metadata from Firestore
+    const db = admin.getFirestore();
+    if (!db) {
+      return res.status(500).json({ error: 'Firestore database not initialized' });
+    }
+    
+    const filesRef = db.collection('modelFiles');
+    const snapshot = await filesRef.where('fileId', '==', fileId).get();
+    
+    if (snapshot.empty) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    let fileData = null;
+    snapshot.forEach(doc => {
+      fileData = doc.data();
+    });
+    
+    if (!fileData || !fileData.storagePath) {
+      return res.status(404).json({ error: 'File storage path not found' });
+    }
+    
+    // Extract GCS path from storagePath (e.g., "gs://i3-testnet-rag/raw/modelId/filename" -> "raw/modelId/filename")
+    const storagePath = fileData.storagePath;
+    let gcsPath = storagePath;
+    if (storagePath.startsWith('gs://')) {
+      // Remove "gs://bucket-name/" prefix
+      const parts = storagePath.replace('gs://', '').split('/');
+      parts.shift(); // Remove bucket name
+      gcsPath = parts.join('/');
+    }
+    
+    console.log(`   Storage path: ${storagePath}`);
+    console.log(`   GCS path: ${gcsPath}`);
+    
+    // Check if bucket is initialized
+    if (!bucket) {
+      return res.status(500).json({ error: 'Google Cloud Storage not initialized' });
+    }
+    
+    // Generate signed URL (valid for 15 minutes)
+    const file = bucket.file(gcsPath);
+    
+    // Check if file exists
+    const [exists] = await file.exists();
+    if (!exists) {
+      console.error(`❌ File does not exist in GCS: ${gcsPath}`);
+      return res.status(404).json({ error: 'File not found in storage' });
+    }
+    
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+      responseDisposition: `inline; filename="${fileData.filename || 'download'}"`,
+      responseType: fileData.mimeType || 'application/pdf'
+    });
+    
+    console.log(`✅ Generated signed URL for ${fileData.filename}`);
+    
+    res.json({ 
+      downloadUrl: signedUrl,
+      filename: fileData.filename,
+      mimeType: fileData.mimeType || 'application/pdf'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error generating download URL:', error);
+    res.status(500).json({ error: 'Failed to generate download URL: ' + error.message });
+  }
+});
+
 // Delete file
 app.delete('/api/personal-agent/files/:fileId', async (req, res) => {
   try {

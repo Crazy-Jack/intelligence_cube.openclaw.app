@@ -549,7 +549,15 @@ function renderFileList(files) {
                     </svg>
                 </div>
                 <div class="pa-file-item-details">
-                    <p class="pa-file-item-name">${escapeHtml(file.filename || 'Unknown')}</p>
+                    <p class="pa-file-item-name">
+                        <a href="#" onclick="downloadFile('${file.fileId || file.id}', '${escapeHtml(file.filename || 'Unknown')}'); return false;" 
+                           style="color: #6366f1; text-decoration: none; cursor: pointer;" 
+                           onmouseover="this.style.textDecoration='underline'" 
+                           onmouseout="this.style.textDecoration='none'"
+                           title="Click to view/download">
+                            ${escapeHtml(file.filename || 'Unknown')}
+                        </a>
+                    </p>
                     <div class="pa-file-item-meta">
                         ${file.createdAt && formatDate(file.createdAt) ? `<span>Uploaded: ${formatDate(file.createdAt)}</span>` : ''}
                         <span class="pa-file-item-status ${file.status || 'uploaded'}">${(file.status || 'uploaded').toUpperCase()}</span>
@@ -1278,6 +1286,33 @@ async function processFileForRAG(fileId, modelId, storagePath, filename) {
         }
         
         throw error;
+    }
+}
+
+// Download/view file - generates signed URL and opens in new tab
+async function downloadFile(fileId, filename) {
+    try {
+        showNotification('Opening file...', 'info');
+        
+        const response = await fetch(`/api/personal-agent/files/${fileId}/download`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to get download URL');
+        }
+        
+        const data = await response.json();
+        
+        if (data.downloadUrl) {
+            // Open the signed URL in a new tab
+            window.open(data.downloadUrl, '_blank');
+            showNotification(`Opening ${filename}`, 'success');
+        } else {
+            throw new Error('No download URL returned');
+        }
+    } catch (error) {
+        console.error('Error downloading file:', error);
+        showNotification(`Failed to open file: ${error.message}`, 'error');
     }
 }
 
