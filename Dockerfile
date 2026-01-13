@@ -1,17 +1,20 @@
-# Use Node.js to run Express server
-FROM node:18-alpine
+# Single-stage build (simpler, easier to debug)
+# Using Node.js 20 because Vite 7.1.3 requires Node.js 20.19+ or 22.12+
+FROM node:20-alpine
 
-# Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies for build)
+RUN npm install
 
 # Copy application files
 COPY . .
+
+# Build the frontend (creates dist/ folder)
+RUN npm run build
 
 # Expose port 8080 (Cloud Run requirement)
 EXPOSE 8080
@@ -21,4 +24,4 @@ ENV PORT=8080
 ENV NODE_ENV=production
 
 # Start the Express server
-CMD ["npm", "start"]
+CMD ["node", "serve.js"]
