@@ -284,6 +284,12 @@ function renderModelDetails(model) {
                 </div>
             </div>
             <div class="pa-model-details-actions">
+                <button class="pa-btn-success" onclick="tryAgentFromDashboard('${model.id}', '${escapeHtml(model.name || '')}')" style="margin-right: 8px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    Try
+                </button>
                 <button class="pa-btn-primary" onclick="saveInlineModelChanges()" style="margin-right: 8px;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -326,29 +332,29 @@ function renderModelDetails(model) {
             </div>
         </div>
         
-        <div style="margin-bottom: 16px;">
+            <div style="margin-bottom: 16px;">
             <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Token Price</label>
             <input type="number" id="inlineTokenPrice" value="${model.tokenPrice !== null && model.tokenPrice !== undefined ? model.tokenPrice : ''}" 
                    placeholder="Price per interaction"
                    style="width: 120px; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
                    onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
-        </div>
+            </div>
         
-        <div style="margin-bottom: 16px;">
+            <div style="margin-bottom: 16px;">
             <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Purpose</label>
             <textarea id="inlinePurpose" rows="2" placeholder="What does this agent do?"
                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: vertical; transition: border-color 0.2s;"
                       onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">${escapeHtml(model.purpose || '')}</textarea>
-        </div>
+            </div>
         
-        <div style="margin-bottom: 16px;">
+            <div style="margin-bottom: 16px;">
             <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Use Case</label>
             <textarea id="inlineUseCase" rows="2" placeholder="How should users interact with this agent?"
                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: vertical; transition: border-color 0.2s;"
                       onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">${escapeHtml(model.useCase || '')}</textarea>
-        </div>
+            </div>
         
-        <div style="margin-bottom: 16px;">
+            <div style="margin-bottom: 16px;">
             <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">System Prompt (Optional)</label>
             <textarea id="inlineSystemPrompt" rows="4" placeholder="Custom system prompt. Leave empty to use the default prompt shown below."
                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; font-family: monospace; resize: vertical; transition: border-color 0.2s;"
@@ -358,7 +364,7 @@ function renderModelDetails(model) {
                 <summary style="font-size: 12px; color: #6b7280; cursor: pointer;">Preview default prompt (if left empty)</summary>
                 <pre id="inlineDefaultPromptPreview" style="margin-top: 8px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; color: #6b7280; white-space: pre-wrap; word-break: break-word;">${escapeHtml(defaultSystemPrompt)}</pre>
             </details>
-        </div>
+            </div>
         
         <div class="pa-files-section">
             <div class="pa-files-header">
@@ -1762,6 +1768,27 @@ function chatWithPublicAgent(agentName) {
     }, 150);
 }
 
+// Try agent from dashboard - opens User Chats with the agent selected
+function tryAgentFromDashboard(modelId, agentName) {
+    console.log(`🚀 Trying agent: ${agentName} (${modelId})`);
+    
+    // Switch to User Chats tab
+    switchTab('user-chats');
+    
+    // Wait for tab to load, then select the agent from sidebar
+    setTimeout(() => {
+        // For agents in "My Agents", they won't be in publicAgents
+        const isPublic = publicAgents.some(a => a.id === modelId);
+        selectAgentFromSidebar(agentName, isPublic ? 'public' : 'my');
+        
+        // Focus the chat input
+        const input = document.getElementById('userChatInput');
+        if (input) {
+            input.focus();
+        }
+    }, 150);
+}
+
 // Handle agent selection
 function handleAgentSelection() {
     const selector = document.getElementById('agentSelector');
@@ -2033,13 +2060,13 @@ function renderMarkdownWithLatex(text) {
     if (!hasMarked) {
         console.warn('marked.js not loaded, using basic rendering');
         let s = escapeHtml(text);
-        s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
-        s = s.replace(/```([^`]+?)```/g, '<pre style="background:#f3f4f6;padding:8px;border-radius:4px;overflow-x:auto;"><code>$1</code></pre>');
-        s = s.replace(/`([^`]+?)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:3px;font-family:monospace;">$1</code>');
-        s = s.replace(/\n/g, '<br>');
-        return s;
-    }
-    
+    s = s.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/```([^`]+?)```/g, '<pre style="background:#f3f4f6;padding:8px;border-radius:4px;overflow-x:auto;"><code>$1</code></pre>');
+    s = s.replace(/`([^`]+?)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:3px;font-family:monospace;">$1</code>');
+    s = s.replace(/\n/g, '<br>');
+    return s;
+}
+
     let processedText = text;
     const latexBlocks = [];
     
