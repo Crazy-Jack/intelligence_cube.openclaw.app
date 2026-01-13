@@ -763,6 +763,10 @@
     background: linear-gradient(135deg, #10b981, #059669);
 }
 
+.agent-sidebar-avatar.forked {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
 .agent-sidebar-info {
     flex: 1;
     min-width: 0;

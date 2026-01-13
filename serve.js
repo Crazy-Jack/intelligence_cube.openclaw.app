@@ -1451,20 +1451,33 @@ app.post('/api/chat/completions', async (req, res) => {
       }
     }
     
-    // Try to get modelId from Firestore if this is a user agent
+    // Try to get agent from Firestore
+    // Priority: 1) Use modelId if provided (unique, collision-proof)
+    //           2) Fall back to name lookup (legacy, may have collisions)
     let agentModelId = null;
-    if (isUserAgent(model)) {
-      console.log('🤖 Detected user agent, querying Firestore for modelId...');
+    const providedModelId = req.body.modelId; // New: modelId passed from frontend
+    
+    if (providedModelId || isUserAgent(model)) {
+      console.log('🤖 Looking up agent in Firestore...', providedModelId ? `(modelId: ${providedModelId})` : `(name: ${model})`);
       
-      // Query Firestore to get the agent's modelId
+      // Query Firestore to get the agent
       // If anything fails (not found, missing modelId, query error, Firestore not configured),
       // just treat it as a regular model and route to I3 API
       if (userAgentsFirestore && userAgentsFirestore.isFirestoreConfigured()) {
         try {
-          const agent = await userAgentsFirestore.getUserAgentByName(model); //getUserAgentByName is imported from user-agents-firestore.js
+          // Prefer modelId lookup (unique) over name lookup (may have collisions)
+          let agent = null;
+          if (providedModelId) {
+            agent = await userAgentsFirestore.getUserAgentById(providedModelId);
+          } else {
+            // Legacy fallback: query by name (may return wrong agent if names collide)
+            console.log('⚠️ No modelId provided, falling back to name lookup (potential collision risk)');
+            agent = await userAgentsFirestore.getUserAgentByName(model);
+          }
+          
           if (agent && agent.modelId) {
             agentModelId = agent.modelId;
-            console.log(`✅ Found user agent in Firestore: ${model} → modelId: ${agentModelId}`);
+            console.log(`✅ Found user agent in Firestore: ${agent.name} → modelId: ${agentModelId}`);
             console.log(`   Purpose: ${agent.purpose || 'N/A'}`);
             console.log(`   Use Case: ${agent.useCase || 'N/A'}`);
             console.log(`   Custom System Prompt: ${agent.systemPrompt ? 'Yes (' + agent.systemPrompt.length + ' chars)' : 'No'}`);
@@ -2355,6 +2368,130 @@ app.post('/api/personal-agent/models', async (req, res) => {
     }
     
     res.status(500).json({ error: 'Failed to create model: ' + error.message });
+  }
+});
+
+// Fork an existing public agent
+app.post('/api/personal-agent/fork', async (req, res) => {
+  try {
+    const { sourceModelId, ownerAddress } = req.body;
+    
+    if (!sourceModelId || !ownerAddress) {
+      return res.status(400).json({ error: 'sourceModelId and ownerAddress are required' });
+    }
+    
+    console.log(`🔀 Fork request: ${sourceModelId} → ${ownerAddress}`);
+    
+    // Get Firestore database
+    let db = admin.getFirestore();
+    if (!db) {
+      return res.status(500).json({ error: 'Firestore database not initialized' });
+    }
+    
+    // Step 1: Get the source agent from Firestore
+    const sourceDoc = await db.collection('models').doc(sourceModelId).get();
+    if (!sourceDoc.exists) {
+      return res.status(404).json({ error: 'Source agent not found' });
+    }
+    
+    const sourceData = sourceDoc.data();
+    
+    // Verify source is public (only public agents can be forked)
+    if (!sourceData.isPublic) {
+      return res.status(403).json({ error: 'Only public agents can be forked' });
+    }
+    
+    // Don't allow forking your own agent
+    if (sourceData.ownerAddress?.toLowerCase() === ownerAddress.toLowerCase()) {
+      return res.status(400).json({ error: 'You cannot fork your own agent' });
+    }
+    
+    // Step 2: Generate new model ID for the forked agent
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const newModelId = `model_${ownerAddress.toLowerCase().replace('0x', '')}_${timestamp}_${random}`;
+    
+    // Step 3: Create the forked agent in Firestore
+    const forkedModelData = {
+      name: `[Fork] ${sourceData.name}`,
+      slug: newModelId,
+      ownerAddress: ownerAddress.toLowerCase(),
+      source: 'user',
+      isPublic: false, // Forked agents start as private
+      purpose: sourceData.purpose || null,
+      hiddenPurpose: null,
+      useCase: sourceData.useCase || null,
+      hiddenUseCase: null,
+      systemPrompt: sourceData.systemPrompt || null,
+      category: sourceData.category || null,
+      industry: sourceData.industry || null,
+      tokenPrice: sourceData.tokenPrice ?? 2,
+      purchasedPercent: null,
+      sharePrice: 10,
+      change: null,
+      rating: null,
+      usage: null,
+      compatibility: null,
+      totalScore: null,
+      paperLink: null,
+      accessCount: 0,
+      lastAccessedAt: null,
+      // Fork attribution
+      forkedFrom: sourceModelId,
+      forkedFromName: sourceData.name,
+      forkedFromOwner: sourceData.ownerAddress,
+      forkedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    
+    const newModelRef = db.collection('models').doc(newModelId);
+    await newModelRef.set(forkedModelData);
+    console.log(`✅ Forked agent created in Firestore: ${newModelId}`);
+    
+    // Step 4: Copy embeddings from AlloyDB
+    let embeddingsCopied = 0;
+    if (alloydb && alloydb.isAlloyDBConnected()) {
+      try {
+        // Copy all knowledge_chunks from source to new model
+        const copyResult = await alloydb.query(`
+          INSERT INTO knowledge_chunks (model_id, chunk_text, embedding, source_file, chunk_index, created_at)
+          SELECT 
+            $1,
+            chunk_text,
+            embedding,
+            '[Inherited]',
+            chunk_index,
+            NOW()
+          FROM knowledge_chunks
+          WHERE model_id = $2
+        `, [newModelId, sourceModelId]);
+        
+        embeddingsCopied = copyResult.rowCount || 0;
+        console.log(`✅ Copied ${embeddingsCopied} embeddings from AlloyDB`);
+      } catch (alloyError) {
+        console.warn(`⚠️ Failed to copy embeddings: ${alloyError.message}`);
+        // Don't fail the entire fork - agent is still created, just without embeddings
+      }
+    } else {
+      console.log('⚠️ AlloyDB not connected - skipping embedding copy');
+    }
+    
+    // Step 5: Return success response
+    res.json({
+      success: true,
+      newModelId: newModelId,
+      name: forkedModelData.name,
+      forkedFrom: sourceModelId,
+      embeddingsCopied: embeddingsCopied,
+      message: `Successfully forked "${sourceData.name}" as "${forkedModelData.name}"`
+    });
+    
+    console.log(`✅ Fork complete: ${sourceModelId} → ${newModelId} (${embeddingsCopied} embeddings copied)`);
+    
+  } catch (error) {
+    console.error('❌ Fork error:', error);
+    res.status(500).json({ error: 'Failed to fork agent: ' + error.message });
   }
 });
 

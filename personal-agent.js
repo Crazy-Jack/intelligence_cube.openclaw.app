@@ -190,7 +190,10 @@ function renderModelList() {
         <div class="pa-model-item ${model.id === currentModelId ? 'selected' : ''}" 
              onclick="selectModel('${model.id}')">
             <div class="pa-model-item-header">
-                <h3 class="pa-model-item-name">${escapeHtml(model.name || 'Unnamed')}</h3>
+                <h3 class="pa-model-item-name">
+                    ${model.forkedFrom ? '<span style="color: #10b981; margin-right: 4px;" title="Forked agent">🔀</span>' : ''}
+                    ${escapeHtml(model.name || 'Unnamed')}
+                </h3>
                 <div class="pa-model-item-actions" onclick="event.stopPropagation()">
                     <button class="pa-model-item-action" onclick="toggleModelVisibility('${model.id}', ${!model.isPublic})" 
                             title="${model.isPublic ? 'Make private' : 'Make public'}">
@@ -212,6 +215,7 @@ function renderModelList() {
                 <span class="pa-model-item-badge ${model.isPublic ? 'public' : 'private'}">
                     ${model.isPublic ? 'Public' : 'Private'}
                 </span>
+                ${model.forkedFrom ? '<span class="pa-model-item-badge forked" style="background: #d1fae5; color: #065f46;">Forked</span>' : ''}
                 ${model.createdAt ? `<span>${formatDate(model.createdAt) || ''}</span>` : ''}
             </div>
         </div>
@@ -280,8 +284,24 @@ function renderModelDetails(model) {
                     <span class="pa-model-item-badge ${model.isPublic ? 'public' : 'private'}">
                         ${model.isPublic ? 'Public' : 'Private'}
                     </span>
+                    ${model.forkedFrom ? '<span class="pa-model-item-badge forked" style="background: #d1fae5; color: #065f46;">🔀 Forked</span>' : ''}
                     ${model.createdAt && formatDate(model.createdAt) ? `<span>Created: ${formatDate(model.createdAt)}</span>` : ''}
                 </div>
+                ${model.forkedFrom ? `
+                <div style="margin-top: 8px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 13px; color: #166534;">
+                    <span style="display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="18" r="3"></circle>
+                            <circle cx="6" cy="6" r="3"></circle>
+                            <circle cx="18" cy="6" r="3"></circle>
+                            <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
+                            <path d="M12 12v3"></path>
+                        </svg>
+                        Forked from <strong style="margin-left: 4px;">${escapeHtml(model.forkedFromName || 'Unknown Agent')}</strong>
+                        <span style="color: #6b7280; margin-left: 4px;">by ${model.forkedFromOwner ? model.forkedFromOwner.slice(0, 6) + '...' + model.forkedFromOwner.slice(-4) : 'Unknown'}</span>
+                    </span>
+                </div>
+                ` : ''}
             </div>
             <div class="pa-model-details-actions">
                 <button class="pa-btn-success" onclick="tryAgentFromDashboard('${model.id}', '${escapeHtml(model.name || '')}')" style="margin-right: 8px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff;">
@@ -1457,7 +1477,8 @@ async function loadAgentsForChat() {
                 const response = await fetch('/api/user-agents?publicOnly=true');
                 if (response.ok) {
                     const data = await response.json();
-                    publicAgents = data.agents || [];
+                    // Normalize: add `id` property (same as modelId) for consistency
+                    publicAgents = (data.agents || []).map(a => ({ ...a, id: a.modelId }));
                 }
             } catch (e) {
                 console.warn('Could not load public agents:', e);
@@ -1485,11 +1506,14 @@ function renderAgentSidebar() {
     // Render my agents
     if (models.length > 0) {
         myAgentsSection.style.display = 'block';
+        const selectedId = selectedAgentForChat?.id;
         myAgentsList.innerHTML = models.map(model => `
-            <div class="agent-sidebar-item ${selectedAgentForChat?.name === model.name ? 'active' : ''}" 
-                 onclick="selectAgentFromSidebar('${escapeHtml(model.name)}', 'my')"
-                 data-agent-name="${escapeHtml(model.name)}">
-                <div class="agent-sidebar-avatar">${escapeHtml((model.name || 'A')[0].toUpperCase())}</div>
+            <div class="agent-sidebar-item ${selectedId === model.id ? 'active' : ''}" 
+                 onclick="selectAgentFromSidebar('${model.id}', 'my')"
+                 data-agent-id="${model.id}">
+                <div class="agent-sidebar-avatar${model.forkedFrom ? ' forked' : ''}">${model.forkedFrom 
+                    ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg>'
+                    : escapeHtml((model.name || 'A')[0].toUpperCase())}</div>
                 <div class="agent-sidebar-info">
                     <div class="agent-sidebar-name">${escapeHtml(model.name || 'Unnamed')}</div>
                     <div class="agent-sidebar-purpose">${escapeHtml(model.purpose?.slice(0, 40) || 'No description')}${model.purpose?.length > 40 ? '...' : ''}</div>
@@ -1510,10 +1534,11 @@ function renderAgentSidebar() {
     // Render public agents
     if (otherPublicAgents.length > 0) {
         publicAgentsSection.style.display = 'block';
+        const selectedId = selectedAgentForChat?.id;
         publicAgentsList.innerHTML = otherPublicAgents.map(agent => `
-            <div class="agent-sidebar-item ${selectedAgentForChat?.name === agent.name ? 'active' : ''}" 
-                 onclick="selectAgentFromSidebar('${escapeHtml(agent.name)}', 'public')"
-                 data-agent-name="${escapeHtml(agent.name)}">
+            <div class="agent-sidebar-item ${selectedId === agent.id ? 'active' : ''}" 
+                 onclick="selectAgentFromSidebar('${agent.id}', 'public')"
+                 data-agent-id="${agent.id}">
                 <div class="agent-sidebar-avatar public">${escapeHtml((agent.name || 'A')[0].toUpperCase())}</div>
                 <div class="agent-sidebar-info">
                     <div class="agent-sidebar-name">${escapeHtml(agent.name || 'Unnamed')}</div>
@@ -1528,18 +1553,18 @@ function renderAgentSidebar() {
 }
 
 // Select agent from sidebar
-function selectAgentFromSidebar(agentName, type) {
-    // Find the agent
+function selectAgentFromSidebar(agentId, type) {
+    // Find the agent by ID (unique, not by name which can collide)
     let agent = null;
     if (type === 'my') {
-        agent = models.find(m => m.name === agentName);
+        agent = models.find(m => m.id === agentId);
     } else {
-        agent = publicAgents.find(a => a.name === agentName);
+        agent = publicAgents.find(a => a.id === agentId);
     }
     
     if (!agent) {
-        // Fallback: check both arrays
-        agent = models.find(m => m.name === agentName) || publicAgents.find(a => a.name === agentName);
+        // Fallback: check both arrays by ID
+        agent = models.find(m => m.id === agentId) || publicAgents.find(a => a.id === agentId);
     }
     
     if (!agent) {
@@ -1549,10 +1574,10 @@ function selectAgentFromSidebar(agentName, type) {
     
     selectedAgentForChat = agent;
     
-    // Update sidebar active state
+    // Update sidebar active state (by ID, not name)
     document.querySelectorAll('.agent-sidebar-item').forEach(item => {
         item.classList.remove('active');
-        if (item.dataset.agentName === agentName) {
+        if (item.dataset.agentId === agentId) {
             item.classList.add('active');
         }
     });
@@ -1581,10 +1606,10 @@ function selectAgentFromSidebar(agentName, type) {
         sendBtn.style.opacity = '1';
     }
     
-    // Load chat history
-    loadUserChatHistory(agentName);
+    // Load chat history (use id for unique storage)
+    loadUserChatHistory(agent.id);
     
-    console.log(`✅ Selected agent: ${agentName}`);
+    console.log(`✅ Selected agent: ${agent.name} (id: ${uniqueAgentId})`);
 }
 
 // ========== Public Agents Functionality ==========
@@ -1605,7 +1630,8 @@ async function loadPublicAgents() {
         }
         
         const data = await response.json();
-        publicAgents = data.agents || [];
+        // Normalize: add `id` property (same as modelId) for consistency
+        publicAgents = (data.agents || []).map(a => ({ ...a, id: a.modelId }));
         
         // Sort by accessCount descending (most used first)
         publicAgents.sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0));
@@ -1629,7 +1655,7 @@ function renderPublicAgentsList(agents) {
     }
     
     listDiv.innerHTML = agents.map(agent => `
-        <div class="pa-model-item" onclick="viewPublicAgentDetails('${agent.modelId}')" style="cursor: pointer;">
+        <div class="pa-model-item" onclick="viewPublicAgentDetails('${agent.id}')" style="cursor: pointer;">
             <div class="pa-model-item-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <h3 class="pa-model-item-name">${escapeHtml(agent.name || 'Unnamed Agent')}</h3>
                 <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">
@@ -1651,8 +1677,8 @@ function renderPublicAgentsList(agents) {
 }
 
 // View public agent details (read-only dashboard)
-function viewPublicAgentDetails(modelId) {
-    const agent = publicAgents.find(a => a.modelId === modelId);
+function viewPublicAgentDetails(agentId) {
+    const agent = publicAgents.find(a => a.id === agentId);
     if (!agent) {
         showNotification('Agent not found', 'error');
         return;
@@ -1728,17 +1754,28 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                 </div>
                 
                 <div style="display: flex; gap: 12px; margin-top: 24px;">
-                    <button class="pa-btn-primary" onclick="chatWithPublicAgent('${escapeHtml(agent.name)}'); closePublicAgentDetailsModal();" style="flex: 1;">
+                    <button class="pa-btn-primary" onclick="chatWithPublicAgent('${agent.id}'); closePublicAgentDetailsModal();" style="flex: 1;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                         </svg>
                         Chat with this Agent
                     </button>
-                    ${isOwner ? `
-                        <button class="pa-btn-secondary" onclick="closePublicAgentDetailsModal(); switchTab('model-creator'); setTimeout(() => selectModel('${agent.modelId}'), 100);">
+                    ${!isOwner ? `
+                        <button class="pa-btn-success" onclick="showForkConfirmModal('${agent.id}', '${escapeHtml(agent.name)}');" style="flex: 1;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                                <circle cx="12" cy="18" r="3"></circle>
+                                <circle cx="6" cy="6" r="3"></circle>
+                                <circle cx="18" cy="6" r="3"></circle>
+                                <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
+                                <path d="M12 12v3"></path>
+                            </svg>
+                            Fork Agent
+                        </button>
+                    ` : `
+                        <button class="pa-btn-secondary" onclick="closePublicAgentDetailsModal(); switchTab('agent-creator'); setTimeout(() => selectModel('${agent.id}'), 100);">
                             Edit
                         </button>
-                    ` : ''}
+                    `}
                 </div>
             </div>
         </div>
@@ -1755,16 +1792,130 @@ function closePublicAgentDetailsModal() {
     }
 }
 
+// ========== Fork Agent Functionality ==========
+
+let forkTargetModelId = null;
+let forkTargetAgentName = null;
+
+// Show fork confirmation modal
+function showForkConfirmModal(modelId, agentName) {
+    forkTargetModelId = modelId;
+    forkTargetAgentName = agentName;
+    
+    const modal = document.getElementById('forkAgentModal');
+    const nameSpan = document.getElementById('forkAgentName');
+    
+    if (nameSpan) {
+        nameSpan.textContent = agentName;
+    }
+    
+    if (modal) {
+        modal.classList.add('show');
+    }
+    
+    // Close the public agent details modal
+    closePublicAgentDetailsModal();
+}
+
+// Close fork modal
+function closeForkModal() {
+    const modal = document.getElementById('forkAgentModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+    forkTargetModelId = null;
+    forkTargetAgentName = null;
+}
+
+// Fork the agent
+async function forkAgent() {
+    if (!forkTargetModelId) {
+        showNotification('No agent selected to fork', 'error');
+        return;
+    }
+    
+    // Use the already-set currentWalletAddress (set when wallet connects)
+    const walletAddress = currentWalletAddress || window.walletManager?.walletAddress;
+    
+    if (!walletAddress) {
+        showNotification('Please connect your wallet first', 'error');
+        return;
+    }
+    
+    console.log(`🔀 Forking agent ${forkTargetModelId} for wallet ${walletAddress}`);
+    
+    const forkBtn = document.getElementById('forkBtn');
+    const originalBtnText = forkBtn?.innerHTML;
+    
+    try {
+        // Show loading state
+        if (forkBtn) {
+            forkBtn.disabled = true;
+            forkBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; animation: spin 1s linear infinite;">
+                    <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"></circle>
+                </svg>
+                Forking...
+            `;
+        }
+        
+        showNotification('Forking agent...', 'info');
+        
+        const response = await fetch('/api/personal-agent/fork', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                sourceModelId: forkTargetModelId,
+                ownerAddress: walletAddress.toLowerCase()
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to fork agent');
+        }
+        
+        showNotification(`Successfully forked "${forkTargetAgentName}"!`, 'success');
+        
+        // Close modal
+        closeForkModal();
+        
+        // Refresh my agents list
+        await loadModels();
+        
+        // Switch to Agent Creator tab and select the new forked agent
+        switchTab('model-creator');
+        setTimeout(() => {
+            if (data.newModelId) {
+                selectModel(data.newModelId);
+            }
+        }, 200);
+        
+    } catch (error) {
+        console.error('Fork error:', error);
+        showNotification(`Failed to fork: ${error.message}`, 'error');
+    } finally {
+        // Restore button state
+        if (forkBtn && originalBtnText) {
+            forkBtn.disabled = false;
+            forkBtn.innerHTML = originalBtnText;
+        }
+    }
+}
+
 // Chat with a public agent
-function chatWithPublicAgent(agentName) {
+function chatWithPublicAgent(agentId) {
     // Switch to User Chats tab
     switchTab('user-chats');
     
     // Wait for tab to load, then select the agent from sidebar
     setTimeout(() => {
-        // Find agent type (check if it's in publicAgents)
-        const isPublic = publicAgents.some(a => a.name === agentName);
-        selectAgentFromSidebar(agentName, isPublic ? 'public' : 'my');
+        // Find agent type by ID (check if it's in publicAgents)
+        const isPublic = publicAgents.some(a => a.id === agentId);
+        selectAgentFromSidebar(agentId, isPublic ? 'public' : 'my');
     }, 150);
 }
 
@@ -1779,7 +1930,7 @@ function tryAgentFromDashboard(modelId, agentName) {
     setTimeout(() => {
         // For agents in "My Agents", they won't be in publicAgents
         const isPublic = publicAgents.some(a => a.id === modelId);
-        selectAgentFromSidebar(agentName, isPublic ? 'public' : 'my');
+        selectAgentFromSidebar(modelId, isPublic ? 'public' : 'my');
         
         // Focus the chat input
         const input = document.getElementById('userChatInput');
@@ -1834,8 +1985,8 @@ function handleAgentSelection() {
     if (nameDiv) nameDiv.textContent = model.name;
     if (purposeDiv) purposeDiv.textContent = model.purpose || 'No description available';
     
-    // Load chat history for this agent
-    loadUserChatHistory(agentName);
+    // Load chat history for this agent (use id for unique storage)
+    loadUserChatHistory(model.id);
     
     // Focus input
     if (input) input.focus();
@@ -1892,13 +2043,16 @@ async function handleUserChatSend() {
         // Call the backend API (backend will handle RAG automatically)
         let fullResponse = '';
         
+        // Get agent id for unique identification
+        const agentModelId = selectedAgentForChat.id;
+        
         await window.apiManager.streamModelRequest(
-            selectedAgentForChat.name, // Agent name - backend will detect it's a user agent and do RAG
+            selectedAgentForChat.name, // Agent name for display/logging
             message,
-            { systemPrompt: systemPrompt },
+            { systemPrompt: systemPrompt, modelId: agentModelId }, // Pass modelId for Firestore lookup
             {
                 onStart() {
-                    console.log('🚀 Starting chat with agent:', selectedAgentForChat.name);
+                    console.log('🚀 Starting chat with agent:', selectedAgentForChat.name, '| modelId:', agentModelId);
                 },
                 onDelta(delta) {
                     fullResponse += delta;
@@ -1925,8 +2079,8 @@ async function handleUserChatSend() {
                         timestamp: new Date().toISOString()
                     });
                     
-                    // Save history
-                    saveUserChatHistory(selectedAgentForChat.name);
+                    // Save history (use id for unique storage)
+                    saveUserChatHistory(selectedAgentForChat.id);
                     
                     // Re-enable input
                     if (input) input.disabled = false;
@@ -1991,10 +2145,10 @@ function appendUserChatMessage(role, content) {
     return messageId;
 }
 
-// Load chat history for an agent
-function loadUserChatHistory(agentName) {
+// Load chat history for an agent (by modelId for uniqueness)
+function loadUserChatHistory(agentId) {
     try {
-        const stored = localStorage.getItem(`userChatHistory_${agentName}`);
+        const stored = localStorage.getItem(`userChatHistory_${agentId}`);
         if (stored) {
             userChatHistory = JSON.parse(stored);
             
@@ -2019,10 +2173,10 @@ function loadUserChatHistory(agentName) {
     }
 }
 
-// Save chat history for an agent
-function saveUserChatHistory(agentName) {
+// Save chat history for an agent (by modelId for uniqueness)
+function saveUserChatHistory(agentId) {
     try {
-        localStorage.setItem(`userChatHistory_${agentName}`, JSON.stringify(userChatHistory));
+        localStorage.setItem(`userChatHistory_${agentId}`, JSON.stringify(userChatHistory));
     } catch (error) {
         console.error('Error saving chat history:', error);
     }
@@ -2166,6 +2320,9 @@ window.chatWithPublicAgent = chatWithPublicAgent;
 window.selectAgentFromSidebar = selectAgentFromSidebar;
 window.viewPublicAgentDetails = viewPublicAgentDetails;
 window.closePublicAgentDetailsModal = closePublicAgentDetailsModal;
+window.showForkConfirmModal = showForkConfirmModal;
+window.closeForkModal = closeForkModal;
+window.forkAgent = forkAgent;
 window.closeUploadFileModal = closeUploadFileModal;
 window.handleFileSelect = handleFileSelect;
 window.removeFileFromPreview = removeFileFromPreview;

@@ -77,7 +77,7 @@ class APIManager {
 
     // NEW: Streaming chat request (client-side)
     async streamChatRequest(messages, options = {}) {
-        const { model = null, onDelta, onStart, onError, onDone } = options;
+        const { model = null, modelId = null, onDelta, onStart, onError, onDone } = options;
         if (!this.isInitialized) throw new Error('API Manager not initialized');
         const apiKey = this.getAPIKey();
         if (!apiKey) throw new Error('API Key not found');
@@ -89,6 +89,11 @@ class APIManager {
             temperature: this.config.proxy.temperature,
             stream: true
         };
+        
+        // Add modelId if provided (for unique agent identification in Firestore)
+        if (modelId) {
+            requestBody.modelId = modelId;
+        }
 
         let fullText = '';
         try {
@@ -186,8 +191,10 @@ class APIManager {
         ];
 
         // Simplified - sanitization now handled in backend
+        // Pass modelId from context for unique Firestore identification
         return this.streamChatRequest(messages, {
             model: modelName || this.config.proxy.model,
+            modelId: context.modelId || null,
             ...options
         });
     }

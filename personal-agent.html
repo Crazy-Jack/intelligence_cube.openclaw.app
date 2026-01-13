@@ -1066,6 +1066,67 @@ Answer the user's question as this specialized model would.</pre>
         </div>
     </div>
 
+    <!-- Fork Agent Confirmation Modal -->
+    <div id="forkAgentModal" class="pa-modal-overlay">
+        <div class="pa-modal-content" style="max-width: 480px;">
+            <div class="pa-modal-header">
+                <h2>Fork Agent</h2>
+                <button class="pa-modal-close" onclick="closeForkModal()">&times;</button>
+            </div>
+            <div class="pa-modal-body">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #10b981, #059669); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <circle cx="12" cy="18" r="3"></circle>
+                            <circle cx="6" cy="6" r="3"></circle>
+                            <circle cx="18" cy="6" r="3"></circle>
+                            <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
+                            <path d="M12 12v3"></path>
+                        </svg>
+                    </div>
+                    <h3 style="margin: 0 0 8px; color: #111827;">Fork "<span id="forkAgentName"></span>"?</h3>
+                    <p style="color: #6b7280; font-size: 14px; margin: 0;">Create your own copy of this agent</p>
+                </div>
+                <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                    <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span style="font-size: 14px; color: #374151;">Agent metadata (name, purpose, system prompt) will be copied</span>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span style="font-size: 14px; color: #374151;">Knowledge base (embeddings) will be copied</span>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span style="font-size: 14px; color: #374151;">You can customize and add your own files</span>
+                    </div>
+                </div>
+                <p style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0;">
+                    The forked agent will appear in your "My Agents" list
+                </p>
+            </div>
+            <div class="pa-modal-footer">
+                <button class="pa-btn-secondary" onclick="closeForkModal()">Cancel</button>
+                <button class="pa-btn-success" onclick="forkAgent()" id="forkBtn" style="background: linear-gradient(135deg, #10b981, #059669);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                        <circle cx="12" cy="18" r="3"></circle>
+                        <circle cx="6" cy="6" r="3"></circle>
+                        <circle cx="18" cy="6" r="3"></circle>
+                        <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
+                        <path d="M12 12v3"></path>
+                    </svg>
+                    Fork Agent
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="account-dropdown.js"></script>
     <script type="module" src="chains.js"></script>
