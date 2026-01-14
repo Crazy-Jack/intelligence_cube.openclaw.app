@@ -767,8 +767,8 @@ async function renderHfSearchResults(results, hfMap, displayContext) {
       <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
       <td class="action-cell" data-label="Actions">
         <div class="invest">
-          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
-          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
+          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;" title="External models are currently not supported. Please use the Intelligence Cubed models.">Try</button>
+          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;" title="External models are currently not supported. Please use the Intelligence Cubed models.">Add to Cart</button>
         </div>
       </td>
     `;
@@ -1336,13 +1336,13 @@ async function showModelCard(modelName, signOverride) {
         tryBtnModal.disabled = true;
         tryBtnModal.style.opacity = '0.5';
         tryBtnModal.style.cursor = 'not-allowed';
-        tryBtnModal.title = 'Not available for external Hugging Face models';
+        tryBtnModal.title = 'External models are currently not supported. Please use the Intelligence Cubed models.';
       }
       if (addBtnModal) {
         addBtnModal.disabled = true;
         addBtnModal.style.opacity = '0.5';
         addBtnModal.style.cursor = 'not-allowed';
-        addBtnModal.title = 'Not available for external Hugging Face models';
+        addBtnModal.title = 'External models are currently not supported. Please use the Intelligence Cubed models.';
       }
     } else {
       if (tryBtnModal) { tryBtnModal.disabled = false; tryBtnModal.style.opacity = ''; tryBtnModal.style.cursor = ''; tryBtnModal.title = ''; }
@@ -2233,8 +2233,8 @@ async function appendHuggingFaceModels(page = 1, clearExisting = true) {
       <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
       <td class="action-cell" data-label="Actions">
         <div class="invest">
-          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;">Try</button>
-          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;">Add to Cart</button>
+          <button class="try-btn" disabled style="opacity:0.5;cursor:not-allowed;" title="External models are currently not supported. Please use the Intelligence Cubed models.">Try</button>
+          <button class="add-cart-btn" disabled style="opacity:0.5;cursor:not-allowed;" title="External models are currently not supported. Please use the Intelligence Cubed models.">Add to Cart</button>
         </div>
       </td>
     `;
