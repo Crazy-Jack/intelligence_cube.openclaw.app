@@ -396,7 +396,8 @@ function hideTokenPurchaseModal() {
 }
 
 // 修复后的placeOrder函数 - 在这里进行所有验证
-function placeOrder() {
+// ✅ 更新（P0）：使用后端验证的 spendCreditsUnified
+async function placeOrder() {
     const modal = document.getElementById('tokenPurchaseModal');
     const workflowId = parseInt(modal.dataset.workflowId);
     const workflow = workflows.find(w => w.id === workflowId);
@@ -421,13 +422,22 @@ function placeOrder() {
         return;
     }
     
-    // 4. 扣除I3 tokens
-    const spendResult = window.walletManager.spendCredits(totalCost, 'workflow_tokens_purchase');
+    // 4. ✅ 使用后端验证的消费函数（P0）
+    const spendResult = await window.spendCreditsUnified(
+        totalCost,
+        'workflow_tokens_purchase',
+        {
+            workflowId: workflow.id,
+            workflowName: workflow.name,
+            tokenCount: missingTokens.length
+        }
+    );
+
     if (!spendResult.success) {
         alert(`❌ Payment Processing Failed!\n\n${spendResult.error}\n\nTransaction cancelled.`);
         return;
     }
-    
+
     // NEW: 为 Workflow 中购买的 tokens 写入 Payment History 交易
     if (window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
         const nowTs = Date.now();

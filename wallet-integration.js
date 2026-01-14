@@ -76,6 +76,37 @@
   }
 })();
 
+// ===== Preferred Network (pre-connect) =====
+// Declare I3_NETWORKS at the top to ensure it's available before any function uses it
+const I3_NETWORKS = {
+  ethereum: { kind:'evm', key:'ethereum', name:'Ethereum', icon:'svg/chains/ethereum.svg', chainId:'0x1' },
+  bnb:      { kind:'evm', key:'bnb',      name:'BNB Chain', icon:'svg/chains/bnb.svg',      chainId:'0x38' },
+  base:     { kind:'evm', key:'base',     name:'Base',      icon:'svg/chains/base.svg',     chainId:'0x2105' },
+  arbitrum: { kind:'evm', key:'arbitrum', name:'Arbitrum One', icon:'svg/chains/arbitrum.svg', chainId:'0xa4b1' },
+  zksync:   { kind:'evm', key:'zksync',   name:'ZKsync Era',   icon:'svg/chains/zksync.svg',   chainId:'0x144' },
+  'polygon-zkevm': { kind:'evm', key:'polygon-zkevm', name:'Polygon zkEVM', icon:'svg/chains/polygon-zkevm.svg', chainId:'0x44d' },
+  optimism: { kind:'evm', key:'optimism', name:'Optimism', icon:'svg/chains/optimism.svg', chainId:'0xa' },
+  opbnb: { kind:'evm', key:'opbnb', name:'opBNB', icon:'svg/chains/opbnb.svg', chainId:'0xcc' },
+  solana:   { kind:'solana', key:'solana', name:'Solana (Devnet)', icon:'svg/chains/solana.svg', network:'devnet' },
+};
+
+function getPreferredNetwork() {
+  try {
+    const raw = localStorage.getItem('i3_preferred_network');
+    const data = raw ? JSON.parse(raw) : null;
+    if (data && I3_NETWORKS[data.key]) return I3_NETWORKS[data.key];
+  } catch {}
+  // Return null if no preference is set (do not force switch to BNB)
+  return null; 
+}
+
+function setPreferredNetwork(key) {
+  const n = I3_NETWORKS[key] || I3_NETWORKS.ethereum;
+  localStorage.setItem('i3_preferred_network', JSON.stringify({ key: n.key }));
+  // 刷新徽章
+  renderNetworkBadge({ name: n.name, icon: n.icon });
+}
+
 /**
  * 显示钱包选择模态框 - 新增功能
  */
@@ -792,6 +823,97 @@ async function connectBinanceWallet() {
     try { openNetworkPickerModal?.(); } catch (_) {}
     return;
   }
+
+  // ============================================================
+  // 🔑 DApp Browser: Use injected provider directly
+  // ============================================================
+  // Check if we're in Binance DApp browser (uses cached result from page load)
+  const isBinanceDappBrowser = detectBinanceDappBrowser();
+  
+  if (isBinanceDappBrowser) {
+    // Use the CACHED provider (saved at page load before other SDKs overwrote it)
+    const provider = getCachedBinanceProvider() || window.ethereum;
+    
+    if (!provider || typeof provider.request !== 'function') {
+      showNotification('Provider not available', 'error');
+      return { success: false, error: 'No provider' };
+    }
+    
+    // Close wallet modal first
+    try { 
+      closeWalletModal?.(); 
+    } catch (e) {
+      // Ignore errors
+    }
+    
+    try {
+      // Wallet connection using the CACHED provider
+      const accounts = await provider.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned from wallet');
+      }
+      
+      const address = accounts[0];
+      
+      // Get chain ID
+      const chainId = await provider.request({ method: 'eth_chainId' });
+      
+      // Update wallet manager
+      if (window.walletManager) {
+        window.walletManager.ethereum = provider;  // Use cached provider
+        window.walletManager.walletType = 'binance';
+        window.walletManager.walletAddress = address;
+        window.walletManager.isConnected = true;
+
+        try {
+          await window.walletManager.fetchRemoteWalletDataIfAvailable?.();
+        } catch (e) {
+          console.warn('[Connect][Binance] Failed to fetch remote data:', e);
+        }
+
+        window.walletManager.loadWalletSpecificData?.();
+        window.walletManager.saveToStorage?.();
+        window.walletManager.setupEventListeners?.();
+        window.walletManager.updateUI?.();
+
+        window.dispatchEvent(new CustomEvent('walletConnected', {
+          detail: {
+            address,
+            credits: window.walletManager.credits || 0,
+            isNewUser: !window.walletManager.getWalletData?.(address)
+          }
+        }));
+
+        // Update network badge
+        try {
+          const networkInfo = mapChainIdToDisplay(chainId, 'binance');
+          if (networkInfo) {
+            renderNetworkBadge(networkInfo);
+          }
+        } catch (e) {
+          console.warn('[Connect][Binance] Failed to update network badge:', e);
+        }
+      }
+
+      showNotification('Binance Wallet connected!', 'success');
+      return { success: true, address };
+
+    } catch (error) {
+      if (error?.code === 4001 || error?.message?.toLowerCase().includes('user rejected')) {
+        showNotification('Connection cancelled by user', 'info');
+      } else {
+        showNotification('Connection failed: ' + (error?.message || 'Unknown error'), 'error');
+      }
+      return { success: false, error: error?.message };
+    }
+    
+    // IMPORTANT: Never fall through to SDK if we're in DApp browser
+    return { success: false, error: 'DApp browser connection failed' };
+  }
+  // ============================================================
 
   // ---- Mobile: Use W3W Provider to auto-jump to Binance Wallet app ----
   const isMobile = isMobileDevice();
@@ -1750,27 +1872,25 @@ async function handleDailyCheckin() {
             return;
         }
 
-        // 2. 判断是否为 Admin
+        // 2. 判断是否为 Admin（无 UI 提示）
         const isAdminUser = window.isAdmin && window.isAdmin();
         
         if (isAdminUser) {
-            // Admin 用户 → 检查后执行本地签到
-            if (!window.walletManager.canCheckinToday()) {
-                showNotification('Already checked in today! Come back tomorrow.', 'error');
-                return;
-            }
-            console.log('Admin user detected, executing local check-in');
-            executeLocalCheckin();
+            // ✨ Admin 用户 → 直接获得 10000 credits
+            console.log('🔑 Admin user detected, executing local check-in');
+            await executeAdminCheckinIntegration();
         } else {
-            // 普通用户 → 直接打开链上签到 Modal
-            console.log('Regular user detected, opening on-chain check-in modal');
+            // 普通用户 → 打开链上签到 Modal
+            console.log('👤 Regular user detected, opening on-chain check-in modal');
             
             if (typeof window.openOnChainCheckInModal === 'function') {
-                // ⚠️ 关键修改：移除 await，不等待加载完成
+                // 先加载用户状态
                 if (typeof window.loadUserCheckInStatus === 'function') {
-                    window.loadUserCheckInStatus(); // 移除了 await
+                    await window.loadUserCheckInStatus();
                 }
+                console.log('[handleDailyCheckin] Calling openOnChainCheckInModal()...');
                 window.openOnChainCheckInModal();
+                console.log('[handleDailyCheckin] openOnChainCheckInModal() call completed');
             } else {
                 console.error('On-chain check-in modal function not found');
                 showNotification('Check-in feature not available', 'error');
@@ -1781,75 +1901,68 @@ async function handleDailyCheckin() {
         showNotification('Failed to process check-in: ' + error.message, 'error');
     }
 }
+
 /**
- * 执行本地签到(仅 Admin 用户)
+ * 执行 Admin 本地签到（直接获得 10000 credits）
+ * ✅ 更新（P1）：使用后端 Cloud Function 验证 Admin 身份并执行签到
  */
-async function executeLocalCheckin() {
+async function executeAdminCheckinIntegration() {
     try {
         const address = (window.walletManager.walletAddress || '').toLowerCase();
-
-        // Firebase 同步(如果可用)
-        if (window.firebaseDb) {
-            const { doc, getDoc, setDoc, updateDoc, serverTimestamp } = 
-                await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-
-            const walletRef = doc(window.firebaseDb, 'wallets', address);
-            const snap = await getDoc(walletRef);
-
-            let remoteTotalCheckins = 0;
-            let lastCheckinAt = null;
-            
-            if (snap.exists()) {
-                const data = snap.data() || {};
-                lastCheckinAt = data.lastCheckinAt || null;
-                remoteTotalCheckins = Number(data.totalCheckins || 0);
-            } else {
-                await setDoc(walletRef, { 
-                    address: address, 
-                    createdAt: serverTimestamp(), 
-                    totalCheckins: 0 
-                }, { merge: true });
-            }
-
-            // 同步时间戳到本地
-            if (lastCheckinAt && typeof lastCheckinAt.toMillis === 'function') {
-                try { 
-                    localStorage.setItem('last_checkin_at', String(lastCheckinAt.toMillis())); 
-                } catch (_) {}
-            }
-
-            // 执行本地签到
-            const result = window.walletManager.dailyCheckin();
-            if (!result || !result.success) {
-                showNotification(result?.error || 'Check-in failed', 'error');
-                return;
-            }
-
-            // 同步到 Firestore
-            try {
-                await updateDoc(walletRef, {
-                    lastCheckinAt: serverTimestamp(),
-                    totalCheckins: remoteTotalCheckins + 1,
-                    credits: window.walletManager.credits,
-                    lastUpdated: serverTimestamp(),
-                    lastCheckinType: 'local-admin'
-                });
-            } catch (e) {
-                console.warn('Failed to sync to Firestore:', e);
-            }
-
-            showNotification(`Check-in successful! +${result.reward} I3 tokens`, 'success');
-        } else {
-            // Firebase 不可用时的降级处理
-            const result = window.walletManager.dailyCheckin();
-            if (result && result.success) {
-                showNotification(`Check-in successful! +${result.reward} I3 tokens`, 'success');
-            } else {
-                showNotification(result?.error || 'Check-in failed', 'error');
-            }
+        
+        if (!address) {
+            showNotification('Wallet address not available', 'error');
+            return;
         }
+
+        // ✅ P0 修复：先获得签名
+        let signature;
+        try {
+            signature = await window.walletManager.signMessage(`Check-in at ${Date.now()}`);
+        } catch (e) {
+            showNotification('Failed to sign message: ' + e.message, 'error');
+            return;
+        }
+
+        // ✅ P1 修复：调用后端 Cloud Function（adminQuickCheckin）
+        // 这确保只有真正的 Admin 才能添加 10000 credits
+        if (!window.creditAPI) {
+            showNotification('Credit API not loaded. Please refresh the page.', 'error');
+            return;
+        }
+
+        console.log('[Admin Check-in] Calling backend adminQuickCheckin for:', address);
+        
+        const result = await window.creditAPI.adminQuickCheckin(address, signature);
+        
+        if (!result.success) {
+            showNotification(
+                `❌ Admin check-in failed: ${result.message || 'Unknown error'}`, 
+                'error'
+            );
+            console.error('[Admin Check-in] Backend error:', result);
+            return;
+        }
+
+        // ✅ 更新内存中的 credits
+        if (typeof result.creditsAdded === 'number' && result.creditsAdded > 0) {
+            window.walletManager.credits = result.creditsAdded;
+            window.walletManager.updateUI();
+            
+            console.log(`✅ Admin check-in successful: +${result.creditsAdded} credits`);
+            showNotification(
+                `✅ Check-in successful! +${result.creditsAdded} I3 tokens earned (from backend)`, 
+                'success'
+            );
+        } else {
+            showNotification(
+                `⚠️ Check-in completed but no credits added. You may not have admin permissions.`,
+                'warning'
+            );
+        }
+        
     } catch (error) {
-        console.error('Local check-in error:', error);
+        console.error('Admin check-in failed:', error);
         showNotification('Check-in failed: ' + error.message, 'error');
     }
 }
@@ -2259,10 +2372,268 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
+// ===== DApp Browser Auto-Connect =====
+// Automatically connect when opened in a DApp browser with injected provider
+async function attemptDappBrowserAutoConnect() {
+    // Skip if already connected
+    if (window.walletManager?.isConnected) {
+        console.log('[AutoConnect] Already connected, skipping auto-connect');
+        return false;
+    }
+
+    // Skip if walletManager not ready yet
+    if (!window.walletManager) {
+        console.log('[AutoConnect] WalletManager not ready');
+        return false;
+    }
+
+    const isMobile = isMobileDevice() || isRealMobileDevice();
+    
+    // 🔑 Direct check for Binance DApp browser (highest priority)
+    // This is the most reliable signal from the screenshot: ethereum.isBinance: true
+    const hasBinanceInjected = window.ethereum?.isBinance === true && typeof window.ethereum?.request === 'function';
+    
+    // Check for other injected providers
+    const hasBinanceProvider = hasBinanceInjected || hasStrongBinanceEvmProvider();
+    const hasMetaMaskProvider = window.ethereum?.isMetaMask && !window.ethereum?.isBinance;
+    const hasCoinbaseProvider = window.ethereum?.isCoinbaseWallet;
+    const hasPhantomProvider = window.phantom?.solana?.isPhantom || window.solana?.isPhantom;
+    const hasGenericProvider = window.ethereum && typeof window.ethereum.request === 'function';
+    
+    // Check UA for "bnc" which indicates Binance app
+    const uaContainsBnc = /bnc/i.test(navigator.userAgent);
+    
+    console.log('[AutoConnect] DApp browser detection:', {
+        isMobile,
+        hasBinanceInjected,
+        hasBinanceProvider,
+        hasMetaMaskProvider,
+        hasCoinbaseProvider,
+        hasPhantomProvider,
+        hasGenericProvider,
+        uaContainsBnc,
+        ethereumIsBinance: window.ethereum?.isBinance,
+        ua: navigator.userAgent.substring(0, 100)
+    });
+
+    // Auto-connect conditions:
+    // 1. Mobile DApp browsers
+    // 2. OR desktop with clear Binance injection (isBinance flag)
+    const shouldAutoConnect = isMobile || hasBinanceInjected;
+    
+    if (!shouldAutoConnect) {
+        console.log('[AutoConnect] No auto-connect trigger detected');
+        return false;
+    }
+
+    // Determine which wallet to auto-connect based on detected provider
+    let walletType = null;
+    let provider = null;
+
+    // Prioritize Binance if isBinance flag is set OR UA contains "bnc"
+    if (hasBinanceInjected || (hasBinanceProvider && uaContainsBnc)) {
+        walletType = 'binance';
+        provider = window.ethereum; // Use window.ethereum directly since isBinance is true
+        console.log('[AutoConnect] 🎯 Detected Binance DApp browser (isBinance=' + window.ethereum?.isBinance + ', uaContainsBnc=' + uaContainsBnc + ')');
+    } else if (hasBinanceProvider) {
+        walletType = 'binance';
+        provider = getBinanceProvider();
+        console.log('[AutoConnect] Detected Binance provider');
+    } else if (hasMetaMaskProvider) {
+        walletType = 'metamask';
+        provider = window.ethereum;
+        console.log('[AutoConnect] Detected MetaMask DApp browser');
+    } else if (hasCoinbaseProvider) {
+        walletType = 'coinbase';
+        provider = window.ethereum;
+        console.log('[AutoConnect] Detected Coinbase DApp browser');
+    } else if (hasPhantomProvider) {
+        walletType = 'phantom';
+        provider = window.phantom?.solana || window.solana;
+        console.log('[AutoConnect] Detected Phantom DApp browser');
+    } else if (hasGenericProvider && isMobile) {
+        // On mobile with a generic provider, assume it's the wallet's built-in browser
+        walletType = 'generic';
+        provider = window.ethereum;
+        console.log('[AutoConnect] Detected generic mobile DApp browser');
+    }
+
+    if (!walletType || !provider) {
+        console.log('[AutoConnect] No suitable injected provider found for auto-connect');
+        return false;
+    }
+
+    try {
+        console.log(`[AutoConnect] Auto-connecting with ${walletType}...`);
+        
+        // Handle Solana (Phantom) separately
+        if (walletType === 'phantom') {
+            setPreferredNetwork('solana');
+            const result = await window.walletManager.connectSolana('phantom');
+            if (result?.success) {
+                console.log('[AutoConnect] Phantom auto-connect successful:', result.address);
+                showNotification('Wallet connected automatically!', 'success');
+                return true;
+            }
+            return false;
+        }
+
+        // EVM wallets
+        // Set appropriate default network
+        if (walletType === 'binance') {
+            setPreferredNetwork('bnb');
+        } else if (walletType === 'coinbase') {
+            setPreferredNetwork('base');
+        } else if (!getPreferredNetwork()) {
+            setPreferredNetwork('ethereum');
+        }
+
+        // Request accounts from injected provider
+        console.log('[AutoConnect] Requesting accounts from injected provider...');
+        
+        // First check if already authorized
+        let accounts = [];
+        try {
+            accounts = await Promise.race([
+                provider.request({ method: 'eth_accounts' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+            ]);
+        } catch (e) {
+            console.log('[AutoConnect] eth_accounts check failed:', e.message);
+        }
+
+        // If not authorized, request authorization
+        if (!accounts || accounts.length === 0) {
+            console.log('[AutoConnect] No existing authorization, requesting accounts...');
+            try {
+                await Promise.race([
+                    provider.request({ method: 'eth_requestAccounts' }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                ]);
+            } catch (e) {
+                if (e.code === 4001) {
+                    console.log('[AutoConnect] User rejected connection');
+                    return false;
+                }
+                console.warn('[AutoConnect] eth_requestAccounts warning:', e.message);
+            }
+        }
+
+        // Wait for accounts
+        const address = await waitForAccounts(provider, { totalMs: 8000 });
+        if (!address) {
+            console.log('[AutoConnect] Failed to get account address');
+            return false;
+        }
+
+        // Get chain ID
+        const chainId = await provider.request({ method: 'eth_chainId' });
+
+        // Update wallet manager state
+        window.walletManager.ethereum = provider;
+        window.walletManager.walletType = walletType === 'generic' ? 'injected' : walletType;
+        window.walletManager.walletAddress = address;
+        window.walletManager.isConnected = true;
+
+        // Load wallet data
+        try {
+            await window.walletManager.fetchRemoteWalletDataIfAvailable?.();
+        } catch (e) {
+            console.warn('[AutoConnect] Failed to fetch remote data:', e);
+        }
+
+        window.walletManager.loadWalletSpecificData?.();
+        window.walletManager.saveToStorage?.();
+        window.walletManager.setupEventListeners?.();
+        window.walletManager.updateUI?.();
+
+        // Dispatch connected event
+        window.dispatchEvent(new CustomEvent('walletConnected', {
+            detail: {
+                address,
+                credits: window.walletManager.credits || 0,
+                isNewUser: !window.walletManager.getWalletData?.(address)
+            }
+        }));
+
+        // Update network badge
+        try {
+            const networkInfo = mapChainIdToDisplay(chainId, walletType);
+            if (networkInfo) {
+                renderNetworkBadge(networkInfo);
+            }
+        } catch (e) {
+            console.warn('[AutoConnect] Failed to update network badge:', e);
+        }
+
+        console.log(`[AutoConnect] ✅ Success! Connected ${walletType} wallet:`, address.slice(0, 6) + '...' + address.slice(-4));
+        showNotification('Wallet connected automatically!', 'success');
+        return true;
+
+    } catch (error) {
+        console.error('[AutoConnect] Auto-connect failed:', error);
+        return false;
+    }
+}
+
+// ===== DApp Browser Detection with Caching =====
+// Cache the detection result AND the original provider at page load
+// because other SDKs may overwrite window.ethereum later
+let _cachedIsDappBrowser = null;
+let _cachedOriginalProvider = null;
+
+// CRITICAL: Run detection IMMEDIATELY when script loads (before other SDKs can overwrite)
+(function earlyDappBrowserCache() {
+  if (window.ethereum && window.ethereum.isBinance === true) {
+    _cachedIsDappBrowser = true;
+    _cachedOriginalProvider = window.ethereum;
+    console.log('[EARLY CACHE] ✅ Detected DApp browser, saved provider reference BEFORE SDKs could overwrite');
+  } else {
+    console.log('[EARLY CACHE] ℹ️ Not in DApp browser or ethereum not yet available');
+  }
+})();
+
+function detectAndCacheDappBrowser() {
+  // Only detect once at page load
+  if (_cachedIsDappBrowser !== null) {
+    return _cachedIsDappBrowser;
+  }
+  
+  // Check if window.ethereum.isBinance is true
+  const isDappBrowser = window.ethereum && window.ethereum.isBinance === true;
+  
+  if (isDappBrowser) {
+    // Cache the result AND save a reference to the original provider
+    _cachedIsDappBrowser = true;
+    _cachedOriginalProvider = window.ethereum;
+    console.log('[Cache] Cached DApp browser detection: TRUE, saved original provider');
+  } else {
+    _cachedIsDappBrowser = false;
+  }
+  
+  return _cachedIsDappBrowser;
+}
+
+function detectBinanceDappBrowser() {
+  // Use cached result if available
+  if (_cachedIsDappBrowser !== null) {
+    return _cachedIsDappBrowser;
+  }
+  // Otherwise do fresh detection
+  return detectAndCacheDappBrowser();
+}
+
+function getCachedBinanceProvider() {
+  // Return the cached original provider (before other SDKs overwrote it)
+  return _cachedOriginalProvider;
+}
+
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Wallet integration script loaded');
     checkWalletManager();
+    
     // Cross-page reconcile: if Firebase is ready and wallet connected, hydrate from Firestore
     try {
         if (window.walletManager && window.walletManager.isConnected && typeof window.walletManager.fetchRemoteWalletDataIfAvailable === 'function') {
@@ -2305,6 +2676,8 @@ window.connectSolanaPhantom     = connectSolanaPhantom;
 // 导出移动设备检测函数
 window.isMobileDevice = isMobileDevice;
 window.isRealMobileDevice = isRealMobileDevice;
+// 导出 DApp 浏览器检测函数
+window.detectBinanceDappBrowser = detectBinanceDappBrowser;
 
 
 console.log('✅ Wallet integration functions loaded successfully');
@@ -2550,37 +2923,6 @@ const makeRow = (net) => {
   requestAnimationFrame(() => modal.classList.add('show'));
 }
 
-
-// ===== Preferred Network (pre-connect) =====
-const I3_NETWORKS = {
-  ethereum: { kind:'evm', key:'ethereum', name:'Ethereum', icon:'svg/chains/ethereum.svg', chainId:'0x1' },
-  bnb:      { kind:'evm', key:'bnb',      name:'BNB Chain', icon:'svg/chains/bnb.svg',      chainId:'0x38' },
-  base:     { kind:'evm', key:'base',     name:'Base',      icon:'svg/chains/base.svg',     chainId:'0x2105' },
-  arbitrum: { kind:'evm', key:'arbitrum', name:'Arbitrum One', icon:'svg/chains/arbitrum.svg', chainId:'0xa4b1' },
-  zksync:   { kind:'evm', key:'zksync',   name:'ZKsync Era',   icon:'svg/chains/zksync.svg',   chainId:'0x144' },
-  'polygon-zkevm': { kind:'evm', key:'polygon-zkevm', name:'Polygon zkEVM', icon:'svg/chains/polygon-zkevm.svg', chainId:'0x44d' },
-  optimism: { kind:'evm', key:'optimism', name:'Optimism', icon:'svg/chains/optimism.svg', chainId:'0xa' },
-  opbnb: { kind:'evm', key:'opbnb', name:'opBNB', icon:'svg/chains/opbnb.svg', chainId:'0xcc' },
-  solana:   { kind:'solana', key:'solana', name:'Solana (Devnet)', icon:'svg/chains/solana.svg', network:'devnet' },
-};
-
-function getPreferredNetwork() {
-  try {
-    const raw = localStorage.getItem('i3_preferred_network');
-    const data = raw ? JSON.parse(raw) : null;
-    if (data && I3_NETWORKS[data.key]) return I3_NETWORKS[data.key];
-  } catch {}
-  // Return null if no preference is set (do not force switch to BNB)
-  return null; 
-}
-
-function setPreferredNetwork(key) {
-  const n = I3_NETWORKS[key] || I3_NETWORKS.ethereum;
-  localStorage.setItem('i3_preferred_network', JSON.stringify({ key: n.key }));
-  // 刷新徽章
-  renderNetworkBadge({ name: n.name, icon: n.icon });
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   const n = getPreferredNetwork();
   // 未连接也显示徽章（如果没有偏好，默认显示 BNB Chain）
@@ -2597,17 +2939,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ===== 链上签到 Modal 控制函数 =====
 function openOnChainCheckInModal() {
+    console.log('[openOnChainCheckInModal] Function called');
     const modal = document.getElementById('onChainCheckInModal');
     if (!modal) {
-        console.error('On-chain check-in modal not found');
+        console.error('[openOnChainCheckInModal] On-chain check-in modal not found in DOM');
         return;
     }
+    console.log('[openOnChainCheckInModal] Modal element found');
     
     // 检查钱包连接
-    if (!window.walletManager || !window.walletManager.isConnected) {
+    if (!window.walletManager) {
+        console.error('[openOnChainCheckInModal] walletManager not found');
         showNotification('Please connect your wallet first', 'error');
         return;
     }
+    if (!window.walletManager.isConnected) {
+        console.error('[openOnChainCheckInModal] Wallet not connected, isConnected:', window.walletManager.isConnected);
+        showNotification('Please connect your wallet first', 'error');
+        return;
+    }
+    console.log('[openOnChainCheckInModal] Wallet is connected, opening modal');
     
     modal.style.display = 'flex';
         // —— 插入开始：打开时根据本地状态初始化 UI —— 
@@ -2653,6 +3004,7 @@ function openOnChainCheckInModal() {
 		}
 		// —— 插入结束 —— 
     modal.classList.add('show');
+    console.log('[openOnChainCheckInModal] Modal show class added, modal should be visible now');
 }
 
 function closeOnChainCheckInModal() {

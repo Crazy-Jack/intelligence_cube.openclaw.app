@@ -567,9 +567,9 @@ function savePurchaseToAssets(cartItems, orderSummary) {
         throw error;
     }
 }
-
 // 下单功能 - 在这里进行所有验证
-function placeOrder() {
+// ✅ 更新（P0）：使用后端验证的 spendCreditsUnified
+async function placeOrder() {
     const cartItems = getCartItems();
     
     // 1. 首先检查钱包连接状态
@@ -608,8 +608,16 @@ function placeOrder() {
         return;
     }
     
-    // 4. 扣除I3 tokens
-    const spendResult = window.walletManager.spendCredits(grandTotal, 'model_purchase');
+    // 4. ✅ 使用后端验证的消费函数（P0）
+    const spendResult = await window.spendCreditsUnified(
+        grandTotal,
+        'model_purchase',
+        {
+            modelCount: cartItems.length,
+            modelIds: cartItems.map(item => item.modelName)
+        }
+    );
+
     if (!spendResult.success) {
         alert(`❌ Payment Processing Failed!\n\n${spendResult.error}\n\nTransaction cancelled.`);
         return;

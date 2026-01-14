@@ -69,6 +69,22 @@ export default defineConfig({
           .replace(/crossorigin href="styles\.css"/g, 'href="styles.css"')
           .replace(/crossorigin href="account-dropdown\.css"/g, 'href="account-dropdown.css"')
         
+        // Ensure styles.css is linked if missing
+        if (!result.includes('href="styles.css"') && !result.includes("href='styles.css'")) {
+          result = result.replace(
+            '</head>',
+            '    <link rel="stylesheet" href="styles.css">\n</head>'
+          )
+        }
+        
+        // Ensure account-dropdown.css is linked if missing (but only if styles.css exists, meaning we're in index.html)
+        if (result.includes('href="styles.css"') && !result.includes('href="account-dropdown.css"') && !result.includes("href='account-dropdown.css'")) {
+          result = result.replace(
+            '</head>',
+            '    <link rel="stylesheet" href="account-dropdown.css">\n</head>'
+          )
+        }
+        
         // Inject the bundled binance-sdk.js script before </head>
         // This is needed because Vite removes the original script tag when processing as entry
         if (!result.includes('src="/binance-sdk.js"') && !result.includes("src='binance-sdk.js'")) {
@@ -98,7 +114,9 @@ export default defineConfig({
           'canvas.js',
           'workflow.js',
           'myassets.js',
-          'mycart.js'
+          'mycart.js',
+          'onchain-checkin.js',
+          'contract-config.js'
           // binance-sdk.js is now bundled via rollup input, not copied
         ]
         
