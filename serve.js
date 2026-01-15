@@ -368,8 +368,14 @@ const upload = multer({
   }
 });
 
-// Serve static files
-app.use(express.static(__dirname));
+// Serve static files from dist folder (built/bundled files)
+// In production, all frontend files should be served from dist/
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// For development, also serve from root (but dist takes priority)
+if (process.env.NODE_ENV !== 'production') {
+  app.use(express.static(__dirname));
+}
 
 // API routes
 app.get('/api/health', (req, res) => {
@@ -3732,9 +3738,9 @@ app.post('/api/process-rag-file', async (req, res) => {
   }
 });
 
-// Serve the main page
+// Serve the main page from dist folder
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 // Handle 404s

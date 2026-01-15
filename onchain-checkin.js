@@ -181,8 +181,25 @@ async function loadUserCheckInStatus() {
  */
 async function switchToChain(targetChainId) {
     try {
-        const provider = window.ethereum;
+        // 优先使用 walletManager 中存储的 provider
+        let provider = window.walletManager?.ethereum;
+        
+        // 如果没有，尝试从 walletManager 获取（根据钱包类型）
+        if (!provider && window.walletManager?.walletType === 'binance') {
+            // 尝试获取 Binance provider
+            if (typeof window.getBinanceProvider === 'function') {
+                provider = window.getBinanceProvider();
+            } else if (typeof window.getCachedBinanceProvider === 'function') {
+                provider = window.getCachedBinanceProvider();
+            }
+        }
+        
+        // 最后的回退：使用 window.ethereum
         if (!provider) {
+            provider = window.ethereum;
+        }
+        
+        if (!provider || typeof provider.request !== 'function') {
             throw new Error('No wallet provider found');
         }
 
@@ -439,10 +456,9 @@ async function updateFirebaseAfterOnChainCheckIn(credits, txHash, streak) {
             });
         }
 
-        // 同步到本地
+        // 同步到本地内存
         if (window.walletManager) {
             window.walletManager.credits = (window.walletManager.credits || 0) + credits;
-            window.walletManager.saveToStorage();
         }
 
         console.log('Firebase updated after on-chain check-in');
@@ -473,9 +489,26 @@ async function executeEVMCheckIn() {
 
         console.log('Starting on-chain check-in on', config.chainName);
 
+        // 获取 provider（优先使用 walletManager 中存储的）
+        let provider = window.walletManager?.ethereum;
+        if (!provider && window.walletManager?.walletType === 'binance') {
+            if (typeof window.getBinanceProvider === 'function') {
+                provider = window.getBinanceProvider();
+            } else if (typeof window.getCachedBinanceProvider === 'function') {
+                provider = window.getCachedBinanceProvider();
+            }
+        }
+        if (!provider) {
+            provider = window.ethereum;
+        }
+        if (!provider || typeof provider.request !== 'function') {
+            safeNotify('No wallet provider available. Please reconnect your wallet.', 'error');
+            return;
+        }
+
         // 检查当前链并显示切换提示
         try {
-            const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+            const currentChainId = await provider.request({ method: 'eth_chainId' });
 
             if (currentChainId.toLowerCase() !== config.chainId.toLowerCase()) {
                 const currentNetworkName = 'Unknown'; // 可以添加映射函数
@@ -527,9 +560,9 @@ async function executeEVMCheckIn() {
         setLoadingState(true, 'Switching network...');
         await switchToChain(config.chainId);
 
-        // 创建provider和signer
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
+        // 创建provider和signer（使用上面获取的 provider）
+        const web3Provider = new ethers.providers.Web3Provider(provider);
+        const signer = web3Provider.getSigner();
         const userAddress = await signer.getAddress();
 
         // 创建合约实例（先创建，便于估算 gas）
@@ -545,13 +578,13 @@ async function executeEVMCheckIn() {
         let requiredWei;
         try {
             const gasEstimate = await contract.estimateGas.checkIn({ value: 0 });
-            const gasPrice = await provider.getGasPrice();
+            const gasPrice = await web3Provider.getGasPrice();
             requiredWei = gasEstimate.mul(gasPrice).mul(120).div(100); // 20% buffer
         } catch (e) {
             // fallback：不给你卡死，至少保证有一点 native 资产
             requiredWei = ethers.utils.parseEther(selectedChain === 'ETH' ? '0.0002' : '0.00005');
         }
-        const balanceWei = await provider.getBalance(userAddress);
+        const balanceWei = await web3Provider.getBalance(userAddress);
         if (balanceWei.lt(requiredWei)) {
             setLoadingState(false);
             if (typeof closeOnChainCheckInModal === 'function') {
@@ -668,30 +701,19 @@ function applySolanaPostSuccessUI({ reward = 30 } = {}) {
     if (streakEl) streakEl.textContent = `${num(streakEl) + 1} days`;
     if (totalEl) totalEl.textContent = String(num(totalEl) + 1);
 
-    // 3) 本地credits统计
-    const getNum = (k) => Number(localStorage.getItem(k) || '0');
-    const setNum = (k, v) => localStorage.setItem(k, String(v));
+    // 3) 同步到 Firebase（使用 increment 原子操作）
+    if (window.walletManager) {
+        window.walletManager.credits = (window.walletManager.credits || 0) + reward;
+    }
 
-    const newCredits = getNum('user_credits') + reward;
-    setNum('user_credits', newCredits);
-    setNum('total_earned', getNum('total_earned') + reward);
-    setNum('total_checkins', getNum('total_checkins') + 1);
-
-    // 4) 交易明细
+    // 异步更新 Firebase（不阻塞UI）
     try {
-        const arr = JSON.parse(localStorage.getItem('credit_transactions') || '[]');
-        arr.unshift({ 
-            type: 'checkin', 
-            chain: 'solana-devnet', 
-            amount: reward, 
-            ts: Date.now() 
-        });
-        localStorage.setItem('credit_transactions', JSON.stringify(arr.slice(0, 200)));
+        updateFirebaseAfterOnChainCheckIn(reward, '', 0).catch(err => 
+            console.warn('[Solana] Failed to update Firebase:', err)
+        );
     } catch {}
 
-    // 5) 刷新总积分显示
-    const totalCreditsEl = document.getElementById('totalCredits');
-    if (totalCreditsEl) totalCreditsEl.textContent = String(newCredits);
+    // 4) 更新总积分显示
 
     // 6) 标记今日已签
     try {

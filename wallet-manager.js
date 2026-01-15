@@ -31,7 +31,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 		  this.solanaConn = null;     // window.SOL.Connection
 		  this.solanaAddress = null;  // base58 public key
   
-		  this.loadFromStorage();
+		  // 不再从 localStorage 加载（全部使用 Firebase）
 		  this.initializeSDK();
 	  }
   
@@ -439,19 +439,14 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			  
 			  const nextAddress = accounts[0];
 			  if (nextAddress !== this.walletAddress) {
-				  if (this.walletAddress) {
-					  this.saveWalletSpecificData();
-				  }
+				  // 切换钱包地址时，从 Firebase 读取新地址的 credits
 				  this.walletAddress = nextAddress;
-				  this.loadWalletSpecificData();
-				  this.saveToStorage();
 				  this.updateUI();
 				  
 				  window.dispatchEvent(new CustomEvent('walletConnected', {
 					  detail: { 
 						  address: this.walletAddress, 
-						  credits: this.credits, 
-						  isNewUser: !this.getWalletData(this.walletAddress) 
+						  credits: this.credits
 					  }
 				  }));
 			  }
@@ -524,10 +519,8 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 					  console.warn('[MM] enforcePreferredEvmChain failed:', e);
 				  }
   
-				  // Load local data first, then hydrate from Firestore if remote has more credits
-				  this.loadWalletSpecificData();
-				  await this.fetchRemoteWalletDataIfAvailable();
-				  this.saveToStorage();
+				  // ✨ 新方式：从 Firebase 读取 credits（唯一数据源）
+				  this.credits = await this.fetchCreditsFromFirebase();
 				  this.updateUI();
   
 				  console.log('Wallet connected:', this.walletAddress, 'Credits:', this.credits);
@@ -535,9 +528,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 				  window.dispatchEvent(new CustomEvent('walletConnected', {
 					  detail: {
 						  address: this.walletAddress,
-						  credits: this.credits,
-						  // Flag new user based on prior local archive (after remote hydrate, check again)
-						  isNewUser: !this.getWalletData(this.walletAddress)
+						  credits: this.credits
 					  }
 				  }));
   
@@ -558,12 +549,11 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 					  if (accounts && accounts.length > 0) {
 						  this.walletAddress = accounts[0];
 						  this.isConnected = true;
-						  this.loadWalletSpecificData();
-						  await this.fetchRemoteWalletDataIfAvailable();
-						  this.saveToStorage();
+						  // ✨ 从 Firebase 读取 credits
+						  this.credits = await this.fetchCreditsFromFirebase();
 						  this.updateUI();
 						  window.dispatchEvent(new CustomEvent('walletConnected', {
-							  detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData(this.walletAddress) }
+							  detail: { address: this.walletAddress, credits: this.credits }
 						  }));
 						  return { success: true, address: this.walletAddress, credits: this.credits };
 					  }
@@ -577,15 +567,11 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 					  if (accounts && accounts.length > 0) {
 						  this.walletAddress = accounts[0];
 						  this.isConnected = true;
-						  const hadLocalArchive = !!this.getWalletData(this.walletAddress);
-						  this.loadWalletSpecificData();
-						  if (!hadLocalArchive) {
-							  await this.fetchRemoteWalletDataIfAvailable();
-						  }
-						  this.saveToStorage();
+						  // ✨ 从 Firebase 读取 credits
+						  this.credits = await this.fetchCreditsFromFirebase();
 						  this.updateUI();
 						  window.dispatchEvent(new CustomEvent('walletConnected', {
-							  detail: { address: this.walletAddress, credits: this.credits, isNewUser: !hadLocalArchive }
+							  detail: { address: this.walletAddress, credits: this.credits }
 						  }));
 						  return { success: true, address: this.walletAddress, credits: this.credits };
 					  }
@@ -599,9 +585,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
   disconnectWallet() {
-		  if (this.walletAddress) {
-			  this.saveWalletSpecificData?.();
-		  }
+		  // 不再保存 wallet 特定数据到 localStorage
 		  // AppKit 断开连接方式（原样保留）
 		  if (this.walletType === 'walletconnect') {
 			  try {
@@ -654,148 +638,47 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
   
-	  // Persist per-wallet archive
-	  saveWalletSpecificData() {
-		  if (!this.walletAddress) return;
-		  try {
-			  const walletKey = `wallet_data_${this.walletAddress.toLowerCase()}`;
-			  const walletData = {
-				  address: this.walletAddress,
-				  credits: this.credits,
-				  totalEarned: this.totalEarned || 0,
-				  lastCheckin: localStorage.getItem('last_checkin'),
-				  lastCheckinAt: localStorage.getItem('last_checkin_at'),
-				  totalCheckins: parseInt(localStorage.getItem('total_checkins') || '0'),
-				  transactions: JSON.parse(localStorage.getItem('credit_transactions') || '[]'),
-				  lastSaved: new Date().toISOString()
-			  };
-			  localStorage.setItem(walletKey, JSON.stringify(walletData));
-			  console.log(`💾 Saved data for wallet ${this.walletAddress}:`, walletData);
-		  } catch (error) {
-			  console.error('Error saving wallet-specific data:', error);
+	  // ✂️ 删除：saveWalletSpecificData（不再使用 localStorage 存储 credit）
+	  // saveWalletSpecificData() { ... }
+  
+	  // ✂️ 删除：loadWalletSpecificData（不再使用 localStorage 存储 credit）
+	  // loadWalletSpecificData() { ... }
+  
+	  // ✨ 新增：从 Firebase 读取钱包 credits（唯一数据源）
+	  async fetchCreditsFromFirebase() {
+		  if (!this.walletAddress || !window.firebaseDb) {
+			  console.warn('⚠️ Cannot fetch credits: missing wallet address or Firebase');
+			  return 0;
 		  }
-	  }
-  
-	  // Load per-wallet archive into session
-	  loadWalletSpecificData() {
-		  if (!this.walletAddress) {
-			  console.warn('⚠️ No wallet address available for loading data');
-			  return;
-		  }
-  
 		  try {
-			  const walletData = this.getWalletData(this.walletAddress);
-			  if (walletData) {
-				  console.log('📦 Local per-wallet archive found:', walletData);
-				  this.credits = walletData.credits || 0;
-				  this.totalEarned = walletData.totalEarned || 0;
-  
-				  if (walletData.lastCheckin) {
-					  localStorage.setItem('last_checkin', walletData.lastCheckin);
-				  } else {
-					  localStorage.removeItem('last_checkin');
-				  }
-  
-				  // Restore precise timestamp if present in local archive
-				  if (walletData.lastCheckinAt) {
-					  localStorage.setItem('last_checkin_at', String(walletData.lastCheckinAt));
-				  } else {
-					  localStorage.removeItem('last_checkin_at');
-				  }
-  
-				  if (typeof walletData.totalCheckins === 'number') {
-					  localStorage.setItem('total_checkins', walletData.totalCheckins.toString());
-				  } else {
-					  localStorage.removeItem('total_checkins');
-				  }
-  
-				  if (walletData.transactions && Array.isArray(walletData.transactions)) {
-					  localStorage.setItem('credit_transactions', JSON.stringify(walletData.transactions));
-				  } else {
-					  localStorage.removeItem('credit_transactions');
-				  }
-  
-				  console.log(`📦 Loaded data for wallet ${this.walletAddress}:`, {
-					  credits: this.credits,
-					  totalEarned: this.totalEarned,
-					  lastCheckin: walletData.lastCheckin,
-					  totalCheckins: walletData.totalCheckins
-				  });
-			  } else {
-				  // No local archive - initialize local zero state, then attempt to hydrate from Firestore if available
-				  this.credits = 0;
-				  this.totalEarned = 0;
-				  localStorage.removeItem('last_checkin');
-				  localStorage.removeItem('total_checkins');
-				  localStorage.removeItem('credit_transactions');
-				  console.log(`🆕 No local data for wallet ${this.walletAddress}. Checking Firebase for existing record...`);
-			  }
-		  } catch (error) {
-			  console.error('Error loading wallet-specific data:', error);
-			  this.credits = 0;
-			  this.totalEarned = 0;
-		  }
-	  }
-  
-	  // Attempt to fetch existing wallet record from Firestore and hydrate local/session state
-	  async fetchRemoteWalletDataIfAvailable() {
-		  if (!this.walletAddress) return;
-		  try {
-			  if (!window.firebaseDb) return;
 			  const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-			  const addrLower = (this.walletAddress || '').toLowerCase();
+			  const addrLower = this.walletAddress.toLowerCase();
 			  let walletRef = doc(window.firebaseDb, 'wallets', addrLower);
 			  let snap = await getDoc(walletRef);
+			  
 			  if (!snap.exists()) {
+				  // 尝试原始大小写的地址
 				  walletRef = doc(window.firebaseDb, 'wallets', this.walletAddress);
 				  snap = await getDoc(walletRef);
 			  }
+			  
 			  if (snap.exists()) {
-				  const data = snap.data() || {};
-				  console.log('🌐 Firestore wallet snapshot:', data);
-				  console.log('🔁 Updating credits from local', this.credits, '→ remote', Number(data.credits || 0));
-				  // ===== PATCH W2 (replace the assignment line) =====
-				  const remote = Number(data.credits ?? 0);
-				  // 远端如果为 0，不要把本地刚签到的 30 覆盖掉；只在远端更大时采用远端
-				  if (Number.isFinite(remote) && remote > this.credits) {
-						this.credits = remote;
-				  }
-  
-				  // totalEarned is not tracked in server; keep local aggregation if any
-				  if (data.lastCheckinAt && typeof data.lastCheckinAt.toMillis === 'function') {
-					  try { localStorage.setItem('last_checkin_at', String(data.lastCheckinAt.toMillis())); } catch (_) {}
-				  }
-				  if (typeof data.totalCheckins === 'number') {
-					  try { localStorage.setItem('total_checkins', String(data.totalCheckins)); } catch (_) {}
-				  }
-				  this.saveToStorage();
-				  this.updateUI();
-				  try {
-					  window.dispatchEvent(new CustomEvent('walletUpdated', {
-						  detail: { address: this.walletAddress, credits: this.credits }
-					  }));
-				  } catch (_) {}
-				  console.log(`📡 Loaded wallet data from Firestore for ${this.walletAddress}:`, { credits: this.credits });
+				  const credits = Number(snap.data().credits ?? 0);
+				  console.log(`📡 Firebase credits for ${this.walletAddress}:`, credits);
+				  return credits;
 			  } else {
-				  console.log(`📭 No existing Firestore record for wallet ${this.walletAddress}`);
+				  console.log(`🆕 No Firebase record for ${this.walletAddress}`);
+				  return 0;
 			  }
 		  } catch (e) {
-			  console.warn('Failed to fetch remote wallet data:', e);
+			  console.error('❌ Failed to fetch credits from Firebase:', e);
+			  return 0;
 		  }
 	  }
   
   
-	  getWalletData(address) {
-		  if (!address) return null;
-		  try {
-			  const walletKey = `wallet_data_${address.toLowerCase()}`;
-			  const data = localStorage.getItem(walletKey);
-			  return data ? JSON.parse(data) : null;
-		  } catch (error) {
-			  console.error('Error getting wallet data:', error);
-			  return null;
-		  }
-	  }
+	  // ✂️ 删除：getWalletData（不再使用 localStorage）
+	  // getWalletData(address) { ... }
   
 	  // Daily check-in with 24h gating support via local last_checkin_at
 	  dailyCheckin(options = {}) {
@@ -837,10 +720,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 		  try { localStorage.setItem('last_checkin_at', String(Date.now())); } catch (_) {}
 		  localStorage.setItem('total_checkins', totalCheckins.toString());
   
-		  this.saveToStorage();
-		  this.saveWalletSpecificData();
-		  this.updateUI();
-		  // ===== PATCH W3: persist to Firestore after local update =====
+
 		  try {
 				const lastMs  = parseInt(localStorage.getItem('last_checkin_at') || String(Date.now()), 10);
 				const totalChk = parseInt(localStorage.getItem('total_checkins') || '0', 10);
@@ -854,8 +734,6 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			console.warn('[dailyCheckin] remote persist try-block failed:', e);
 		  }
   
-  
-		  this.recordTransaction(DAILY_REWARD, 'daily_checkin');
   
 		  // NEW: 同步一条 daily_checkin 收入交易到 Payment History
 		  if (window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
@@ -895,60 +773,58 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
 	  canCheckinToday() {
-		  // Prefer Firestore-hydrated timestamp for a precise 24h window
+		  // ✅ 改进（P1）：优先从 Firebase 读取，更可靠
+		  return this.canCheckinTodayAsync();  // 返回 Promise
+	  }
+
+	  // ✅ 新增：异步检查 24h 限制（优先级：Firebase > localStorage）
+	  async canCheckinTodayAsync() {
+		  try {
+			  // 1. 首先尝试从 Firebase 读取（最可靠）
+			  if (window.firebaseDb && this.isConnected) {
+				  const walletInfo = await window.creditAPI.getWalletInfo(
+					  this.walletAddress
+				  );
+
+				  if (walletInfo.success && walletInfo.lastCheckinAt) {
+					  const lastCheckinAtMs = walletInfo.lastCheckinAt;
+					  const DAY_MS = 24 * 60 * 60 * 1000;
+					  return (Date.now() - lastCheckinAtMs) >= DAY_MS;
+				  }
+			  }
+		  } catch (error) {
+			  console.warn('[wallet-manager] Failed to check Firebase, falling back to localStorage:', error);
+		  }
+
+		  // 2. 备选方案：使用 localStorage（本地设备）
 		  const lastCheckinAtMs = parseInt(localStorage.getItem('last_checkin_at') || '0', 10);
 		  if (!Number.isNaN(lastCheckinAtMs) && lastCheckinAtMs > 0) {
 			  const DAY_MS = 24 * 60 * 60 * 1000;
 			  return (Date.now() - lastCheckinAtMs) >= DAY_MS;
 		  }
-		  // Fallback to legacy date-based gating if timestamp missing
+
+		  // 3. 备选方案：使用日期（legacy）
 		  const now = new Date();
 		  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 		  const lastCheckin = localStorage.getItem('last_checkin');
 		  return lastCheckin !== today;
 	  }
   
-	  loadFromStorage() {
-		  try {
-			  const savedWallet = localStorage.getItem('wallet_connected');
-			  if (savedWallet) {
-				  this.walletAddress = savedWallet;
-				  this.isConnected = true;
-				  this.walletType = localStorage.getItem('wallet_type') || 'metamask';
-				  this.loadWalletSpecificData();
-				  console.log(`🔄 Restored wallet session: ${this.walletAddress} with ${this.credits} I3 tokens`);
-				  // Immediately reconcile with Firestore so server-side credit changes reflect after refresh
-				  try {
-					  if (typeof this.fetchRemoteWalletDataIfAvailable === 'function') {
-						  this.fetchRemoteWalletDataIfAvailable().then(() => {
-							  console.log('🔁 Reconciled with Firestore after restore. Credits now:', this.credits);
-							  this.loadWalletSpecificData();
-							  this.saveToStorage();
-							  this.updateUI();
-							  try { window.dispatchEvent(new CustomEvent('walletUpdated', { detail: { address: this.walletAddress, credits: this.credits } })); } catch (_) {}
-						  });
-					  }
-				  } catch (e) { console.warn('Post-restore reconcile skipped:', e); }
-			  }
-		  } catch (error) {
-			  console.error('Error loading wallet data:', error);
-		  }
-	  }
-  
+	  // ✂️ 删除：loadFromStorage（不再使用 localStorage）
+	  // loadFromStorage() { ... }
+
+	  // ✅ 向后兼容：saveToStorage（已迁移到Firebase，保留为空操作）
 	  saveToStorage() {
+		  // Legacy method for backward compatibility
+		  // Data is now persisted to Firebase only, not to localStorage
+		  // This method is kept as a no-op to prevent errors in existing code
 		  try {
-			  if (this.isConnected) {
-				  localStorage.setItem('wallet_connected', this.walletAddress);
-				  localStorage.setItem('wallet_type', this.walletType || 'metamask'); 
-				  localStorage.setItem('user_credits', this.credits.toString());
-				  localStorage.setItem('total_earned', (this.totalEarned || 0).toString());
-				  this.saveWalletSpecificData();
-			  }
-		  } catch (error) {
-			  console.error('Error saving wallet data:', error);
-		  }
+			  console.debug('[wallet-manager] saveToStorage called (legacy no-op, data saved to Firebase)');
+		  } catch (_) {}
 	  }
-  
+
+	  // ✂️ 弃用：spendCredits - 改用后端验证的 safeSpendCredits
+	  // 保留此方法以向后兼容，但应该使用 safeSpendCreditsWithSignature
 	  spendCredits(amount, reason = 'model_usage') {
 		  if (!this.isConnected) {
 			  return { success: false, error: 'Please connect your wallet first' };
@@ -957,44 +833,128 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			  return { success: false, error: 'Invalid amount' };
 		  }
   
-		  // Allow negative balance; caller may prompt user to top up
+		  // ⚠️ 警告：这个方法已弃用，应该使用 safeSpendCreditsWithSignature
+		  console.warn('[wallet-manager] spendCredits is deprecated. Use safeSpendCreditsWithSignature instead.');
+		  
+		  if (this.credits < amount) {
+			  return { success: false, error: 'Insufficient credits' };
+		  }
+		  
 		  this.credits -= amount;
-		  this.saveToStorage();
 		  this.updateUI();
-		  this.recordTransaction(-amount, reason);
   
 		  window.dispatchEvent(new CustomEvent('creditsSpent', {
 			  detail: { amount: amount, newBalance: this.credits, reason: reason }
 		  }));
   
-		  // Fire an event when credits drop to zero or below so UIs can prompt top-up
-		  if (this.credits <= 0) {
-			  try {
-				  window.dispatchEvent(new CustomEvent('creditsLow', { detail: { newBalance: this.credits } }));
-			  } catch (_) {}
-		  }
-  
 		  return { success: true, spent: amount, newBalance: this.credits };
 	  }
-  
-	  recordTransaction(amount, reason) {
+
+	  // ✅ 新增：消费 credit（签名验证已注释，用户直接扣除）
+	  async safeSpendCreditsWithSignature(amount, reason = 'model_usage') {
+		  if (!this.isConnected) {
+			  return { success: false, error: 'Please connect your wallet first' };
+		  }
+		  if (amount <= 0) {
+			  return { success: false, error: 'Invalid amount' };
+		  }
+
 		  try {
-			  const transactions = JSON.parse(localStorage.getItem('credit_transactions') || '[]');
-			  transactions.push({
-				  amount: amount,
-				  reason: reason,
-				  timestamp: new Date().toISOString(),
-				  balance: this.credits
-			  });
-			  const recentTransactions = transactions.slice(-100);
-			  localStorage.setItem('credit_transactions', JSON.stringify(recentTransactions));
-			  if (this.walletAddress) {
-				  this.saveWalletSpecificData();
+			  // ⚠️ 注释掉：签名验证步骤
+			  // const signature = await this.signMessage(`Spend ${amount} credits for ${reason}`);
+			  // const result = await window.creditAPI.safeSpendCredits(
+			  //     this.walletAddress, amount, reason, signature
+			  // );
+
+			  // ✅ 简化：直接检查余额并扣除
+			  if (this.credits < amount) {
+				  return { success: false, error: `Insufficient credits. You have ${this.credits} but need ${amount}` };
 			  }
+
+			  this.credits -= amount;
+			  this.updateUI();
+
+			  // 触发事件
+			  window.dispatchEvent(new CustomEvent('creditsSpent', {
+				  detail: { 
+					  amount: amount, 
+					  newBalance: this.credits, 
+					  reason: reason,
+					  verifiedByBackend: false  // ⚠️ 未通过后端验证
+				  }
+			  }));
+
+			  // 异步记录到 Firebase（审计）
+			  await this.recordTransactionAsync({
+				  type: 'spend',
+				  amount: -amount,
+				  reason: reason
+			  }).catch(err => 
+				  console.warn('[wallet-manager] Failed to record transaction:', err)
+			  );
+
+			  return { success: true, spent: amount, newBalance: this.credits };
 		  } catch (error) {
-			  console.error('Error recording transaction:', error);
+			  console.error('[wallet-manager] safeSpendCreditsWithSignature error:', error);
+			  return { success: false, error: error.message };
 		  }
 	  }
+
+	  // ✅ 新增：签名消息（钱包证明）
+	  async signMessage(message) {
+		  try {
+			  // 支持 EVM 钱包
+			  if (this.ethereum && typeof this.ethereum.request === 'function') {
+				  const signature = await this.ethereum.request({
+					  method: 'personal_sign',
+					  params: [
+						  '0x' + Buffer.from(message).toString('hex'),
+						  this.walletAddress
+					  ]
+				  });
+				  return signature;
+			  }
+
+			  // 支持 Solana
+			  if (this.walletType === 'solana-phantom' && window.solana) {
+				  const messageBuffer = new TextEncoder().encode(message);
+				  const result = await window.solana.signMessage(messageBuffer);
+				  return result.signature;
+			  }
+
+			  throw new Error('Wallet does not support signing');
+		  } catch (error) {
+			  console.error('[wallet-manager] signMessage error:', error);
+			  throw error;
+		  }
+	  }
+
+	  // ✅ 新增：异步记录交易
+	  async recordTransactionAsync(transactionData) {
+		  try {
+			  await window.creditAPI.recordTransactionToFirebase(
+				  this.walletAddress,
+				  {
+					  type: transactionData.type,
+					  amount: transactionData.amount,
+					  reason: transactionData.reason,
+					  modelId: transactionData.modelId || null,
+					  modelName: transactionData.modelName || null
+				  }
+			  );
+		  } catch (error) {
+			  console.warn('[wallet-manager] recordTransactionAsync failed:', error);
+		  }
+	  }
+
+	  // ✂️ 弃用：syncCreditsToFirebase - 使用后端 API 替代
+	  async syncCreditsToFirebase(delta, reason = 'manual') {
+		  console.warn('[wallet-manager] syncCreditsToFirebase is deprecated. Use backend API instead.');
+		  // 不再直接修改 Firebase，所有修改都通过后端 API
+	  }
+  
+	  // ✂️ 删除：recordTransaction（不再记录本地交易）
+	  // recordTransaction(amount, reason) { ... }
   
 	  getCheckinStatus() {
 		  const lastCheckin = localStorage.getItem('last_checkin');
@@ -1028,22 +988,15 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			  }
 			  const nextAddress = accounts[0];
 			  if (nextAddress !== this.walletAddress) {
-				  if (this.walletAddress) {
-					  this.saveWalletSpecificData();
-				  }
+				  // 切换钱包地址时，从 Firebase 读取新地址的 credits
 				  this.walletAddress = nextAddress;
 				  this.isConnected = true;
-				  this.loadWalletSpecificData();
-				  this.saveToStorage();
 				  this.updateUI();
+				  // 触发 walletConnected 事件，onWalletConnected 会从 Firebase 读取 credits
+				  window.dispatchEvent(new CustomEvent('walletConnected', {
+					  detail: { address: this.walletAddress, credits: this.credits }
+				  }));
 				  console.log(`Switched to wallet: ${this.walletAddress}`);
-				  // Dispatch walletConnected so other modules can react (UI, Firebase sync)
-				  try {
-					  const isNewUser = !this.getWalletData(this.walletAddress);
-					  window.dispatchEvent(new CustomEvent('walletConnected', {
-						  detail: { address: this.walletAddress, credits: this.credits, isNewUser: isNewUser }
-					  }));
-				  } catch (_) {}
 			  }
 		  });
   

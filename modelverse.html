@@ -26,6 +26,10 @@
 
     <script src="https://c0f4f41c-2f55-4863-921b-sdk-docs.github.io/cdn/metamask-sdk.js"></script>
     
+    <!-- Binance Web3 Wallet SDK Provider (for QR code connection) -->
+    <!-- Using npm bundle with proper crypto polyfills -->
+    <script type="module" src="binance-sdk.js?v=4"></script>
+    
     <!-- Base Account SDK -->
     <script src="https://unpkg.com/@base-org/account/dist/base-account.min.js"></script>
     
@@ -801,7 +805,7 @@
                                 placeholder="Search models..." 
                                 style="
                                     flex: 1;
-                                    min-width: 400px;
+                                    min-width: 300px;
                                     padding: 10px 15px;
                                     font-size: 14px;
                                     border: 1px solid #d1d5db;
@@ -901,10 +905,10 @@
                                     <th>Model</th>
                                     <th>Paper</th>
                                     <th>Details</th>
-                                    <th>Base Model</th>
-                                    <th>Author</th>
-                                    <th>Downloads / Likes</th>
-                                    <th>Last Updated</th>
+                                    <th>Per Request</th>
+                                    <th>Per Share</th>
+                                    <th>Change</th>
+                                    <th>Trend</th>
                                     <th class="action-col">Action</th>
                                 </tr>
                             </thead>
@@ -921,6 +925,40 @@
 
                 <!-- Hugging Face Models Panel -->
                 <div class="models-tab-panel" id="hfModelsPanel" data-tab="hf">
+                    <!-- Category Filter for HF Models -->
+                    <div style="padding: 15px 20px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
+                        <label style="display: inline-block; margin-right: 10px; font-weight: 500; color: #374151; font-size: 14px;">Filter by Category:</label>
+                        <select 
+                            id="categoryFilter" 
+                            style="
+                                padding: 8px 12px;
+                                font-size: 14px;
+                                border: 1px solid #d1d5db;
+                                border-radius: 6px;
+                                background: white;
+                                color: #374151;
+                                font-weight: 400;
+                                cursor: pointer;
+                                transition: all 0.2s ease;
+                            "
+                            onchange="performCategorySearch()"
+                        >
+                            <option value="">None</option>
+                            <option value="text-classification">Text Classification</option>
+                            <option value="token-classification">Token Classification</option>
+                            <option value="question-answering">Question Answering</option>
+                            <option value="fill-mask">Fill Mask</option>
+                            <option value="text-generation">Text Generation</option>
+                            <option value="translation">Translation</option>
+                            <option value="summarization">Summarization</option>
+                            <option value="image-classification">Image Classification</option>
+                            <option value="object-detection">Object Detection</option>
+                            <option value="automatic-speech-recognition">Automatic Speech Recognition</option>
+                            <option value="text-to-speech">Text to Speech</option>
+                            <option value="image-to-text">Image to Text</option>
+                            <option value="zero-shot-classification">Zero Shot Classification</option>
+                        </select>
+                    </div>
                     <div class="models-table-container desktop-table">
                         <table class="models-table" id="huggingfaceModelsTable">
                             <thead>
@@ -928,7 +966,7 @@
                                     <th>Model</th>
                                     <th>Paper</th>
                                     <th>Details</th>
-                                    <th>Base Model</th>
+                                    <th>Category</th>
                                     <th>Author</th>
                                     <th>Downloads / Likes</th>
                                     <th>Last Updated</th>
@@ -936,14 +974,37 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- HF models appended via JS with pagination -->
+                                <tr>
+                                    <td colspan="8" style="text-align: center; padding: 60px 20px; color: #9ca3af;">
+                                        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                                            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 0v3.75m0-3.75h3.75M12 9H8.25M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            <div>
+                                                <p style="font-size: 16px; font-weight: 500; color: #374151;">Select a category to view models</p>
+                                                <p style="font-size: 13px; color: #9ca3af; margin-top: 4px;">Choose from the dropdown above to load models</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
 
+                    <!-- Pagination Controls -->
+                    <div id="hfPaginationContainer" style="display: none; margin-top: 16px;"></div>
+
                     <!-- Mobile Model List View (HF) -->
                     <div class="mobile-models-list" id="hfMobileModelsList">
-                        <!-- HF models list with pagination generated via JS -->
+                        <div style="display: flex; flex-direction: column; align-items: center; padding: 60px 20px; color: #9ca3af; gap: 15px;">
+                            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 0v3.75m0-3.75h3.75M12 9H8.25M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div style="text-align: center;">
+                                <p style="font-size: 16px; font-weight: 500; color: #374151;">Select a category to view models</p>
+                                <p style="font-size: 13px; color: #9ca3af; margin-top: 4px;">Choose from the dropdown above to load models</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1622,8 +1683,8 @@
             metricsSection = `
               <div class="mobile-detail-section">
                 <div class="mobile-detail-row">
-                  <span class="mobile-detail-label">BASE MODEL</span>
-                  <span class="mobile-detail-value">${baseModel}</span>
+                  <span class="mobile-detail-label">CATEGORY</span>
+                  <span class="mobile-detail-value">${category}</span>
                 </div>
                 <div class="mobile-detail-row">
                   <span class="mobile-detail-label">AUTHOR</span>
@@ -2412,6 +2473,8 @@
     <script type="module" src="solana-checkin.js"></script>
     <script src="social-tasks.js"></script>
     <script src="wallet-manager.js"></script>
+    <script src="credit-api-wrapper.js"></script>
+    <script src="unified-spend-credits.js"></script>
 	<script src="wallet-integration.js"></script>
     <script src="onchain-checkin.js"></script>
         <!-- Follow X Modal -->
@@ -2896,124 +2959,6 @@
         }
 
         // 每日签到处理函数 - 支持 Admin 本地签到 + 普通用户链上签到
-        window.handleDailyCheckin = async function() {
-            try {
-                // 1. 检查钱包连接
-                if (!window.walletManager || !window.walletManager.isConnected) {
-                    alert('Please connect your MetaMask wallet to claim the daily check-in bonus.');
-                    return;
-                }
-
-                // 2. 判断是否为 Admin
-                const isAdminUser = window.isAdmin && window.isAdmin();
-                
-                if (isAdminUser) {
-                    // ===== Admin 用户 → 执行完整的本地签到 + Firebase 同步 =====
-                    console.log('🔑 Admin user detected, executing local check-in');
-                    
-                    const address = (window.walletManager.walletAddress || '').toLowerCase();
-                    
-                    if (window.firebaseDb && address) {
-                        const { doc, getDoc, setDoc, updateDoc, serverTimestamp } = 
-                            await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-
-                        const walletRef = doc(window.firebaseDb, 'wallets', address);
-                        const snap = await getDoc(walletRef);
-
-                        let lastCheckinAt = null;
-                        let remoteTotalCheckins = 0;
-                        
-                        if (snap.exists()) {
-                            const data = snap.data() || {};
-                            lastCheckinAt = data.lastCheckinAt || null;
-                            remoteTotalCheckins = Number(data.totalCheckins || 0);
-                        } else {
-                            await setDoc(walletRef, {
-                                address: address,
-                                createdAt: serverTimestamp(),
-                                totalCheckins: 0
-                            }, { merge: true });
-                        }
-
-                        // 同步远端时间戳到本地
-                        if (lastCheckinAt && typeof lastCheckinAt.toMillis === 'function') {
-                            try { 
-                                localStorage.setItem('last_checkin_at', String(lastCheckinAt.toMillis())); 
-                            } catch (_) {}
-                        }
-
-                        // 执行本地签到
-                        const result = window.walletManager.dailyCheckin();
-                        if (!result || !result.success) {
-                            alert(result?.error || '签到失败，请稍后重试');
-                            return;
-                        }
-
-                        // 同步到 Firestore
-                        try {
-                            await updateDoc(walletRef, {
-                                lastCheckinAt: serverTimestamp(),
-                                totalCheckins: remoteTotalCheckins + 1,
-                                credits: window.walletManager.credits,
-                                lastUpdated: serverTimestamp(),
-                                lastCheckinType: 'local-admin'
-                            });
-                        } catch (e) {
-                            console.warn('⚠️ 更新 Firestore 失败（可忽略）：', e);
-                        }
-
-                        // 同步到 users_by_wallet
-                        try {
-                            const walletUserRef = doc(window.firebaseDb, 'users_by_wallet', address);
-                            await setDoc(walletUserRef, {
-                                lastCheckinAt: serverTimestamp(),
-                                totalCheckins: remoteTotalCheckins + 1,
-                                lastUpdated: serverTimestamp()
-                            }, { merge: true });
-                        } catch (e) {
-                            console.warn('⚠️ 同步失败（可忽略）：', e);
-                        }
-
-                        // 如果有 Google 账户，同步到 users/<uid>
-                        if (window.currentUser && window.currentUser.uid) {
-                            try {
-                                const userRef = doc(window.firebaseDb, 'users', window.currentUser.uid);
-                                await updateDoc(userRef, { lastUpdated: serverTimestamp() });
-                            } catch (e) {
-                                console.warn('⚠️ 同步到 users 失败（可忽略）：', e);
-                            }
-                        }
-
-                        return;
-                    }
-
-                    // Firebase 不可用时的降级处理
-                    const result = window.walletManager.dailyCheckin();
-                    if (!result || !result.success) {
-                        alert(result?.error || '签到失败，请稍后重试');
-                    }
-                    
-                } else {
-                    // ===== 普通用户 → 打开链上签到 Modal =====
-                    console.log('👤 Regular user detected, opening on-chain check-in modal');
-                    
-                    if (typeof window.openOnChainCheckInModal === 'function') {
-                        // 先加载用户状态
-                        if (typeof window.loadUserCheckInStatus === 'function') {
-                            await window.loadUserCheckInStatus();
-                        }
-                        window.openOnChainCheckInModal();
-                    } else {
-                        console.error('On-chain check-in modal function not found');
-                        alert('Check-in feature not available');
-                    }
-                }
-                
-            } catch (error) {
-                console.error('签到失败:', error);
-                alert('签到失败: ' + error.message);
-            }
-        };
         // Global helper: clear ALL local data (localStorage and sessionStorage) ONLY.
         // Does not sign out or disconnect wallet. Backward compatible signature.
         // Usage:

@@ -31,8 +31,8 @@ const CHECKIN_CONTRACTS = {
     ETH: {
         chainId: '0x1',  // 1
         chainName: 'Ethereum Mainnet',
-        checkInAddress: '0xYourEthereumCheckInContractAddress',  // 🔴 部署后填写你的 ETH 签到合约地址
-        tokenAddress: '0xYourEthereumTokenAddress',              // 🔴 部署后填写你的 ETH 代币合约地址（可选）
+        checkInAddress: '0x57Bb2Ae11cbbdEFA7d7eBb522C2e19bA3f73EF79',  // 🔴 部署后填写你的 ETH 签到合约地址
+        tokenAddress: '',              // 🔴 部署后填写你的 ETH 代币合约地址（可选）
         rpcUrl: 'https://cloudflare-eth.com',
         explorer: 'https://etherscan.io',
         nativeCurrency: {
@@ -44,7 +44,7 @@ const CHECKIN_CONTRACTS = {
     BASE: {
         chainId: '0x2105', // 8453
         chainName: 'Base Mainnet',
-        checkInAddress: '0xYourBaseCheckInContractAddress',      // 🔴 部署后填写你的 Base 签到合约地址
+        checkInAddress: '0xcB80Fb8a37711b24D10Ddf4dAeD161a9CCE17B79',   
         tokenAddress: '0xYourBaseTokenAddress',                  // 🔴 部署后填写你的 Base 代币合约地址（可选）
         rpcUrl: 'https://mainnet.base.org',
         explorer: 'https://basescan.org',

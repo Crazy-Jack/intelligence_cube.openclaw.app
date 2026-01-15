@@ -10,6 +10,14 @@
 let currentModelverseTab = window.currentModelverseTab || 'local';
 window.currentModelverseTab = currentModelverseTab;
 
+// Pagination configuration
+const HF_RESULTS_PER_PAGE = 20;
+const HF_MODELS_PER_PAGE = 20; // Alias for backwards compatibility
+let hfCurrentPage = 1;
+let hfTotalResults = [];
+let hfTotalModels = null; // Will be fetched from API
+let hfCurrentSearchContext = { isCategory: false, searchQuery: null, searchCategory: null };
+
 function getActiveModelsPanel() {
   return document.querySelector(`.models-tab-panel[data-tab="${currentModelverseTab}"]`) || document.querySelector('.models-tab-panel');
 }
@@ -66,7 +74,8 @@ function renderMarkdown(text, modelId) {
       const cleanPath = path.replace(/^\.\//, '');
       return `https://huggingface.co/${modelId}/resolve/main/${cleanPath}`;
     }
-    return path;
+    // Return null for local/relative paths that can't be resolved
+    return null;
   }
   
   // Remove YAML frontmatter (--- delimited metadata at the start of file)
@@ -93,8 +102,8 @@ function renderMarkdown(text, modelId) {
   });
   
   // Preserve safe HTML tags commonly used in READMEs
-  // Safe tags: structural, text formatting, media
-  const safeTagPattern = /<(\/?)(\s*)(h[1-6]|div|span|p|br|hr|img|a|strong|b|em|i|u|s|sub|sup|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|details|summary|center|figure|figcaption)(\s+[^>]*)?(\s*\/?\s*)>/gi;
+  // Safe tags: structural, text formatting, media, style
+  const safeTagPattern = /<(\/?)(\s*)(h[1-6]|div|span|p|br|hr|img|a|strong|b|em|i|u|s|sub|sup|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|details|summary|center|figure|figcaption|style)(\s+[^>]*)?(\s*\/?\s*)>/gi;
   
   s = s.replace(safeTagPattern, function(match) {
     const idx = placeholders.length;
@@ -163,14 +172,19 @@ function renderMarkdown(text, modelId) {
   });
   
   // Images: ![alt](src) - render as actual images (convert relative paths to HuggingFace URLs)
+  // Filter out local/relative paths that can't be resolved
   s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(_, alt, src) {
     const resolvedSrc = toHfUrl(src.trim());
+    // Skip images with unresolvable local paths
+    if (resolvedSrc === null) return '';
     return `<img src="${resolvedSrc}" alt="${alt}" style="max-width:100%;height:auto;border-radius:8px;margin:8px 0;">`;
   });
   
   // Links: [text](url) - handle both absolute and relative URLs
   s = s.replace(/\[([^\]]+?)\]\(([^)]+)\)/g, function(_, label, url) {
     const resolvedUrl = toHfUrl(url.trim());
+    // Skip links to unresolvable local files
+    if (resolvedUrl === null) return label;
     // Determine if it's a downloadable file (PDF, zip, etc.)
     const isDownload = /\.(pdf|zip|tar|gz|rar|7z|doc|docx|xls|xlsx|ppt|pptx)$/i.test(resolvedUrl);
     const downloadAttr = isDownload ? ' download' : '';
@@ -242,11 +256,91 @@ function renderMarkdown(text, modelId) {
 let hfSearchDebounceTimer = null;
 let lastHfSearchQuery = '';
 
+// Search HuggingFace models by category with pipeline_tag
+async function searchHuggingFaceModelsByCategory(category, limit = 100) {
+  if (!category) return null;
+  
+  try {
+    // Check cache first using category as key with normalized format
+    const cacheKey = `category_${category.toLowerCase().trim()}`;
+    const cache = getHfCache();
+    if (cache && cache[cacheKey]) {
+      console.log(`Using cached results for category: ${category}`);
+      return cache[cacheKey].slice(0, limit);
+    }
+
+    let results = [];
+    
+    // Use HuggingFace API with pipeline_tag parameter
+    // Request higher limit to support pagination
+    const searchUrl = `https://huggingface.co/api/models?pipeline_tag=${encodeURIComponent(category)}&limit=${limit}`;
+    const searchRes = await fetch(searchUrl);
+    
+    if (searchRes.ok) {
+      const searchResults = await searchRes.json();
+      if (searchResults && searchResults.length > 0) {
+        results = searchResults.map(r => ({
+          modelId: r.id || r.modelId,
+          id: r.id || r.modelId,
+          author: r.author,
+          downloads: r.downloads,
+          likes: r.likes,
+          pipeline_tag: r.pipeline_tag,
+          lastModified: r.lastModified
+        }));
+        // Cache the results
+        setHfCache({ [cacheKey]: results });
+      }
+    }
+    
+    return results.length > 0 ? results : null;
+  } catch (err) {
+    console.error('HuggingFace category search error:', err);
+    return null;
+  }
+}
+
+
 // Search HuggingFace models via API (searches entire catalog)
 async function searchHuggingFaceModels(query, limit = 20) {
+  // If no query provided (null), return unfiltered models list
+  if (query === null) {
+    try {
+      // Check cache first with key 'unfiltered'
+      const cacheKey = 'unfiltered';
+      const cache = getHfCache();
+      if (cache && cache[cacheKey]) {
+        console.log('Using cached unfiltered models');
+        return cache[cacheKey].slice(0, limit);
+      }
+
+      const unfilteredUrl = `https://huggingface.co/api/models?limit=${limit}&sort=downloads`;
+      const res = await fetch(unfilteredUrl);
+      if (res.ok) {
+        const results = await res.json();
+        if (results && results.length > 0) {
+          // Cache the results
+          setHfCache({ [cacheKey]: results });
+          return results;
+        }
+      }
+    } catch (err) {
+      console.error('Unfiltered models fetch error:', err);
+    }
+    return null;
+  }
+
   if (!query || query.length < 2) return null;
   
   try {
+    // Check cache first using query as key with normalized format
+    const cacheKey = `search_${query.toLowerCase().trim()}`;
+    const cache = getHfCache();
+    if (cache && cache[cacheKey]) {
+      console.log(`Using cached search results for: ${query}`);
+      return cache[cacheKey].slice(0, limit);
+    }
+
     let results = [];
     
     // If query looks like a model ID (contains /), try direct lookup first
@@ -315,6 +409,11 @@ async function searchHuggingFaceModels(query, limit = 20) {
       }
     }
     
+    // Cache results before returning
+    if (results.length > 0) {
+      setHfCache({ [cacheKey]: results });
+    }
+    
     return results.length > 0 ? results.slice(0, limit) : null;
   } catch (err) {
     console.error('HuggingFace search error:', err);
@@ -322,11 +421,74 @@ async function searchHuggingFaceModels(query, limit = 20) {
   }
 }
 
-// Display HuggingFace search results
-async function displayHfSearchResults(query) {
+// Perform search by category
+async function performCategorySearch() {
+  const categorySelect = document.getElementById('categoryFilter');
+  const category = categorySelect ? categorySelect.value : '';
+  
+  if (!category) {
+    // When 'Please select a category' is selected, show results with no filtering
+    hfCurrentPage = 1;
+    hfCurrentSearchContext = { isCategory: false, searchQuery: null, searchCategory: null };
+    await displayHfSearchResults(null, null);
+    return;
+  }
+  
+  // Display category search results using unified function
+  hfCurrentPage = 1;
+  hfCurrentSearchContext = { isCategory: true, searchQuery: null, searchCategory: category };
+  await displayHfSearchResults(null, category);
+}
+
+// Unified function to display HuggingFace search results (handles both category and query searches)
+async function displayHfSearchResults(searchQuery = null, searchCategory = null) {
   const tbody = document.querySelector('#huggingfaceModelsTable tbody');
   const mobileContainer = document.getElementById('hfMobileModelsList');
   if (!tbody) return;
+
+  // Determine search type and parameters
+  const isCategory = searchCategory != null;
+  const isUnfiltered = !searchQuery && !searchCategory;
+  let searchLabel = isUnfiltered ? 'HuggingFace Models' : (isCategory ? searchCategory : searchQuery);
+  let loadingMessage = isUnfiltered 
+    ? 'Loading HuggingFace models...'
+    : (isCategory 
+      ? `Loading ${searchLabel} models...`
+      : `Searching HuggingFace for "${searchLabel}"...`);
+
+  // Show loading state
+  tbody.innerHTML = `
+    <tr id="hfSearchingRow">
+      <td colspan="8" style="text-align: center; padding: 30px 20px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+          <div style="width: 28px; height: 28px; border: 3px solid #e5e7eb; border-top-color: #8b7cf6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <span style="color: #6b7280; font-size: 14px;">${loadingMessage}</span>
+        </div>
+      </td>
+    </tr>
+  `;
+
+  // Store search context for page navigation
+  hfCurrentSearchContext = {
+    isCategory: isCategory,
+    searchQuery: searchQuery,
+    searchCategory: searchCategory,
+    isUnfiltered: isUnfiltered
+  };
+  
+  hfCurrentPage = 1;
+
+  // Load first page
+  await loadHfPage(1);
+}
+
+// Display paginated results - fetches from API if needed
+async function displayPaginatedHfResults(searchQuery = null, searchCategory = null, isUnfiltered = false) {
+  const tbody = document.querySelector('#huggingfaceModelsTable tbody');
+  const mobileContainer = document.getElementById('hfMobileModelsList');
+  
+  const isCategory = searchCategory != null;
+  const searchLabel = isUnfiltered ? 'HuggingFace Models' : (isCategory ? searchCategory : searchQuery);
   
   // Show loading state
   tbody.innerHTML = `
@@ -334,15 +496,16 @@ async function displayHfSearchResults(query) {
       <td colspan="8" style="text-align: center; padding: 30px 20px;">
         <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
           <div style="width: 28px; height: 28px; border: 3px solid #e5e7eb; border-top-color: #8b7cf6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-          <span style="color: #6b7280; font-size: 14px;">Searching HuggingFace for "${query}"...</span>
+          <span style="color: #6b7280; font-size: 14px;">Loading page ${hfCurrentPage}...</span>
         </div>
       </td>
     </tr>
   `;
-  
-  const results = await searchHuggingFaceModels(query, 20);
-  
-  if (!results || results.length === 0) {
+
+  // Fetch models for current page from HuggingFace
+  let pageResults = await fetchHfPage(searchQuery, searchCategory, hfCurrentPage);
+
+  if (!pageResults || pageResults.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="8" style="text-align: center; padding: 40px 20px; color: #6b7280;">
@@ -350,41 +513,205 @@ async function displayHfSearchResults(query) {
             <svg width="32" height="32" fill="none" stroke="#9ca3af" stroke-width="1.5" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
             </svg>
-            <span>Querying too frequently. Please wait / Clear Cache / Try the Intelligence Cubed Models.</span>
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <button onclick="clearSearch(); switchModelverseTab('local');" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Go to I³ Models</button>
-              <button onclick="clearSearch()" style="padding: 8px 16px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px;">Clear Search</button>
-            </div>
+            <span>No more models available</span>
           </div>
         </td>
       </tr>
     `;
-    if (mobileContainer) {
-      mobileContainer.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; padding: 40px 20px; color: #6b7280; gap: 10px;">
-          <svg width="32" height="32" fill="none" stroke="#9ca3af" stroke-width="1.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
-          </svg>
-          <span style="text-align: center;">Querying too frequently.<br>Please wait or try Intelligence Cubed Models.</span>
-          <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <button onclick="clearSearch(); switchModelverseTab('local');" style="padding: 10px 18px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">Go to I³ Models</button>
-          </div>
-        </div>
-      `;
-    }
-    updateSearchResultCount(0);
+    return;
+  }
+
+  // Fetch model cards for current page
+  const modelIds = pageResults.map(m => m.modelId || m.id).filter(Boolean);
+  const hfMap = await fetchAllModelCards(modelIds.slice(0, 20), 4);
+
+  // Render results
+  await renderHfSearchResults(pageResults, hfMap, {
+    tbody,
+    mobileContainer,
+    query: searchQuery,
+    categoryLabel: isCategory ? searchLabel : null
+  });
+
+  // Update count to show current page results
+  updateSearchResultCount(pageResults.length);
+
+  // Add pagination controls with smart paging (Prev/Next + visible pages)
+  updateHfPagination(hfCurrentPage, pageResults.length === HF_RESULTS_PER_PAGE);
+}
+
+// Update pagination controls with smart paging (show 5 visible pages)
+function updateHfPagination(currentPage, hasMore) {
+  const paginationContainer = document.getElementById('hfPaginationContainer');
+  
+  if (!paginationContainer) {
+    console.warn('Pagination container not found');
     return;
   }
   
-  // Clear and populate with search results
+  console.log('Updating pagination for page', currentPage, 'hasMore:', hasMore);
+  // Generate page buttons - show 5 visible pages
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = startPage + maxVisiblePages - 1;
+  
+  let paginationHtml = `
+    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 20px 0; flex-wrap: wrap;">
+      <button 
+        onclick="window.loadHfPage(${currentPage - 1})" 
+        ${currentPage <= 1 ? 'disabled' : ''}
+        style="padding: 8px 12px; border: 1px solid ${currentPage <= 1 ? '#e5e7eb' : '#d1d5db'}; 
+               background: ${currentPage <= 1 ? '#f9fafb' : 'white'}; border-radius: 6px; 
+               cursor: ${currentPage <= 1 ? 'not-allowed' : 'pointer'}; color: ${currentPage <= 1 ? '#9ca3af' : '#374151'}; 
+               font-size: 13px; transition: all 0.2s;"
+        ${currentPage > 1 ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'white\'"' : ''}>
+        ← Prev
+      </button>
+  `;
+  
+  for (let i = startPage; i <= endPage; i++) {
+    const isActive = i === currentPage;
+    paginationHtml += `
+      <button 
+        onclick="window.loadHfPage(${i})" 
+        style="padding: 8px 14px; border: 1px solid ${isActive ? '#8b7cf6' : '#d1d5db'}; 
+               background: ${isActive ? '#8b7cf6' : 'white'}; color: ${isActive ? 'white' : '#374151'}; 
+               border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: ${isActive ? '600' : '400'}; 
+               transition: all 0.2s;"
+        ${!isActive ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'white\'"' : ''}>
+        ${i}
+      </button>
+    `;
+  }
+  
+  // Add "..." and next button if there might be more
+  if (hasMore) {
+    paginationHtml += `
+      <span style="color: #6b7280; padding: 0 4px;">...</span>
+    `;
+  }
+  
+  paginationHtml += `
+      <button 
+        onclick="window.loadHfPage(${currentPage + 1})" 
+        ${!hasMore ? 'disabled' : ''}
+        style="padding: 8px 12px; border: 1px solid ${!hasMore ? '#e5e7eb' : '#d1d5db'}; 
+               background: ${!hasMore ? '#f9fafb' : 'white'}; border-radius: 6px; 
+               cursor: ${!hasMore ? 'not-allowed' : 'pointer'}; color: ${!hasMore ? '#9ca3af' : '#374151'}; 
+               font-size: 13px; transition: all 0.2s;"
+        ${hasMore ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'white\'"' : ''}>
+        Next →
+      </button>
+    </div>
+    <div style="text-align: center; color: #9ca3af; font-size: 12px; padding-bottom: 12px;">
+      Page ${currentPage} • ${HF_RESULTS_PER_PAGE} models per page • Cached for 30 min
+    </div>
+  `;
+  
+  paginationContainer.innerHTML = paginationHtml;
+  paginationContainer.style.display = 'block';
+}
+
+// Load a specific HuggingFace page
+async function loadHfPage(page) {
+  if (page < 1) return;
+  hfCurrentPage = page;
+  const isUnfiltered = !hfCurrentSearchContext.searchQuery && !hfCurrentSearchContext.searchCategory;
+  await displayPaginatedHfResults(hfCurrentSearchContext.searchQuery, hfCurrentSearchContext.searchCategory, isUnfiltered);
+  
+  // Scroll to top of table
+  const tableContainer = document.querySelector('#huggingfaceModelsPanel');
+  if (tableContainer) {
+    tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// Expose loadHfPage globally
+window.loadHfPage = loadHfPage;
+
+// Fetch a specific page from HuggingFace API with caching
+async function fetchHfPage(searchQuery, searchCategory, page) {
+  const limit = HF_RESULTS_PER_PAGE;
+  let cacheKey;
+  
+  // Determine cache key based on search type (support combined search + category)
+  if (searchCategory && searchQuery) {
+    cacheKey = `category_${searchCategory.toLowerCase().trim()}_search_${searchQuery.toLowerCase().trim()}_page_${page}`;
+  } else if (searchCategory) {
+    cacheKey = `category_${searchCategory.toLowerCase().trim()}_page_${page}`;
+  } else if (searchQuery) {
+    cacheKey = `search_${searchQuery.toLowerCase().trim()}_page_${page}`;
+  } else {
+    cacheKey = `unfiltered_page_${page}`;
+  }
+  
+  const cache = getHfCache();
+  
+  // Check cache first
+  if (cache && cache[cacheKey]) {
+    console.log(`Using cached HF page ${page}`);
+    return cache[cacheKey];
+  }
+  
+  try {
+    const skip = (page - 1) * limit;
+    let url;
+    
+    // Support combined category + search filtering
+    if (searchCategory && searchQuery) {
+      url = `https://huggingface.co/api/models?pipeline_tag=${encodeURIComponent(searchCategory)}&search=${encodeURIComponent(searchQuery)}&limit=${limit}&skip=${skip}`;
+    } else if (searchCategory) {
+      // Category search with pagination
+      url = `https://huggingface.co/api/models?pipeline_tag=${encodeURIComponent(searchCategory)}&limit=${limit}&skip=${skip}`;
+    } else if (searchQuery) {
+      // Text search with pagination
+      url = `https://huggingface.co/api/models?search=${encodeURIComponent(searchQuery)}&limit=${limit}&skip=${skip}`;
+    } else {
+      // Unfiltered with pagination
+      url = `https://huggingface.co/api/models?limit=${limit}&skip=${skip}`;
+    }
+    
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HF page fetch failed: ' + res.status);
+    let data = await res.json();
+    
+    // Standardize response
+    let results = Array.isArray(data) ? data : (data.results || []);
+    results = results.map(model => ({
+      id: model.id,
+      modelId: model.id,
+      name: model.id.split('/').pop(),
+      author: model.author || 'Unknown',
+      pipeline_tag: model.pipeline_tag || 'Unknown',
+      lastUpdated: model.lastModified ? new Date(model.lastModified).toLocaleDateString() : 'Unknown',
+      downloads: model.downloads || 0,
+      likes: model.likes || 0
+    }));
+    
+    // Cache the page
+    setHfCache({ [cacheKey]: results });
+    
+    return results;
+  } catch (err) {
+    console.error('fetchHfPage error:', err);
+    return [];
+  }
+}
+
+// Legacy wrapper for category search (backwards compatibility)
+async function displayHfCategorySearchResults(category) {
+  await displayHfSearchResults(null, category);
+}
+
+// Helper function to render HuggingFace search results into the tables
+async function renderHfSearchResults(results, hfMap, displayContext) {
+  const { tbody, mobileContainer, query, categoryLabel, infoSelector } = displayContext;
+  
+  if (!tbody) return;
+  
+  // Clear previous content
   tbody.innerHTML = '';
   if (mobileContainer) mobileContainer.innerHTML = '';
-  
-  // Process results (reuse existing row creation logic)
-  const modelIds = results.map(m => m.modelId || m.id).filter(Boolean);
-  
-  // Fetch model cards in parallel (with limit to avoid rate limiting)
-  const hfMap = await fetchAllModelCards(modelIds.slice(0, 20), 4);
   
   results.forEach(entry => {
     const modelId = entry.modelId || entry.id;
@@ -403,12 +730,12 @@ async function displayHfSearchResults(query) {
     const escModelId = escapeHtml(modelId);
     const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
     const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
-    const baseModel = normalized?.baseModel || entry.base_model || normalized?.category || '-';
-    const pipelineTag = normalized?.pipelineTag || entry.pipeline_tag || null;
+    // Use pipeline_tag as category/base model, not category field
+    const baseModel = normalized?.pipelineTag || entry.pipeline_tag || normalized?.baseModel || entry.base_model || (categoryLabel || '-');
+    const pipelineTag = normalized?.pipelineTag || entry.pipeline_tag || '';
     const author = normalized?.author || entry.author || '-';
     const downloadsValue = Number.isFinite(Number(normalized?.downloads)) ? Number(normalized.downloads) : (Number.isFinite(Number(entry.downloads)) ? Number(entry.downloads) : null);
     const likesValue = Number.isFinite(Number(normalized?.likes)) ? Number(normalized.likes) : (Number.isFinite(Number(entry.likes)) ? Number(entry.likes) : null);
-    // List API only has createdAt, individual model API has lastModified
     const lastUpdated = normalized?.lastModified || entry.lastModified || entry.last_modified || entry.createdAt || null;
     
     const baseModelHtml = `
@@ -422,8 +749,11 @@ async function displayHfSearchResults(query) {
     `;
     const lastUpdatedHtml = formatDateDisplay(lastUpdated);
     
-    // Highlight search term in model name
-    const highlightedName = escModelId.replace(new RegExp(`(${query})`, 'gi'), '<mark style="background:#fef08a;padding:0 2px;border-radius:2px;">$1</mark>');
+    // Highlight search term in model name if query is provided
+    let highlightedName = escModelId;
+    if (query) {
+      highlightedName = escModelId.replace(new RegExp(`(${query})`, 'gi'), '<mark style="background:#fef08a;padding:0 2px;border-radius:2px;">$1</mark>');
+    }
     
     row.innerHTML = `
       <td class="model-name">${highlightedName}</td>
@@ -459,7 +789,7 @@ async function displayHfSearchResults(query) {
         <div class="mobile-model-item-header">
           <div class="mobile-model-icon">${icon}</div>
           <div style="flex: 1;">
-            <div class="mobile-model-name">${highlightedName}</div>
+            <div class="mobile-model-name">${escModelId}</div>
           </div>
           <div style="color: #9ca3af; font-size: 12px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -491,11 +821,23 @@ async function displayHfSearchResults(query) {
     }
   });
   
-  // Update count
+  // Update count - show in the same format as pagination results
   const info = document.querySelector('.search-info') || document.getElementById('searchResults');
   if (info) {
-    info.innerHTML = `Found <strong>${results.length}</strong> models matching "<strong>${escapeHtml(query)}</strong>" <span style="color:#6b7280;font-size:12px;">(from ${formatLargeNumber(hfTotalModels || 1200000)} total)</span>`;
+    if (hfCurrentSearchContext.searchCategory && hfCurrentSearchContext.searchQuery) {
+      // Combined search + category filter
+      info.innerHTML = `Showing <strong>${results.length}</strong> / <strong>${formatLargeNumber(hfTotalModels || 1200000)}</strong> models matching "<strong>${escapeHtml(query)}</strong>" (in <strong>${categoryLabel}</strong>)`;
+    } else if (hfCurrentSearchContext.searchCategory) {
+      info.innerHTML = `Showing <strong>${results.length}</strong> / <strong>${formatLargeNumber(hfTotalModels || 1200000)}</strong> models (in <strong>${categoryLabel}</strong>)`;
+    } else if (query) {
+      info.innerHTML = `Showing <strong>${results.length}</strong> / <strong>${formatLargeNumber(hfTotalModels || 1200000)}</strong> models matching "<strong>${escapeHtml(query)}</strong>"`;
+    } else {
+      info.innerHTML = `Showing <strong>${results.length}</strong> / <strong>${formatLargeNumber(hfTotalModels || 1200000)}</strong> models`;
+    }
   }
+  
+  // Update the row count for consistency
+  updateSearchResultCount(results.length);
   
   // Hide pagination during search
   const paginationContainer = document.getElementById('hfPaginationContainer');
@@ -504,6 +846,7 @@ async function displayHfSearchResults(query) {
   if (mobilePagination) mobilePagination.style.display = 'none';
 }
 
+// Display HuggingFace search results
 function performSearch() {
   const input = document.getElementById('searchInput') || document.getElementById('mobileSearchInput');
   const searchTerm = (input ? input.value : '').toLowerCase().trim();
@@ -520,7 +863,10 @@ function performSearch() {
     hfSearchDebounceTimer = setTimeout(() => {
       if (searchTerm !== lastHfSearchQuery && searchTerm.length >= 2) {
         lastHfSearchQuery = searchTerm;
-        displayHfSearchResults(searchTerm);
+        // Check if category is selected to enable combined search
+        const categorySelect = document.getElementById('categoryFilter');
+        const selectedCategory = categorySelect && categorySelect.value !== '' ? categorySelect.value : null;
+        displayHfSearchResults(searchTerm, selectedCategory);
       }
     }, 300); // 300ms debounce
     return;
@@ -592,25 +938,10 @@ function performSearch() {
 function clearSearch() {
   const input = document.getElementById('searchInput');
   const mobileInput = document.getElementById('mobileSearchInput');
+  const categoryFilter = document.getElementById('categoryFilter');
   if (input) input.value = '';
   if (mobileInput) mobileInput.value = '';
-  
-  // Reset HF search state
-  lastHfSearchQuery = '';
-  clearTimeout(hfSearchDebounceTimer);
-  
-  // For HuggingFace tab, reload the current page
-  if (currentModelverseTab === 'hf') {
-    // Show pagination again
-    const paginationContainer = document.getElementById('hfPaginationContainer');
-    if (paginationContainer) paginationContainer.style.display = '';
-    const mobilePagination = document.getElementById('hfMobilePaginationContainer');
-    if (mobilePagination) mobilePagination.style.display = '';
-    
-    // Reload current page
-    loadHfPage(hfCurrentPage || 1);
-    return;
-  }
+  if (categoryFilter) categoryFilter.value = '';
   
   document.querySelectorAll('.models-table tbody tr').forEach(row => {
     row.style.display = '';
@@ -708,7 +1039,15 @@ function switchModelverseTab(tabName) {
     }
   }
 
-  performSearch();
+  // When switching to HF tab, show unfiltered models by default
+  if (tabName === 'hf') {
+    hfCurrentPage = 1;
+    hfCurrentSearchContext = { isCategory: false, searchQuery: null, searchCategory: null };
+    displayHfSearchResults(null, null);
+  } else {
+    performSearch();
+  }
+  
   refreshModelCounts();
   requestAnimationFrame(refreshModelCounts);
 }
@@ -903,42 +1242,77 @@ async function showModelCard(modelName, signOverride) {
   if (titleEl)    titleEl.textContent = `${modelName} Details`;
   if (purposeEl) {
     const fullPurpose = data.purpose || '—';
-    const isLong = fullPurpose.length > 500;
-    const displayText = isLong ? fullPurpose.substring(0, 500) + '...' : fullPurpose;
-    // Pass modelName to renderMarkdown so relative paths can be resolved to HuggingFace URLs
-    const renderedContent = renderMarkdown(displayText, modelName);
-    
-    purposeEl.innerHTML = `
-      <div class="purpose-content clickable-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="max-height: 300px; overflow-y: auto; padding-right: 8px; cursor: pointer; transition: background 0.2s;" title="Click to view full content">
-        ${renderedContent}
-        ${isLong ? '<div style="color: #8b7cf6; font-size: 12px; margin-top: 8px; font-weight: 500;">Click to read more...</div>' : ''}
-      </div>
-      ${isLong ? `
-      <div style="margin-top: 12px;">
-        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px;">
+    const isHuggingFace = data._hf;
+    if (isHuggingFace && fullPurpose !== '—') {
+      // For HuggingFace models, only show "View Full Content" link
+      purposeEl.innerHTML = `
+        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
           View Full Content
         </a>
-      </div>
-      ` : ''}
-    `;
+      `;
+    } else if (!isHuggingFace) {
+      // For local models, show preview + link
+      const shortText = fullPurpose.substring(0, 200) + (fullPurpose.length > 200 ? "..." : "");
+      const isLong = fullPurpose.length > 200;
+      const renderedContent = typeof renderMarkdown === 'function' ? renderMarkdown(shortText, modelName) : escapeHtml(shortText);
+      purposeEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div>${renderedContent}</div>
+          ${isLong ? `
+          <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullPurpose)}" data-type="Purpose" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            View Full Content
+          </a>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      purposeEl.innerHTML = '—';
+    }
   }
   if (useCaseEl) {
-    const shortText = (data.useCase || '—').substring(0, 150) + "...";
-    useCaseEl.innerHTML = `
-      ${shortText}
-      <br><br>
-        <a href="#" class="view-full-content" data-content="${encodeURIComponent(data.useCase || '')}" data-type="Use Case" data-model="${encodeURIComponent(modelName)}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-        View Full Content
-      </a>
-    `;
+    const fullUseCase = data.useCase || '—';
+    const isHuggingFace = data._hf;
+    if (isHuggingFace && fullUseCase !== '—') {
+      // For HuggingFace models, only show "View Full Content" link
+      useCaseEl.innerHTML = `
+        <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullUseCase)}" data-type="Use Case" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          View Full Content
+        </a>
+      `;
+    } else if (!isHuggingFace) {
+      // For local models, show preview + link
+      const shortText = fullUseCase.substring(0, 150) + (fullUseCase.length > 150 ? "..." : "");
+      const isLong = fullUseCase.length > 150;
+      const renderedContent = typeof renderMarkdown === 'function' ? renderMarkdown(shortText, modelName) : escapeHtml(shortText);
+      useCaseEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div>${renderedContent}</div>
+          ${isLong ? `
+          <a href="#" class="view-full-content" data-content="${encodeURIComponent(fullUseCase)}" data-type="Use Case" data-model="${encodeURIComponent(modelName)}" style="display: inline-flex; align-items: center; gap: 6px; color: #8b7cf6; text-decoration: none; font-size: 13px; width: fit-content;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            View Full Content
+          </a>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      useCaseEl.innerHTML = '—';
+    }
   }
   if (categoryEl) categoryEl.textContent = data.category || '—';
   if (industryEl) industryEl.textContent = data.industry || '—';
@@ -1311,8 +1685,7 @@ function getModelData(name) {
 function showFullContentModal(content, title = 'Content', modelId = null) {
   const fullModal = document.createElement('div');
   fullModal.className = 'full-content-modal';
-  // Render markdown for the full content, passing modelId for relative URL resolution
-  const renderedContent = renderMarkdown(content, modelId);
+  const renderedContent = typeof renderMarkdown === 'function' ? renderMarkdown(content) : escapeHtml(content);
   fullModal.innerHTML = `
     <div class="full-content-overlay">
       <div class="full-content-container" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
@@ -1392,10 +1765,7 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// HuggingFace pagination state
-let hfCurrentPage = 1;
-let hfTotalModels = null; // Will be fetched from API
-const HF_MODELS_PER_PAGE = 20;
+// HuggingFace helper constants
 const HF_CACHE_KEY = 'hf_models_cache';
 const HF_CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes cache expiry
 
@@ -1492,30 +1862,50 @@ function setHfCache(pageData) {
   }
 }
 
-async function fetchHuggingFaceModels(page = 1, limit = HF_MODELS_PER_PAGE) {
-  const cacheKey = `page_${page}`;
-  const cache = getHfCache();
-  
-  // Check cache first
-  if (cache && cache[cacheKey]) {
-    console.log(`Using cached HF models for page ${page}`);
-    return cache[cacheKey];
-  }
-  
+// Get cached model card data
+function getCachedModelCard(modelId) {
   try {
-    const skip = (page - 1) * limit;
-    const url = `https://huggingface.co/api/models?limit=${encodeURIComponent(limit)}&skip=${encodeURIComponent(skip)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HF models request failed: ' + res.status);
-    const data = await res.json();
-    
-    // Cache the results
-    setHfCache({ [cacheKey]: data });
-    
-    return data;
-  } catch (err) {
-    console.error('fetchHuggingFaceModels error:', err);
-    return [];
+    const cached = localStorage.getItem(MODEL_CARD_CACHE_KEY);
+    if (!cached) return null;
+    const cache = JSON.parse(cached);
+    const entry = cache[modelId];
+    if (!entry) return null;
+    // Check if cache is expired
+    if (Date.now() - entry.timestamp > MODEL_CARD_CACHE_EXPIRY) {
+      // Remove expired entry
+      delete cache[modelId];
+      localStorage.setItem(MODEL_CARD_CACHE_KEY, JSON.stringify(cache));
+      return null;
+    }
+    console.log(`Using cached model card for: ${modelId}`);
+    return entry.data;
+  } catch (e) {
+    console.warn('Error reading model card cache:', e);
+    return null;
+  }
+}
+
+// Save model card data to cache
+function setCachedModelCard(modelId, data) {
+  try {
+    const cached = localStorage.getItem(MODEL_CARD_CACHE_KEY);
+    const cache = cached ? JSON.parse(cached) : {};
+    cache[modelId] = {
+      data: data,
+      timestamp: Date.now()
+    };
+    // Limit cache size - keep only last 50 model cards
+    const keys = Object.keys(cache);
+    if (keys.length > 50) {
+      // Remove oldest entries
+      const sorted = keys.sort((a, b) => cache[a].timestamp - cache[b].timestamp);
+      for (let i = 0; i < keys.length - 50; i++) {
+        delete cache[sorted[i]];
+      }
+    }
+    localStorage.setItem(MODEL_CARD_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('Error saving model card cache:', e);
   }
 }
 
@@ -1566,15 +1956,38 @@ function setCachedModelCard(modelId, data) {
     }
     localStorage.setItem(MODEL_CARD_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {
-    console.warn('Error saving model card to cache:', e);
+    console.warn('Error saving model card cache:', e);
+  }
+}
+
+async function fetchHuggingFaceModels(page = 1, limit = HF_MODELS_PER_PAGE) {
+  const cacheKey = `page_${page}`;
+  const cache = getHfCache();
+  
+  // Check cache first
+  if (cache && cache[cacheKey]) {
+    console.log(`Using cached HF models for page ${page}`);
+    return cache[cacheKey];
+  }
+  
+  try {
+    const skip = (page - 1) * limit;
+    const url = `https://huggingface.co/api/models?limit=${encodeURIComponent(limit)}&skip=${encodeURIComponent(skip)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HF models request failed: ' + res.status);
+    const data = await res.json();
+    
+    // Cache the results
+    setHfCache({ [cacheKey]: data });
+    
+    return data;
+  } catch (err) {
+    console.error('fetchHuggingFaceModels error:', err);
+    return [];
   }
 }
 
 async function fetchHuggingFaceModelCard(modelId) {
-  // Check cache first
-  const cached = getCachedModelCard(modelId);
-  if (cached) return cached;
-  
   // Fetch model metadata from HF API and attempt to fetch README.raw for purpose and paper link.
   try {
   const safeId = encodeURIComponent(modelId).replace(/%2F/g, '/');
@@ -1686,7 +2099,8 @@ async function fetchHuggingFaceModelCard(modelId) {
     else if (api.tags && api.tags.length) pipeline = api.tags[0];
 
     const pipelineTag = pipeline || cardData.pipeline_tag || card.pipeline_tag || null;
-    const baseModel = cardData.base_model || card.base_model || (api.config?.peft?.base_model_name_or_path) || pipelineTag || null;
+    // Use pipelineTag as the preferred category; keep base_model available as fallback.
+    const baseModel = pipelineTag || cardData.base_model || card.base_model || (api.config?.peft?.base_model_name_or_path) || null;
     const author = api.author || cardData.author || card.author || null;
     const downloads = api.downloads ?? api.downloads_count ?? null;
     const likes = api.likes ?? null;
@@ -1712,6 +2126,7 @@ async function fetchHuggingFaceModelCard(modelId) {
       starsHtml: '—',
       purchasedPercent: 0,
       paperLink: sanitizeUrl(paperLink) || sanitizeUrl(card.paperLink || card.paper) || '-',
+      // normalized.baseModel will reflect the pipelineTag when available (so UI treats it as Category)
       baseModel: baseModel || '-',
       pipelineTag: pipelineTag || '-',
       license: license || '-',
@@ -1728,8 +2143,6 @@ async function fetchHuggingFaceModelCard(modelId) {
     };
 
     const result = { api, readme, normalized };
-    // Cache the result for future use
-    setCachedModelCard(modelId, result);
     return result;
   } catch (err) {
     console.error('fetchHuggingFaceModelCard error for', modelId, err);
@@ -1822,8 +2235,9 @@ async function appendHuggingFaceModels(page = 1, clearExisting = true) {
     const escPaper = normalized && normalized.paperLink && normalized.paperLink !== '-' ? escapeHtml(normalized.paperLink) : '';
     const paperLinkHtml = escPaper ? `<a href="${escPaper}" target="_blank">Link</a>` : '<span>-</span>';
     const listMeta = listMetaMap[modelId] || {};
-    const baseModel = normalized?.baseModel || listMeta.base_model || normalized?.category || '-';
-    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || (normalized?.category !== baseModel ? normalized?.category : null);
+    // Prefer pipeline_tag (pipelineTag) to represent the model's Category
+    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || normalized?.category || null;
+    const category = pipelineTag || normalized?.category || normalized?.baseModel || listMeta.base_model || '-';
     const author = normalized?.author || listMeta.author || '-';
     const downloadsValue = Number.isFinite(Number(normalized?.downloads))
       ? Number(normalized.downloads)
@@ -1834,9 +2248,9 @@ async function appendHuggingFaceModels(page = 1, clearExisting = true) {
     // List API only has createdAt, individual model API has lastModified
     const lastUpdated = normalized?.lastModified || listMeta.lastModified || listMeta.createdAt || null;
 
-    const baseModelHtml = `
-      <div class="hf-meta-primary">${escapeHtml(baseModel || '-')}</div>
-      ${pipelineTag && pipelineTag !== baseModel ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
+    const categoryHtml = `
+      <div class="hf-meta-primary">${escapeHtml(category || '-')}</div>
+      ${pipelineTag && pipelineTag !== category ? `<div class="hf-meta-secondary">${escapeHtml(pipelineTag)}</div>` : ''}
     `;
     const authorHtml = author ? escapeHtml(author) : '-';
     const downloadsLikesHtml = `
@@ -1851,7 +2265,7 @@ async function appendHuggingFaceModels(page = 1, clearExisting = true) {
       <td class="model-details" data-label="Details">
         <button class="model-card-btn" onclick="showModelCard('${escModelId}')">Model Card</button>
       </td>
-      <td class="hf-meta" data-label="Base Model">${baseModelHtml}</td>
+      <td class="hf-meta" data-label="Category">${categoryHtml}</td>
       <td class="hf-author" data-label="Author">${authorHtml || '-'}</td>
       <td class="hf-downloads" data-label="Downloads / Likes">${downloadsLikesHtml}</td>
       <td class="hf-last-updated" data-label="Last Updated">${lastUpdatedHtml}</td>
@@ -1950,20 +2364,23 @@ function updateHfPagination(currentPage, hasMore) {
       </button>
     </div>
     <div style="text-align: center; color: #9ca3af; font-size: 12px; padding-bottom: 12px;">
-      Page ${currentPage} • ${HF_MODELS_PER_PAGE} models per page • Cached for 30 min
+      Page ${currentPage} • ${HF_RESULTS_PER_PAGE} models per page • Cached for 30 min
     </div>
   `;
   
   paginationContainer.innerHTML = paginationHtml;
+  paginationContainer.style.display = 'block';
 }
 
 // Load a specific HuggingFace page
 async function loadHfPage(page) {
   if (page < 1) return;
-  await appendHuggingFaceModels(page, true);
-  await appendHuggingFaceModelsToMobile(page, true);
+  hfCurrentPage = page;
+  const isUnfiltered = !hfCurrentSearchContext.searchQuery && !hfCurrentSearchContext.searchCategory;
+  await displayPaginatedHfResults(hfCurrentSearchContext.searchQuery, hfCurrentSearchContext.searchCategory, isUnfiltered);
+  
   // Scroll to top of table
-  const tableContainer = document.querySelector('#hfModelsPanel');
+  const tableContainer = document.querySelector('#huggingfaceModelsTable');
   if (tableContainer) {
     tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -2037,7 +2454,8 @@ async function appendHuggingFaceModelsToMobile(page = 1, clearExisting = true) {
     if (typeof MODEL_DATA === 'object' && normalized) MODEL_DATA[modelId] = normalized;
 
     const listMeta = listMetaMap[modelId] || {};
-    const baseModel = normalized?.baseModel || listMeta.base_model || normalized?.category || '-';
+    const pipelineTag = normalized?.pipelineTag || listMeta.pipeline_tag || normalized?.category || null;
+    const category = pipelineTag || normalized?.category || normalized?.baseModel || listMeta.base_model || '-';
     const author = normalized?.author || listMeta.author || '-';
     const downloadsValue = Number.isFinite(Number(normalized?.downloads))
       ? Number(normalized.downloads)
@@ -2073,8 +2491,8 @@ async function appendHuggingFaceModelsToMobile(page = 1, clearExisting = true) {
       </div>
       <div class="mobile-model-info">
         <div class="mobile-model-info-row">
-          <span class="mobile-model-label">Base:</span>
-          <span class="mobile-model-value">${escapeHtml(baseModel || '-')}</span>
+          <span class="mobile-model-label">Category:</span>
+          <span class="mobile-model-value">${escapeHtml(category || '-')}</span>
         </div>
         <div class="mobile-model-info-row">
           <span class="mobile-model-label">Author:</span>

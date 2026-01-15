@@ -231,22 +231,7 @@ body {
     font-weight: 500;
 }
 
-.account-btn {
-    padding: 6px 12px;
-    border: 1px solid #d1d5db;
-    background: white;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #374151;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.account-btn:hover {
-    border-color: #8b7cf6;
-    background: #f9fafb;
-}
+/* .account-btn styles moved to account-dropdown.css to avoid conflicts */
 
 /* Main Layout */
 .main-layout {
@@ -359,13 +344,14 @@ body {
 }
 
 .terminal-subtitle {
-    font-size: 16px;
-    color: #6b7280;
+    font-size: 1.125rem;
+    color: #64748b;
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.8;
+    font-weight: 300;
+    letter-spacing: -0.01em;
     margin-bottom: 36px;
-    max-width: 500px;
-    margin-left: auto;
-    margin-right: auto;
-    line-height: 1.5;
 }
 
 /* Search Container */
@@ -585,21 +571,56 @@ input:checked + .slider:before {
 }
 
 .send-btn {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    background: #8b7cf6;
-    border: none;
-    border-radius: 6px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
     color: white;
-    cursor: pointer;
-    transition: all 0.2s ease;
 }
 
 .send-btn:hover {
-    background: #7c3aed;
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+}
+
+.send-btn:active {
+    transform: translateY(-50%) scale(0.98);
+}
+
+.send-btn svg {
+    color: white;
+    width: 18px;
+    height: 18px;
+}
+
+.send-btn-dark {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 0;
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: white;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.send-btn-dark:active {
+    transform: translateY(1px);
 }
 
 /* Tooltip */
@@ -820,10 +841,7 @@ input:checked + .slider:before {
         gap: 6px;
     }
     
-    .account-btn {
-        padding: 5px 10px;
-        font-size: 12px;
-    }
+    /* .account-btn responsive styles are in account-dropdown.css */
     
     .user-points {
         font-size: 10px;
@@ -954,11 +972,6 @@ input:checked + .slider:before {
         font-size: 11px;
     }
     
-    .send-btn {
-        width: 36px;
-        height: 36px;
-    }
-    
     .suggestion-item {
         padding: 10px 12px;
         gap: 8px;
@@ -983,6 +996,31 @@ input:checked + .slider:before {
     .search-container {
         max-width: 100%;
         margin: 0 auto 24px;
+    }
+    
+    .send-btn {
+        width: 40px;
+        height: 40px;
+        right: 14px;
+    }
+    
+    .send-btn-dark {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .chat-composer > button.send-btn-dark {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        font-size: 18px;
+        flex-shrink: 0;
+        margin-top: 0;
+        order: 2;
     }
 }
 

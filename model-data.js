@@ -9503,7 +9503,7 @@ const MODEL_DATA = {
     
     // 📊 统计信息
     const MODEL_STATS = {
-        totalModels: 192,
+        totalModels: 506,
         categories: ["Model Analysis","Data Provenance","Agent Benchmarking","Text Generation","Watermarking (Text)","Watermarking (Multimedia)","AI Research","Security (Red Teaming)","Safety Evaluation","Clinical AI","Graph Neural Networks","Content Generation","Game Agents","Code Agents","Evaluation Bias","智能生成文字类","Text Classification","Computer Vision","Texture Analysis","Model Optimization","3D Computer Vision","3D Generation","Shape Recognition","Medical Imaging Reconstruction","Blockchain Consensus","Environmental AI","Medical Diagnosis"],
         industries: ["Content Moderation","Privacy & Compliance","AI Agents & Automation","AI Safety","AI Platform Ops","Legal & Compliance","Content Authenticity","AI Research","AI Security","Software Engineering","AI Safety & Evaluation","Education & Publishing","Media & IP","Healthcare Imaging","Creative & Design","Web3 / Blockchain","Generative Imaging","Computer Vision R&D","AI Safety & Ethics","Environmental Science"],
         averageRating: 4.33,
