@@ -1589,7 +1589,17 @@ function selectAgentFromSidebar(agentId, type) {
     const purposeEl = document.getElementById('selectedAgentPurpose');
     
     if (header) header.style.display = 'block';
-    if (avatar) avatar.textContent = (agent.name || 'A')[0].toUpperCase();
+    if (avatar) {
+        if (agent.forkedFrom) {
+            // Show fork icon for forked agents
+            avatar.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg>';
+            avatar.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        } else {
+            // Show first letter for regular agents
+            avatar.textContent = (agent.name || 'A')[0].toUpperCase();
+            avatar.style.background = 'linear-gradient(135deg, #8b5cf6, #7c3aed)';
+        }
+    }
     if (nameEl) nameEl.textContent = agent.name;
     if (purposeEl) purposeEl.textContent = agent.purpose || 'No description available';
     
