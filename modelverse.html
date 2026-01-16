@@ -2119,18 +2119,32 @@
             <div class="mvpro-body">
                 <section class="mvpro-info">
                     <div class="mvpro-row">
-                        <span class="mvpro-label">Purpose</span>
+                        <span class="mvpro-label" id="modelPurposeLabel">Purpose</span>
                         <p id="modelPurpose" class="mvpro-text">-</p>
                     </div>
-                    <div class="mvpro-row">
+                    <div class="mvpro-row" id="modelUseCaseRow">
                         <span class="mvpro-label">Use Case</span>
                         <p id="modelUseCase" class="mvpro-text">-</p>
                     </div>
-                    <div class="mvpro-row mvpro-pills">
+                    
+                    <!-- HuggingFace Model Details -->
+                    <div class="mvpro-row mvpro-pills" id="modelHFDetailsRow">
+                        <div class="mvpro-pill"><span>Category</span><strong id="modelCategoryText">-</strong></div>
+                        <div class="mvpro-pill"><span>Base Model</span><strong id="modelBaseModel">-</strong></div>
+                        <div class="mvpro-pill"><span>License</span><strong id="modelLicense">-</strong></div>
+                        <div class="mvpro-pill"><span>Downloads</span><strong id="modelDownloads">-</strong></div>
+                        <div class="mvpro-pill"><span>Likes</span><strong id="modelLikes">-</strong></div>
+                        <div class="mvpro-pill"><span>Last Updated</span><strong id="modelLastUpdated">-</strong></div>
+                        <div class="mvpro-pill"><span>Languages</span><strong id="modelLanguages">-</strong></div>
+                        <div class="mvpro-pill"><span>Datasets</span><strong id="modelDatasets">-</strong></div>
+                    </div>
+                    
+                    <!-- Local Model Fields -->
+                    <div class="mvpro-row mvpro-pills" id="modelLocalPills">
                         <div class="mvpro-pill"><span>Category</span><strong id="modelCategory">?</strong></div>
                         <div class="mvpro-pill"><span>Industry</span><strong id="modelIndustry">?</strong></div>
                     </div>
-                    <div class="mvpro-kpis">
+                    <div class="mvpro-kpis" id="modelLocalKPIs">
                         <div class="mvpro-kpi"><div class="lbl">Price</div><div id="modelPrice" class="val">-</div></div>
                         <div class="mvpro-kpi"><div class="lbl">Market Change</div><div id="modelChange" class="val">-</div></div>
                         <div class="mvpro-kpi"><div class="lbl">Reviews</div><div id="modelRating" class="val">-</div></div>
