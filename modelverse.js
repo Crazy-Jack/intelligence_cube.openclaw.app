@@ -87,7 +87,17 @@ function renderMarkdown(text, modelId) {
   // Store placeholders for preserved content
   const placeholders = [];
   
-  // FIRST: Process code blocks before anything else (to preserve their content)
+  // FIRST: Preserve complete SVG blocks before anything else (including nested tags)
+  // Match <svg...>...</svg> with all attributes and nested content
+  s = s.replace(/<svg[\s\S]*?<\/svg>/gi, function(match) {
+    const idx = placeholders.length;
+    // Wrap SVG in a container div for better display control
+    const html = `<div style="display:inline-block;max-width:100%;margin:8px 0;">${match}</div>`;
+    placeholders.push(html);
+    return `\x00PLACEHOLDER${idx}\x00`;
+  });
+  
+  // Process code blocks before anything else (to preserve their content)
   // Handle fenced code blocks: ```lang\ncode\n```
   s = s.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
     const idx = placeholders.length;
@@ -101,9 +111,33 @@ function renderMarkdown(text, modelId) {
     return `\x00PLACEHOLDER${idx}\x00`;
   });
   
+  // Preserve and process HTML img tags - convert relative paths or remove unresolvable ones
+  s = s.replace(/<img\s+([^>]*)>/gi, function(match, attrs) {
+    // Extract src attribute
+    const srcMatch = attrs.match(/src=["']([^"']+)["']/i);
+    if (srcMatch) {
+      const originalSrc = srcMatch[1];
+      const resolvedSrc = toHfUrl(originalSrc);
+      
+      // Skip images with unresolvable local paths
+      if (resolvedSrc === null) return '';
+      
+      // Replace the src with resolved URL
+      const updatedAttrs = attrs.replace(/src=["']([^"']+)["']/i, `src="${resolvedSrc}"`);
+      const idx = placeholders.length;
+      placeholders.push(`<img ${updatedAttrs}>`);
+      return `\x00PLACEHOLDER${idx}\x00`;
+    }
+    
+    // No src attribute, preserve as-is
+    const idx = placeholders.length;
+    placeholders.push(match);
+    return `\x00PLACEHOLDER${idx}\x00`;
+  });
+  
   // Preserve safe HTML tags commonly used in READMEs
-  // Safe tags: structural, text formatting, media, style
-  const safeTagPattern = /<(\/?)(\s*)(h[1-6]|div|span|p|br|hr|img|a|strong|b|em|i|u|s|sub|sup|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|details|summary|center|figure|figcaption|style)(\s+[^>]*)?(\s*\/?\s*)>/gi;
+  // Safe tags: structural, text formatting, media, style (excluding img since we handled it above)
+  const safeTagPattern = /<(\/?)(\s*)(h[1-6]|div|span|p|br|hr|a|strong|b|em|i|u|s|sub|sup|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|details|summary|center|figure|figcaption|style|svg|path|circle|rect|line|polyline|polygon|ellipse|g|defs|use|symbol|clipPath|mask|pattern|linearGradient|radialGradient|stop|text|tspan)(\s+[^>]*)?(\s*\/?\s*)>/gi;
   
   s = s.replace(safeTagPattern, function(match) {
     const idx = placeholders.length;
@@ -177,6 +211,14 @@ function renderMarkdown(text, modelId) {
     const resolvedSrc = toHfUrl(src.trim());
     // Skip images with unresolvable local paths
     if (resolvedSrc === null) return '';
+    
+    // Special handling for SVG files
+    const isSvg = /\.svg$/i.test(resolvedSrc) || /image\/svg\+xml/i.test(resolvedSrc);
+    if (isSvg) {
+      // SVG images with specific styling to ensure proper display
+      return `<img src="${resolvedSrc}" alt="${alt}" style="max-width:100%;height:auto;margin:8px 0;display:inline-block;">`;
+    }
+    
     return `<img src="${resolvedSrc}" alt="${alt}" style="max-width:100%;height:auto;border-radius:8px;margin:8px 0;">`;
   });
   
