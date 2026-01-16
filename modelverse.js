@@ -1096,25 +1096,86 @@ async function showModelCard(modelName, signOverride) {
   }
   const $ = (sel) => modal.querySelector(sel);
 
-  const titleEl    = $('#modelCartTitle');
-  const purposeEl  = $('#modelPurpose');
+  const titleEl = $('#modelCartTitle');
+  const purposeEl = $('#modelPurpose');
   const purposeLabelEl = $('#modelPurposeLabel');
-  const useCaseEl  = $('#modelUseCase');
+  const useCaseEl = $('#modelUseCase');
   const useCaseRowEl = $('#modelUseCaseRow');
+  
+  // HuggingFace-specific elements
+  const categoryTextEl = $('#modelCategoryText');
+  const baseModelEl = $('#modelBaseModel');
+  const licenseEl = $('#modelLicense');
+  const downloadsEl = $('#modelDownloads');
+  const likesEl = $('#modelLikes');
+  const lastUpdatedEl = $('#modelLastUpdated');
+  const languagesEl = $('#modelLanguages');
+  const datasetsEl = $('#modelDatasets');
+  const hfDetailsRowEl = $('#modelHFDetailsRow');
+  
+  // Local model elements
   const categoryEl = $('#modelCategory');
   const industryEl = $('#modelIndustry');
-  const priceEl    = $('#modelPrice');
-  const changeEl   = $('#modelChange');
-  const ratingEl   = $('#modelRating');
+  const priceEl = $('#modelPrice');
+  const changeEl = $('#modelChange');
+  const ratingEl = $('#modelRating');
+  const localPillsEl = $('#modelLocalPills');
+  const localKPIsEl = $('#modelLocalKPIs');
   
   const isHuggingFace = data._hf;
   
-  // Hide Use Case row for HuggingFace models
-  if (useCaseRowEl) {
-    useCaseRowEl.style.display = isHuggingFace ? 'none' : '';
+  // Show/hide rows based on model type
+  if (useCaseRowEl) useCaseRowEl.style.display = isHuggingFace ? 'none' : '';
+  if (hfDetailsRowEl) hfDetailsRowEl.style.display = isHuggingFace ? '' : 'none';
+  if (localPillsEl) localPillsEl.style.display = isHuggingFace ? 'none' : '';
+  if (localKPIsEl) localKPIsEl.style.display = isHuggingFace ? 'none' : '';
+  
+  // Populate HuggingFace-specific fields
+  if (isHuggingFace) {
+    if (categoryTextEl) categoryTextEl.textContent = data.category || data.pipelineTag || '—';
+    if (baseModelEl) {
+      const baseModel = data.baseModel || data.pipelineTag || '—';
+      baseModelEl.textContent = baseModel !== data.pipelineTag ? baseModel : '—';
+    }
+    if (licenseEl) licenseEl.textContent = data.license || '—';
+    if (downloadsEl) {
+      const downloads = data.downloads;
+      downloadsEl.textContent = downloads ? formatLargeNumber(downloads) : '—';
+    }
+    if (likesEl) {
+      const likes = data.likes;
+      likesEl.textContent = likes ? formatLargeNumber(likes) : '—';
+    }
+    if (lastUpdatedEl) {
+      const lastModified = data.lastModified;
+      if (lastModified) {
+        const date = new Date(lastModified);
+        lastUpdatedEl.textContent = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      } else {
+        lastUpdatedEl.textContent = '—';
+      }
+    }
+    if (languagesEl) {
+      const languages = data.languages;
+      if (languages && languages.length > 0) {
+        languagesEl.textContent = languages.join(', ');
+      } else {
+        languagesEl.textContent = '—';
+      }
+    }
+    if (datasetsEl) {
+      const datasets = data.datasets;
+      if (datasets && datasets.length > 0) {
+        // Show first 3 datasets, with more indicator
+        const display = datasets.slice(0, 3).join(', ');
+        datasetsEl.textContent = datasets.length > 3 ? `${display} (+${datasets.length - 3} more)` : display;
+      } else {
+        datasetsEl.textContent = '—';
+      }
+    }
   }
 
-  if (titleEl)    titleEl.textContent = `${modelName} Details`;
+  if (titleEl) titleEl.textContent = `${modelName} Details`;
   if (purposeEl) {
     const fullPurpose = data.purpose || '—';
     
