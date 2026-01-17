@@ -921,7 +921,27 @@
                         Refresh
                     </button>
                 </div>
-                <p style="color: #6b7280; font-size: 14px; margin-bottom: 20px;">Discover and chat with agents shared by the community.</p>
+                <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">Discover and chat with agents shared by the community.</p>
+                
+                <!-- Search Bar -->
+                <div style="margin-bottom: 20px;">
+                    <div style="position: relative;">
+                        <input 
+                            type="text" 
+                            id="agentverseSearchInput" 
+                            placeholder="Search agents by name, purpose, category, or industry..." 
+                            oninput="filterPublicAgents()"
+                            style="width: 100%; padding: 10px 40px 10px 16px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: border-color 0.2s;"
+                            onfocus="this.style.borderColor='#8b5cf6'" 
+                            onblur="this.style.borderColor='#e5e7eb'"
+                        />
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </div>
+                </div>
+                
                 <div id="public-agents-list" class="pa-model-list">
                     <div class="pa-empty-state">
                         <p>Loading agents...</p>

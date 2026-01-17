@@ -352,23 +352,58 @@ function renderModelDetails(model) {
             </div>
         </div>
         
-            <div style="margin-bottom: 16px;">
-            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Token Price</label>
-            <input type="number" id="inlineTokenPrice" value="${model.tokenPrice !== null && model.tokenPrice !== undefined ? model.tokenPrice : ''}" 
-                   placeholder="Price per interaction"
-                   style="width: 120px; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
-                   onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
+            <div style="margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Token Price</label>
+                    <input type="number" id="inlineTokenPrice" value="${model.tokenPrice !== null && model.tokenPrice !== undefined ? model.tokenPrice : ''}" 
+                           placeholder="Price per interaction"
+                           style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
+                           onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Forked Usage Price
+                        <span style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-size: 12px; cursor: help;" onmouseenter="this.querySelector('.tooltip-text').style.opacity='1'; this.querySelector('.tooltip-text').style.visibility='visible';" onmouseleave="this.querySelector('.tooltip-text').style.opacity='0'; this.querySelector('.tooltip-text').style.visibility='hidden';">i
+                            <span class="tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; padding: 8px 12px; background: #1f2937; color: white; font-size: 12px; font-weight: normal; border-radius: 6px; white-space: normal; width: 280px; text-align: left; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">When other people fork your agent, a forked revenue will be routed back to you per their agent usage to value your original creation to the ecosystem.
+                                <span style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1f2937;"></span>
+                            </span>
+                        </span>
+                    </label>
+                    <input type="number" id="inlineForkedUsagePrice" value="${model.forkedUsagePrice !== null && model.forkedUsagePrice !== undefined ? model.forkedUsagePrice : 1}" 
+                           placeholder="Price per forked usage"
+                           style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
+                           onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
+                </div>
             </div>
         
             <div style="margin-bottom: 16px;">
-            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Purpose</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 13px; font-weight: 600; color: #374151;">Purpose</label>
+                <button class="pa-btn-secondary" onclick="autoGeneratePurpose('${model.id}')" style="padding: 4px 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    Auto Generate
+                </button>
+            </div>
             <textarea id="inlinePurpose" rows="2" placeholder="What does this agent do?"
                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: vertical; transition: border-color 0.2s;"
                       onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">${escapeHtml(model.purpose || '')}</textarea>
             </div>
         
             <div style="margin-bottom: 16px;">
-            <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Use Case</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 13px; font-weight: 600; color: #374151;">Use Case</label>
+                <button class="pa-btn-secondary" onclick="autoGenerateUseCase('${model.id}')" style="padding: 4px 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    Auto Generate
+                </button>
+            </div>
             <textarea id="inlineUseCase" rows="2" placeholder="How should users interact with this agent?"
                       style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; resize: vertical; transition: border-color 0.2s;"
                       onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">${escapeHtml(model.useCase || '')}</textarea>
@@ -405,14 +440,25 @@ function renderModelDetails(model) {
         </div>
         
         <div style="margin-top: 24px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                </svg>
-                <span style="font-size: 13px; font-weight: 600; color: #374151;">Number of Uses</span>
-                <span style="font-size: 20px; font-weight: 700; color: #8b5cf6; margin-left: auto;">
-                    ${model.accessCount !== null && model.accessCount !== undefined ? model.accessCount : 0}
-                </span>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px;">
+                <div>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Uses</div>
+                    <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;">
+                        ${model.accessCount !== null && model.accessCount !== undefined ? model.accessCount : 0}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Times Forked</div>
+                    <div style="font-size: 18px; font-weight: 600; color: #10b981;">
+                        ${model.forkedCount !== null && model.forkedCount !== undefined ? model.forkedCount : 0}
+                    </div>
+                </div>
+            </div>
+            <div style="padding: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 6px;">
+                <div style="font-size: 12px; color: rgba(255,255,255,0.9); margin-bottom: 2px;">Total Usage</div>
+                <div style="font-size: 22px; font-weight: 700; color: #ffffff;">
+                    ${(model.forkedCount || 0) + (model.accessCount || 0)}
+                </div>
             </div>
         </div>
     `;
@@ -476,6 +522,7 @@ async function saveInlineModelChanges() {
     const category = document.getElementById('inlineCategory')?.value?.trim();
     const industry = document.getElementById('inlineIndustry')?.value?.trim();
     const tokenPrice = document.getElementById('inlineTokenPrice')?.value;
+    const forkedUsagePrice = document.getElementById('inlineForkedUsagePrice')?.value;
     const purpose = document.getElementById('inlinePurpose')?.value?.trim();
     const useCase = document.getElementById('inlineUseCase')?.value?.trim();
     const systemPrompt = document.getElementById('inlineSystemPrompt')?.value?.trim();
@@ -491,6 +538,7 @@ async function saveInlineModelChanges() {
         category: category || null,
         industry: industry || null,
         tokenPrice: tokenPrice ? parseFloat(tokenPrice) : null,
+        forkedUsagePrice: forkedUsagePrice ? parseFloat(forkedUsagePrice) : 1,
         purpose: purpose || null,
         useCase: useCase || null,
         systemPrompt: systemPrompt || null
@@ -537,6 +585,209 @@ async function saveInlineModelChanges() {
         showNotification('Failed to save changes: ' + error.message, 'error');
     }
 }
+
+// Auto-generate Purpose using I3 API based on uploaded files
+async function autoGeneratePurpose(modelId) {
+    if (!modelId) {
+        showNotification('No agent selected', 'error');
+        return;
+    }
+    
+    try {
+        // Get uploaded files for this model
+        const filesResponse = await fetch(`/api/personal-agent/files?modelId=${encodeURIComponent(modelId)}`);
+        if (!filesResponse.ok) {
+            throw new Error('Failed to load files');
+        }
+        const filesData = await filesResponse.json();
+        const files = filesData.files || [];
+        
+        // Check if files are uploaded
+        if (files.length === 0) {
+            showNotification('Please upload files first before auto-generating', 'info');
+            return;
+        }
+        
+        // Show loading state
+        const purposeTextarea = document.getElementById('inlinePurpose');
+        if (!purposeTextarea) return;
+        
+        const originalValue = purposeTextarea.value;
+        purposeTextarea.disabled = true;
+        purposeTextarea.value = 'Generating purpose from uploaded files...';
+        purposeTextarea.style.opacity = '0.6';
+        
+        // Extract text from files
+        let fileContents = '';
+        for (const file of files.slice(0, 3)) { // Limit to first 3 files to avoid token limit
+            try {
+                const textResponse = await fetch(`/api/personal-agent/files/${file.fileId}/text?maxLength=2000`);
+                if (textResponse.ok) {
+                    const textData = await textResponse.json();
+                    if (textData.success && textData.text) {
+                        fileContents += `\n\n--- ${file.filename} ---\n${textData.text}`;
+                    }
+                }
+            } catch (err) {
+                console.warn(`Failed to load file ${file.filename}:`, err);
+            }
+        }
+        
+        if (!fileContents.trim()) {
+            throw new Error('Could not extract text from uploaded files. Please ensure files are PDF or text format.');
+        }
+        
+        // Call I3 API to generate purpose
+        const apiManager = window.apiManager;
+        if (!apiManager) {
+            throw new Error('API Manager not initialized');
+        }
+        
+        const messages = [
+            {
+                role: 'system',
+                content: 'You are a helpful assistant that analyzes documents and generates concise, clear descriptions.'
+            },
+            {
+                role: 'user',
+                content: `Based on the following file contents, generate a clear and concise "Purpose" description (2-3 sentences) for an AI agent. The purpose should explain what this agent does and its main functionality.\\n\\nFile Contents:\\n${fileContents}\\n\\nGenerate only the purpose description, nothing else:`
+            }
+        ];
+        
+        let generatedPurpose = '';
+        
+        await apiManager.streamChatRequest(messages, {
+            model: 'i3-model',
+            onDelta: (delta) => {
+                generatedPurpose += delta;
+                purposeTextarea.value = generatedPurpose;
+            },
+            onError: (error) => {
+                console.error('API error:', error);
+                purposeTextarea.value = originalValue;
+                purposeTextarea.disabled = false;
+                purposeTextarea.style.opacity = '1';
+                showNotification('Failed to generate purpose: ' + error.message, 'error');
+            },
+            onDone: () => {
+                purposeTextarea.disabled = false;
+                purposeTextarea.style.opacity = '1';
+                showNotification('Purpose generated successfully! Review and click Save if satisfied.', 'success');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error generating purpose:', error);
+        const purposeTextarea = document.getElementById('inlinePurpose');
+        if (purposeTextarea) {
+            purposeTextarea.disabled = false;
+            purposeTextarea.style.opacity = '1';
+        }
+        showNotification('Failed to generate purpose: ' + error.message, 'error');
+    }
+}
+
+// Auto-generate Use Case using I3 API based on uploaded files
+async function autoGenerateUseCase(modelId) {
+    if (!modelId) {
+        showNotification('No agent selected', 'error');
+        return;
+    }
+    
+    try {
+        // Get uploaded files for this model
+        const filesResponse = await fetch(`/api/personal-agent/files?modelId=${encodeURIComponent(modelId)}`);
+        if (!filesResponse.ok) {
+            throw new Error('Failed to load files');
+        }
+        const filesData = await filesResponse.json();
+        const files = filesData.files || [];
+        
+        // Check if files are uploaded
+        if (files.length === 0) {
+            showNotification('Please upload files first before auto-generating', 'info');
+            return;
+        }
+        
+        // Show loading state
+        const useCaseTextarea = document.getElementById('inlineUseCase');
+        if (!useCaseTextarea) return;
+        
+        const originalValue = useCaseTextarea.value;
+        useCaseTextarea.disabled = true;
+        useCaseTextarea.value = 'Generating use case from uploaded files...';
+        useCaseTextarea.style.opacity = '0.6';
+        
+        // Extract text from files
+        let fileContents = '';
+        for (const file of files.slice(0, 3)) { // Limit to first 3 files to avoid token limit
+            try {
+                const textResponse = await fetch(`/api/personal-agent/files/${file.fileId}/text?maxLength=2000`);
+                if (textResponse.ok) {
+                    const textData = await textResponse.json();
+                    if (textData.success && textData.text) {
+                        fileContents += `\n\n--- ${file.filename} ---\n${textData.text}`;
+                    }
+                }
+            } catch (err) {
+                console.warn(`Failed to load file ${file.filename}:`, err);
+            }
+        }
+        
+        if (!fileContents.trim()) {
+            throw new Error('Could not extract text from uploaded files. Please ensure files are PDF or text format.');
+        }
+        
+        // Call I3 API to generate use case
+        const apiManager = window.apiManager;
+        if (!apiManager) {
+            throw new Error('API Manager not initialized');
+        }
+        
+        const messages = [
+            {
+                role: 'system',
+                content: 'You are a helpful assistant that analyzes documents and generates clear use case descriptions.'
+            },
+            {
+                role: 'user',
+                content: `Based on the following file contents, generate a clear and concise "Use Case" description (2-3 sentences) for an AI agent. The use case should explain how users should interact with this agent and what scenarios it is best suited for.\\n\\nFile Contents:\\n${fileContents}\\n\\nGenerate only the use case description, nothing else:`
+            }
+        ];
+        
+        let generatedUseCase = '';
+        
+        await apiManager.streamChatRequest(messages, {
+            model: 'i3-model',
+            onDelta: (delta) => {
+                generatedUseCase += delta;
+                useCaseTextarea.value = generatedUseCase;
+            },
+            onError: (error) => {
+                console.error('API error:', error);
+                useCaseTextarea.value = originalValue;
+                useCaseTextarea.disabled = false;
+                useCaseTextarea.style.opacity = '1';
+                showNotification('Failed to generate use case: ' + error.message, 'error');
+            },
+            onDone: () => {
+                useCaseTextarea.disabled = false;
+                useCaseTextarea.style.opacity = '1';
+                showNotification('Use case generated successfully! Review and click Save if satisfied.', 'success');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error generating use case:', error);
+        const useCaseTextarea = document.getElementById('inlineUseCase');
+        if (useCaseTextarea) {
+            useCaseTextarea.disabled = false;
+            useCaseTextarea.style.opacity = '1';
+        }
+        showNotification('Failed to generate use case: ' + error.message, 'error');
+    }
+}
+
 
 // Load model files from backend API
 async function loadModelFiles(modelId) {
@@ -1641,16 +1892,60 @@ async function loadPublicAgents() {
         
         const data = await response.json();
         // Normalize: add `id` property (same as modelId) for consistency
-        publicAgents = (data.agents || []).map(a => ({ ...a, id: a.modelId }));
+        // Calculate total usage as forkedCount + accessCount
+        publicAgents = (data.agents || []).map(a => ({
+            ...a,
+            id: a.modelId,
+            totalUsage: (a.forkedCount || 0) + (a.accessCount || 0)
+        }));
         
-        // Sort by accessCount descending (most used first)
-        publicAgents.sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0));
+        // Sort by total usage descending (most used first)
+        publicAgents.sort((a, b) => (b.totalUsage || 0) - (a.totalUsage || 0));
         
         renderPublicAgentsList(publicAgents);
         console.log(`✅ Loaded ${publicAgents.length} public agents (sorted by uses)`);
     } catch (error) {
         console.error('Error loading public agents:', error);
         listDiv.innerHTML = '<div class="pa-empty-state"><p>Failed to load Agentverse</p></div>';
+    }
+}
+
+// Filter public agents based on search input
+function filterPublicAgents() {
+    const searchInput = document.getElementById('agentverseSearchInput');
+    if (!searchInput) return;
+    
+    const query = searchInput.value.toLowerCase().trim();
+    
+    if (!query) {
+        // If search is empty, show all agents
+        renderPublicAgentsList(publicAgents);
+        return;
+    }
+    
+    // Filter agents by name, purpose, category, or industry
+    const filteredAgents = publicAgents.filter(agent => {
+        const name = (agent.name || '').toLowerCase();
+        const purpose = (agent.purpose || '').toLowerCase();
+        const category = (agent.category || '').toLowerCase();
+        const industry = (agent.industry || '').toLowerCase();
+        const useCase = (agent.useCase || '').toLowerCase();
+        
+        return name.includes(query) || 
+               purpose.includes(query) || 
+               category.includes(query) || 
+               industry.includes(query) ||
+               useCase.includes(query);
+    });
+    
+    renderPublicAgentsList(filteredAgents);
+    
+    // Show a message if no results
+    if (filteredAgents.length === 0) {
+        const listDiv = document.getElementById('public-agents-list');
+        if (listDiv) {
+            listDiv.innerHTML = `<div class="pa-empty-state"><p>No agents found matching "${escapeHtml(query)}"</p></div>`;
+        }
     }
 }
 
@@ -1672,7 +1967,7 @@ function renderPublicAgentsList(agents) {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
                     </svg>
-                    ${agent.accessCount || 0}
+                    ${agent.totalUsage || 0}
                 </span>
             </div>
             <div class="pa-model-item-meta" style="margin-bottom: 8px;">
@@ -1725,7 +2020,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
             </div>
             
             <div style="padding: 0 24px 24px;">
-                <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 8px; margin-top: 14px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
                     <span class="pa-model-item-badge public">Public</span>
                     <span style="font-size: 13px; color: #6b7280;">Created by ${ownerDisplay}</span>
                     ${isOwner ? '<span style="background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 2px 8px; border-radius: 4px;">You own this agent</span>' : ''}
@@ -1752,15 +2047,27 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                     </div>
                 ` : ''}
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px;">
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
                         <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Token Price</div>
                         <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.tokenPrice ?? 'N/A'}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Number of Uses</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage Price</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #4f46e5;">${agent.forkedUsagePrice ?? 1}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Uses</div>
                         <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;">${agent.accessCount ?? 0}</div>
                     </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Times Forked</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #10b981;">${agent.forkedCount ?? 0}</div>
+                    </div>
+                </div>
+                <div style="padding: 16px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 4px;">Total Usage</div>
+                    <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.forkedCount || 0) + (agent.accessCount || 0)}</div>
                 </div>
                 
                 <div style="display: flex; gap: 12px; margin-top: 24px;">
@@ -2322,10 +2629,13 @@ window.selectModel = selectModel;
 window.toggleModelVisibility = toggleModelVisibility;
 window.deleteModel = deleteModel;
 window.saveInlineModelChanges = saveInlineModelChanges;
+window.autoGeneratePurpose = autoGeneratePurpose;
+window.autoGenerateUseCase = autoGenerateUseCase;
 window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
 window.loadPublicAgents = loadPublicAgents;
+window.filterPublicAgents = filterPublicAgents;
 window.chatWithPublicAgent = chatWithPublicAgent;
 window.selectAgentFromSidebar = selectAgentFromSidebar;
 window.viewPublicAgentDetails = viewPublicAgentDetails;

@@ -2258,6 +2258,7 @@ app.post('/api/personal-agent/models', async (req, res) => {
       category: category || null,
       industry: industry || null,
       tokenPrice: tokenPrice !== null && tokenPrice !== undefined ? tokenPrice : 2, // Default to 2 if not provided
+      forkedUsagePrice: 1, // Default forked usage price
       purchasedPercent: null,
       sharePrice: 10, // Default sharePrice is 10, not user-editable
       change: null,
@@ -2267,6 +2268,7 @@ app.post('/api/personal-agent/models', async (req, res) => {
       totalScore: null,
       paperLink: null,
       accessCount: 0, // Track number of times this model is accessed
+      forkedCount: 0, // Track number of times this model is forked
       lastAccessedAt: null, // Timestamp of last access
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2432,6 +2434,7 @@ app.post('/api/personal-agent/fork', async (req, res) => {
       category: sourceData.category || null,
       industry: sourceData.industry || null,
       tokenPrice: sourceData.tokenPrice ?? 2,
+      forkedUsagePrice: sourceData.forkedUsagePrice ?? 1,
       purchasedPercent: null,
       sharePrice: 10,
       change: null,
@@ -2441,6 +2444,7 @@ app.post('/api/personal-agent/fork', async (req, res) => {
       totalScore: null,
       paperLink: null,
       accessCount: 0,
+      forkedCount: 0,
       lastAccessedAt: null,
       // Fork attribution
       forkedFrom: sourceModelId,
@@ -2454,6 +2458,17 @@ app.post('/api/personal-agent/fork', async (req, res) => {
     const newModelRef = db.collection('models').doc(newModelId);
     await newModelRef.set(forkedModelData);
     console.log(`✅ Forked agent created in Firestore: ${newModelId}`);
+    
+    // Increment forkedCount on the source model
+    try {
+      await db.collection('models').doc(sourceModelId).update({
+        forkedCount: admin.firestore.FieldValue.increment(1)
+      });
+      console.log(`✅ Incremented forkedCount for source model: ${sourceModelId}`);
+    } catch (updateError) {
+      console.warn(`⚠️ Failed to increment forkedCount: ${updateError.message}`);
+      // Don't fail the fork if this update fails
+    }
     
     // Step 4: Copy embeddings from AlloyDB
     let embeddingsCopied = 0;
@@ -3195,6 +3210,112 @@ app.get('/api/personal-agent/files/:fileId/download', async (req, res) => {
   } catch (error) {
     console.error('❌ Error generating download URL:', error);
     res.status(500).json({ error: 'Failed to generate download URL: ' + error.message });
+  }
+});
+
+// Extract text content from file (for auto-generation features)
+app.get('/api/personal-agent/files/:fileId/text', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { maxLength } = req.query; // Optional parameter to limit text length
+    
+    console.log(`📄 Extracting text from file: ${fileId}`);
+    
+    // Get file metadata from Firestore
+    const db = admin.getFirestore();
+    if (!db) {
+      return res.status(500).json({ error: 'Firestore database not initialized' });
+    }
+    
+    const filesRef = db.collection('modelFiles');
+    const snapshot = await filesRef.where('fileId', '==', fileId).get();
+    
+    if (snapshot.empty) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    let fileData = null;
+    snapshot.forEach(doc => {
+      fileData = doc.data();
+    });
+    
+    if (!fileData || !fileData.storagePath) {
+      return res.status(404).json({ error: 'File storage path not found' });
+    }
+    
+    // Extract GCS path from storagePath
+    const storagePath = fileData.storagePath;
+    let gcsPath = storagePath;
+    if (storagePath.startsWith('gs://')) {
+      const parts = storagePath.replace('gs://', '').split('/');
+      parts.shift(); // Remove bucket name
+      gcsPath = parts.join('/');
+    }
+    
+    // Check if bucket is initialized
+    if (!bucket) {
+      return res.status(500).json({ error: 'Google Cloud Storage not initialized' });
+    }
+    
+    // Download file from GCS
+    const file = bucket.file(gcsPath);
+    const [exists] = await file.exists();
+    
+    if (!exists) {
+      return res.status(404).json({ error: 'File not found in storage' });
+    }
+    
+    const [fileBuffer] = await file.download();
+    
+    let extractedText = '';
+    
+    // Extract text based on file type
+    const mimeType = fileData.mimeType || '';
+    const filename = fileData.filename || '';
+    
+    if (mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
+      // Extract text from PDF
+      try {
+        const pdfData = await pdf(fileBuffer);
+        extractedText = pdfData.text || '';
+      } catch (pdfError) {
+        console.error('PDF parsing error:', pdfError);
+        return res.status(500).json({ error: 'Failed to extract text from PDF' });
+      }
+    } else if (mimeType.startsWith('text/') || 
+               filename.toLowerCase().endsWith('.txt') ||
+               filename.toLowerCase().endsWith('.md') ||
+               filename.toLowerCase().endsWith('.json') ||
+               filename.toLowerCase().endsWith('.csv')) {
+      // Plain text files
+      extractedText = fileBuffer.toString('utf-8');
+    } else {
+      // Unsupported file type
+      return res.status(400).json({ 
+        error: 'Unsupported file type for text extraction',
+        mimeType: mimeType,
+        filename: filename
+      });
+    }
+    
+    // Apply max length if specified
+    if (maxLength && extractedText.length > parseInt(maxLength)) {
+      extractedText = extractedText.slice(0, parseInt(maxLength));
+    }
+    
+    console.log(`✅ Extracted ${extractedText.length} characters from ${filename}`);
+    
+    res.json({
+      success: true,
+      text: extractedText,
+      filename: fileData.filename,
+      mimeType: fileData.mimeType,
+      length: extractedText.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error extracting text:', error);
+    res.status(500).json({ error: 'Failed to extract text: ' + error.message });
   }
 });
 
