@@ -465,10 +465,88 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			  this.disconnectWallet();
 		  });
 	  }
-  
+
+
+// ✅ NEW: hydrate an already-authorized EVM account (NO popup)
+async hydrateEvmSession({ walletType = 'metamask', provider = null, address = null, emitEvent = true } = {}) {
+  try {
+    // 1) provider default
+    if (!provider) {
+      provider =
+        (typeof this.getMetaMaskProvider === 'function' ? this.getMetaMaskProvider(walletType) : null) ||
+        window.ethereum;
+    }
+    if (!provider || typeof provider.request !== 'function') {
+      return { success: false, error: 'No EVM provider available' };
+    }
+
+    // 2) address default: read eth_accounts (NO prompt)
+    if (!address) {
+      const accs = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+      address = accs && accs[0] ? accs[0] : null;
+    }
+    if (!address) {
+      return { success: false, error: 'No authorized accounts (eth_accounts empty)' };
+    }
+
+    // ✅ A方案：如果用户手动断开过，则不允许 hydrate 自动恢复
+    try {
+      const locked = localStorage.getItem('i3_manual_disconnect') === '1';
+      const lockedAddr = (localStorage.getItem('i3_manual_disconnect_addr') || '').toLowerCase();
+      if (locked) {
+        const addrLower = String(address).toLowerCase();
+        // A：只要锁存在就拦；也兼容“锁了特定地址”
+        if (!lockedAddr || lockedAddr === addrLower) {
+          return { success: false, error: 'Manual disconnect lock active' };
+        }
+      }
+    } catch (_) {}
+
+    // 3) ✅ 写回会话状态（关键）
+    this.walletType = walletType || 'metamask';
+    this.ethereum = provider;
+    this.walletAddress = address;
+    this.isConnected = true;
+
+    // 4) credits: fetch from Firebase if ready
+    if (typeof this.fetchCreditsFromFirebase === 'function') {
+      this.credits = await this.fetchCreditsFromFirebase().catch(() => this.credits || 0);
+    }
+
+    // 5) refresh UI
+    this.updateUI?.();
+
+    // 6) optional: broadcast
+    if (emitEvent) {
+      window.dispatchEvent(
+        new CustomEvent('walletConnected', {
+          detail: {
+            address: this.walletAddress,
+            credits: this.credits || 0,
+            isNewUser: false,
+            source: 'restore'
+          }
+        })
+      );
+    }
+
+    return { success: true, address: this.walletAddress, credits: this.credits || 0 };
+  } catch (e) {
+    console.error('[hydrateEvmSession] failed:', e);
+    return { success: false, error: e?.message || String(e) };
+  }
+}
+
   
 	  // ========== 统一连接入口（MetaMask 默认） ==========
 	  async connectWallet(walletType = 'metamask') {
+		  // ✅ FIX: user is explicitly reconnecting, so clear manual-disconnect lock
+		  try {
+			  localStorage.removeItem('i3_manual_disconnect');
+			  localStorage.removeItem('i3_manual_disconnect_addr');
+			  localStorage.removeItem('i3_manual_disconnect_at');
+		  } catch (_) {}
+
 		  if (walletType === 'walletconnect') {
 			  return this.connectWalletConnect();
 		  }
@@ -585,6 +663,14 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
   disconnectWallet() {
+		  // ✅ FIX: mark manual disconnect so auto-restore won't reconnect after refresh
+		  const prevAddr = this.walletAddress;
+		  try {
+			  localStorage.setItem('i3_manual_disconnect', '1');
+			  if (prevAddr) localStorage.setItem('i3_manual_disconnect_addr', String(prevAddr).toLowerCase());
+			  localStorage.setItem('i3_manual_disconnect_at', String(Date.now()));
+		  } catch (_) {}
+
 		  // 不再保存 wallet 特定数据到 localStorage
 		  // AppKit 断开连接方式（原样保留）
 		  if (this.walletType === 'walletconnect') {
@@ -628,6 +714,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 		  // Clear current session data (do not delete per-wallet archives)
 		  try {
 			  localStorage.removeItem('wallet_connected');
+			  localStorage.removeItem('walletConnected');
 			  localStorage.removeItem('wallet_type');
 			  localStorage.removeItem('user_credits');
 			  localStorage.removeItem('total_earned');

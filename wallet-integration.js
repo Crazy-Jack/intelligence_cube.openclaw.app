@@ -2062,6 +2062,12 @@ function initializeWalletUI() {
             } catch (e) {
                 console.error('Failed to render preferred network badge:', e);
             }
+
+            // ✅ after UI init, try restore once (desktop included)
+            attemptRestoreOnLoad();
+
+            // ✅ keep your existing mobile/binance dapp browser auto-connect (optional)
+            // attemptDappBrowserAutoConnect();
         }
     } catch (error) {
         console.error('Error initializing wallet UI:', error);
@@ -2257,6 +2263,20 @@ function checkWalletManager() {
 // 钱包事件监听器 - 更新为I3 tokens术语
 window.addEventListener('walletConnected', function(event) {
     console.log('Wallet connected event received:', event.detail);
+
+    // ✅ 只在"用户主动连接"时清除手动断开锁
+    // - restore/autoconnect 不清锁（否则锁会被自动恢复自己清掉）
+    const src = String(event?.detail?.source || '').toLowerCase();
+    const isAuto = (src === 'restore' || src === 'autoconnect' || src === 'auto');
+
+    if (!isAuto) {
+      try {
+        localStorage.removeItem('i3_manual_disconnect');
+        localStorage.removeItem('i3_manual_disconnect_addr');
+        localStorage.removeItem('i3_manual_disconnect_at');
+      } catch (_) {}
+    }
+
     const { address, credits, isNewUser } = event.detail;
     
     updateWalletUI(address, credits);
@@ -2372,9 +2392,72 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
+// ===== Universal Restore (desktop included) =====
+// ✅ NEW: Universal restore (desktop included), NO popup
+async function attemptRestoreOnLoad() {
+  try {
+    if (!window.walletManager || window.walletManager.isConnected) return false;
+
+    // ✅ A方案：如果用户手动断开过，则刷新不自动恢复
+    if (i3_isManualDisconnectLocked()) {
+      console.log('[RestoreOnLoad] manual-disconnect lock active -> skip restore');
+      return false;
+    }
+
+    const provider =
+      (typeof window.walletManager.getMetaMaskProvider === 'function'
+        ? window.walletManager.getMetaMaskProvider('metamask')
+        : null) || window.ethereum;
+
+    if (!provider || typeof provider.request !== 'function') return false;
+
+    const accounts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+    if (!accounts || !accounts.length) return false;
+
+    const addr = accounts[0];
+
+    // 双保险：如果锁里记录了地址，也阻止该地址恢复
+    if (i3_isManualDisconnectLocked(addr)) {
+      console.log('[RestoreOnLoad] manual-disconnect lock matches addr -> skip restore', addr);
+      return false;
+    }
+
+    const r = await window.walletManager.hydrateEvmSession({
+      walletType: 'metamask',
+      provider,
+      address: addr,
+      emitEvent: true
+    });
+
+    console.log('[RestoreOnLoad] hydrated:', r);
+    return !!r?.success;
+  } catch (e) {
+    console.warn('[RestoreOnLoad] failed:', e);
+    return false;
+  }
+}
+
+// ===== Utility: Check Manual Disconnect Lock =====
+function i3_isManualDisconnectLocked(expectedAddr = null) {
+  try {
+    if (localStorage.getItem('i3_manual_disconnect') !== '1') return false;
+    const lockedAddr = (localStorage.getItem('i3_manual_disconnect_addr') || '').toLowerCase();
+    if (!expectedAddr) return true; // A方案：只要锁存在，就不允许任何自动恢复
+    return !lockedAddr || lockedAddr === String(expectedAddr).toLowerCase();
+  } catch (_) {
+    return false;
+  }
+}
+
 // ===== DApp Browser Auto-Connect =====
 // Automatically connect when opened in a DApp browser with injected provider
 async function attemptDappBrowserAutoConnect() {
+    // ✅ 检查手动断开锁
+    if (i3_isManualDisconnectLocked()) {
+      console.log('[AutoConnect] manual-disconnect lock active -> skip auto-connect');
+      return false;
+    }
+
     // Skip if already connected
     if (window.walletManager?.isConnected) {
         console.log('[AutoConnect] Already connected, skipping auto-connect');
@@ -2552,7 +2635,8 @@ async function attemptDappBrowserAutoConnect() {
             detail: {
                 address,
                 credits: window.walletManager.credits || 0,
-                isNewUser: !window.walletManager.getWalletData?.(address)
+                isNewUser: !window.walletManager.getWalletData?.(address),
+                source: 'autoconnect'
             }
         }));
 
