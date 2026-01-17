@@ -439,22 +439,35 @@ function renderModelDetails(model) {
             </div>
         </div>
         
-        <div style="margin-top: 24px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px;">
+        <div style="margin-top: 24px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 16px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div>
-                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Uses</div>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Usage</div>
                     <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;">
                         ${model.accessCount !== null && model.accessCount !== undefined ? model.accessCount : 0}
                     </div>
                 </div>
                 <div>
-                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Times Forked</div>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage</div>
                     <div style="font-size: 18px; font-weight: 600; color: #10b981;">
+                        ${model.forkedUsage !== null && model.forkedUsage !== undefined ? model.forkedUsage : 0}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Count</div>
+                    <div style="font-size: 18px; font-weight: 600; color: #f59e0b;">
                         ${model.forkedCount !== null && model.forkedCount !== undefined ? model.forkedCount : 0}
                     </div>
                 </div>
+                <div>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px; font-weight: 600;\">Total Usage</div>
+                    <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;\">
+                        ${(model.accessCount || 0) + (model.forkedUsage || 0)}
+                    </div>
+                </div>
             </div>
-            <div style="padding: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 6px;">
+            </div>
+            <div style="padding: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 6px; margin-top: 16px;">
                 <div style="font-size: 12px; color: rgba(255,255,255,0.9); margin-bottom: 2px;">Total Usage</div>
                 <div style="font-size: 22px; font-weight: 700; color: #ffffff;">
                     ${(model.forkedCount || 0) + (model.accessCount || 0)}
@@ -1892,11 +1905,13 @@ async function loadPublicAgents() {
         
         const data = await response.json();
         // Normalize: add `id` property (same as modelId) for consistency
-        // Calculate total usage as forkedCount + accessCount
+        // Calculate total usage as accessCount (direct) + forkedUsage
         publicAgents = (data.agents || []).map(a => ({
             ...a,
             id: a.modelId,
-            totalUsage: (a.forkedCount || 0) + (a.accessCount || 0)
+            directUsage: a.accessCount || 0,
+            forkedUsageCount: a.forkedUsage || 0,
+            totalUsage: (a.accessCount || 0) + (a.forkedUsage || 0)
         }));
         
         // Sort by total usage descending (most used first)
@@ -2047,27 +2062,32 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                     </div>
                 ` : ''}
                 
-                <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px;">
+                <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px;">
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
                         <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Token Price</div>
                         <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.tokenPrice ?? 'N/A'}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
                         <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage Price</div>
-                        <div style="font-size: 18px; font-weight: 600; color: #4f46e5;">${agent.forkedUsagePrice ?? 1}</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.forkedUsagePrice ?? 1}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Uses</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Usage</div>
                         <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;">${agent.accessCount ?? 0}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Times Forked</div>
-                        <div style="font-size: 18px; font-weight: 600; color: #10b981;">${agent.forkedCount ?? 0}</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #10b981;">${agent.forkedUsage ?? 0}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Count</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #f59e0b;">${agent.forkedCount ?? 0}</div>
                     </div>
                 </div>
+                
                 <div style="padding: 16px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 8px; margin-bottom: 16px;">
                     <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 4px;">Total Usage</div>
-                    <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.forkedCount || 0) + (agent.accessCount || 0)}</div>
+                    <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</div>
                 </div>
                 
                 <div style="display: flex; gap: 12px; margin-top: 24px;">

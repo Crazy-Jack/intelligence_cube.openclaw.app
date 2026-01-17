@@ -1492,6 +1492,7 @@ app.post('/api/chat/completions', async (req, res) => {
             try {
               const db = admin.getFirestore();
               if (db) {
+                // Update this model's accessCount
                 db.collection('models').doc(agentModelId).update({
                   accessCount: admin.firestore.FieldValue.increment(1),
                   lastAccessedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -1499,6 +1500,25 @@ app.post('/api/chat/completions', async (req, res) => {
                   console.log(`📊 Incremented accessCount for ${model}`);
                 }).catch(err => {
                   console.warn(`⚠️ Failed to increment accessCount: ${err.message}`);
+                });
+                
+                // If this model is forked from another, increment the parent's forkedUsage
+                db.collection('models').doc(agentModelId).get().then(doc => {
+                  if (doc.exists) {
+                    const data = doc.data();
+                    if (data.forkedFrom) {
+                      // Increment parent model's forkedUsage
+                      db.collection('models').doc(data.forkedFrom).update({
+                        forkedUsage: admin.firestore.FieldValue.increment(1)
+                      }).then(() => {
+                        console.log(`📊 Incremented forkedUsage for parent model: ${data.forkedFrom}`);
+                      }).catch(err => {
+                        console.warn(`⚠️ Failed to increment forkedUsage: ${err.message}`);
+                      });
+                    }
+                  }
+                }).catch(err => {
+                  console.warn(`⚠️ Failed to fetch forkedFrom info: ${err.message}`);
                 });
               }
             } catch (accessCountError) {
@@ -2269,6 +2289,7 @@ app.post('/api/personal-agent/models', async (req, res) => {
       paperLink: null,
       accessCount: 0, // Track number of times this model is accessed
       forkedCount: 0, // Track number of times this model is forked
+      forkedUsage: 0, // Track usage from forked models
       lastAccessedAt: null, // Timestamp of last access
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2445,6 +2466,7 @@ app.post('/api/personal-agent/fork', async (req, res) => {
       paperLink: null,
       accessCount: 0,
       forkedCount: 0,
+      forkedUsage: 0,
       lastAccessedAt: null,
       // Fork attribution
       forkedFrom: sourceModelId,
