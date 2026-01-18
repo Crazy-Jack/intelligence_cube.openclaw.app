@@ -2683,9 +2683,10 @@ function appendUserChatMessage(role, content) {
     const messageId = 'userChatMsg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const messageEl = document.createElement('div');
     messageEl.id = messageId;
+    messageEl.className = role === 'user' ? 'user-chat-message user' : 'user-chat-message assistant';
     messageEl.style.cssText = `
         margin-bottom: 16px;
-        padding: 12px 16px;
+        padding: ${role === 'user' ? '12px 16px' : '16px 20px 16px 28px'};
         max-width: 75%;
         width: fit-content;
         word-wrap: break-word;
