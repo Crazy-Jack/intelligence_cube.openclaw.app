@@ -5,17 +5,51 @@ let currentWalletAddress = null;
 let currentModelId = null;
 let selectedFiles = [];
 let models = [];
+let modelsLoaded = false; // Track if models have been loaded
 
-// Wait for wallet to be ready (Firebase is only needed for file operations)
+// Listen for wallet connection IMMEDIATELY (before DOMContentLoaded)
+// This ensures we catch the event even if wallet auto-connects early
+window.addEventListener('walletConnected', async () => {
+    const newAddress = getWalletAddress();
+    if (newAddress && newAddress !== currentWalletAddress) {
+        currentWalletAddress = newAddress;
+        console.log('🔗 Wallet connected, loading models...');
+        await loadModels();
+        renderAgentSidebar();
+    }
+});
+
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
     // Handle URL parameters FIRST - doesn't need wallet
     handleUrlParameters();
     
-    // Then wait for wallet and load user's models
-    await waitForWallet();
+    // Try to get wallet address synchronously (no waiting/polling)
+    currentWalletAddress = getWalletAddress();
+    
+    // Load models (will gracefully handle if wallet isn't connected)
     await loadModels();
     setupEventListeners();
+    
+    // If wallet wasn't ready yet, check again after wallet manager initializes (1s delay in wallet-manager.js)
+    if (!currentWalletAddress) {
+        setTimeout(async () => {
+            const newAddress = getWalletAddress();
+            if (newAddress && !modelsLoaded) {
+                currentWalletAddress = newAddress;
+                console.log('🔗 Wallet detected after delay, loading models...');
+                await loadModels();
+                renderAgentSidebar();
+            }
+        }, 1200); // Slightly after wallet-manager's 1s updateUI delay
+    }
 });
+
+// Get wallet address synchronously from wallet manager
+function getWalletAddress() {
+    // Only source is walletManager - localStorage is no longer used for wallet address
+    return window.walletManager?.walletAddress || null;
+}
 
 // Handle URL parameters for deep linking
 function handleUrlParameters() {
@@ -97,47 +131,6 @@ async function waitForFirebase() {
     });
 }
 
-// Wait for wallet to be ready
-async function waitForWallet() {
-    if (window.walletManager && window.walletManager.isConnected) {
-        currentWalletAddress = window.walletManager.walletAddress;
-        return;
-    }
-    
-    // Wait for wallet with a timeout (don't block page if user isn't logged in)
-    return new Promise((resolve) => {
-        let resolved = false;
-        const maxWait = 2000; // 2 seconds max
-        const startTime = Date.now();
-        
-        const checkWallet = () => {
-            if (resolved) return;
-            
-            if (window.walletManager && window.walletManager.isConnected) {
-                currentWalletAddress = window.walletManager.walletAddress;
-                resolved = true;
-                resolve();
-            } else if (Date.now() - startTime > maxWait) {
-                // Timeout - proceed without wallet (user not logged in)
-                console.log('⚠️ Wallet not connected, proceeding without wallet');
-                resolved = true;
-                resolve();
-            } else {
-                setTimeout(checkWallet, 100);
-            }
-        };
-        
-        window.addEventListener('walletConnected', () => {
-            if (!resolved && window.walletManager && window.walletManager.isConnected) {
-                currentWalletAddress = window.walletManager.walletAddress;
-                resolved = true;
-                resolve();
-            }
-        });
-        
-        checkWallet();
-    });
-}
 
 // Setup event listeners
 function setupEventListeners() {
@@ -256,6 +249,7 @@ async function loadModels() {
         }
         const data = await response.json();
         models = data.models || [];
+        modelsLoaded = true; // Mark that models have been loaded
         console.log(`✅ Loaded ${models.length} model(s):`, models.map(m => m.name));
         renderModelList();
     } catch (error) {
@@ -602,10 +596,8 @@ async function saveInlineModelChanges() {
         return;
     }
     
-    // Try to get wallet address from multiple sources
-    const walletAddress = currentWalletAddress || 
-                          (window.walletManager && window.walletManager.walletAddress) ||
-                          localStorage.getItem('connectedWallet');
+    // Get wallet address synchronously
+    const walletAddress = getWalletAddress();
     
     if (!walletAddress) {
         alert('Wallet not connected. Please connect your wallet first.');
@@ -955,9 +947,17 @@ function renderFileList(files) {
 
 // Open create model modal
 function openCreateModelModal() {
-    if (!currentWalletAddress) {
+    // Get wallet address synchronously
+    const walletAddress = getWalletAddress();
+    
+    if (!walletAddress) {
         showNotification('Please connect your wallet first', 'error');
         return;
+    }
+    
+    // Update global variable if we found it elsewhere
+    if (!currentWalletAddress && walletAddress) {
+        currentWalletAddress = walletAddress;
     }
     
     const modal = document.getElementById('createModelModal');
@@ -1159,9 +1159,17 @@ async function deleteModel(modelId) {
 
 // Open edit model modal
 function openEditModelModal(modelId) {
-    if (!currentWalletAddress) {
+    // Get wallet address synchronously
+    const walletAddress = getWalletAddress();
+    
+    if (!walletAddress) {
         showNotification('Please connect your wallet first', 'error');
         return;
+    }
+    
+    // Update global variable if we found it elsewhere
+    if (!currentWalletAddress && walletAddress) {
+        currentWalletAddress = walletAddress;
     }
     
     // Find the model data
@@ -2382,8 +2390,8 @@ async function forkAgent() {
         return;
     }
     
-    // Use the already-set currentWalletAddress (set when wallet connects)
-    const walletAddress = currentWalletAddress || window.walletManager?.walletAddress;
+    // Get wallet address synchronously
+    const walletAddress = getWalletAddress();
     
     if (!walletAddress) {
         showNotification('Please connect your wallet first', 'error');
