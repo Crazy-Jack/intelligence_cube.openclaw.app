@@ -8,10 +8,77 @@ let models = [];
 
 // Wait for wallet to be ready (Firebase is only needed for file operations)
 document.addEventListener('DOMContentLoaded', async function() {
+    // Handle URL parameters FIRST - doesn't need wallet
+    handleUrlParameters();
+    
+    // Then wait for wallet and load user's models
     await waitForWallet();
     await loadModels();
     setupEventListeners();
 });
+
+// Handle URL parameters for deep linking
+function handleUrlParameters() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tab = urlParams.get('tab');
+    const agentId = urlParams.get('agentId');
+    const action = urlParams.get('action');
+    const agentName = urlParams.get('agentName');
+    
+    if (tab) {
+        // Map URL param to tab name
+        const tabMap = {
+            'user-chats': 'user-chats',
+            'agent-creator': 'model-creator',
+            'agentverse': 'public-agents',
+            'public-agents': 'public-agents'
+        };
+        const tabName = tabMap[tab] || tab;
+        
+        // Switch to the specified tab
+        setTimeout(() => {
+            switchTab(tabName);
+            
+            // If agentId is provided and we're on user-chats, select that agent
+            if (agentId && tabName === 'user-chats') {
+                setTimeout(async () => {
+                    // Ensure agents are loaded
+                    await loadAgentsForChat();
+                    
+                    // Track this agent as interacted (so it shows in sidebar)
+                    addInteractedPublicAgent(agentId);
+                    
+                    // Re-render sidebar to include the new agent
+                    renderAgentSidebar();
+                    
+                    // Select the agent
+                    const isPublic = publicAgents.some(a => a.id === agentId);
+                    selectAgentFromSidebar(agentId, isPublic ? 'public' : 'my');
+                }, 200);
+            }
+            
+            // Handle fork action from Modelverse
+            if (action === 'fork' && agentId && tabName === 'public-agents') {
+                setTimeout(async () => {
+                    // Load public agents first
+                    await loadPublicAgents();
+                    
+                    // Find the agent and show fork modal
+                    const agent = publicAgents.find(a => a.id === agentId || a.modelId === agentId);
+                    if (agent) {
+                        showForkConfirmModal(agent.id || agent.modelId, agent.name || agentName || 'Unknown Agent');
+                    } else if (agentName) {
+                        // Fallback if agent not found in list
+                        showForkConfirmModal(agentId, agentName);
+                    }
+                }, 300);
+            }
+        }, 100);
+        
+        // Clean up URL (remove params without page reload)
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+}
 
 // Wait for Firebase to be ready
 async function waitForFirebase() {
@@ -37,21 +104,37 @@ async function waitForWallet() {
         return;
     }
     
+    // Wait for wallet with a timeout (don't block page if user isn't logged in)
     return new Promise((resolve) => {
+        let resolved = false;
+        const maxWait = 2000; // 2 seconds max
+        const startTime = Date.now();
+        
         const checkWallet = () => {
+            if (resolved) return;
+            
             if (window.walletManager && window.walletManager.isConnected) {
                 currentWalletAddress = window.walletManager.walletAddress;
+                resolved = true;
+                resolve();
+            } else if (Date.now() - startTime > maxWait) {
+                // Timeout - proceed without wallet (user not logged in)
+                console.log('⚠️ Wallet not connected, proceeding without wallet');
+                resolved = true;
                 resolve();
             } else {
                 setTimeout(checkWallet, 100);
             }
         };
+        
         window.addEventListener('walletConnected', () => {
-            if (window.walletManager && window.walletManager.isConnected) {
+            if (!resolved && window.walletManager && window.walletManager.isConnected) {
                 currentWalletAddress = window.walletManager.walletAddress;
+                resolved = true;
                 resolve();
             }
         });
+        
         checkWallet();
     });
 }
@@ -135,19 +218,24 @@ function setupEventListeners() {
 
 // Tab switching
 function switchTab(tabName) {
-    // Update tab buttons
+    // Update tab buttons - find the correct button by checking onclick attribute
     document.querySelectorAll('.pa-tab').forEach(tab => {
         tab.classList.remove('active');
+        // Check if this button's onclick contains the tabName
+        const onclick = tab.getAttribute('onclick') || '';
+        if (onclick.includes(`'${tabName}'`) || onclick.includes(`"${tabName}"`)) {
+            tab.classList.add('active');
+        }
     });
-    if (event && event.target) {
-        event.target.classList.add('active');
-    }
     
     // Update tab content
     document.querySelectorAll('.pa-tab-content').forEach(content => {
         content.classList.remove('active');
     });
-    document.getElementById(`${tabName}-tab`).classList.add('active');
+    const tabElement = document.getElementById(`${tabName}-tab`);
+    if (tabElement) {
+        tabElement.classList.add('active');
+    }
 }
 
 // ========== Model Management ==========
@@ -1729,6 +1817,23 @@ function showNotification(message, type = 'info') {
 let selectedAgentForChat = null;
 let userChatHistory = [];
 
+// Track which public agents the user has interacted with
+function getInteractedPublicAgents() {
+    try {
+        return JSON.parse(localStorage.getItem('interactedPublicAgents') || '[]');
+    } catch {
+        return [];
+    }
+}
+
+function addInteractedPublicAgent(agentId) {
+    const interacted = getInteractedPublicAgents();
+    if (!interacted.includes(agentId)) {
+        interacted.push(agentId);
+        localStorage.setItem('interactedPublicAgents', JSON.stringify(interacted));
+    }
+}
+
 // Load agents into dropdown when User Chats tab is opened
 async function loadAgentsForChat() {
     try {
@@ -1789,17 +1894,21 @@ function renderAgentSidebar() {
         myAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">No agents yet</div>';
     }
     
-    // Filter public agents (exclude own)
-    const otherPublicAgents = publicAgents.filter(agent => {
-        if (!currentWalletAddress) return true;
-        return agent.ownerAddress?.toLowerCase() !== currentWalletAddress.toLowerCase();
+    // Filter public agents: only show ones the user has interacted with (clicked "Chat with this agent")
+    const interactedAgentIds = getInteractedPublicAgents();
+    const interactedPublicAgents = publicAgents.filter(agent => {
+        // Must be in the interacted list
+        if (!interactedAgentIds.includes(agent.id)) return false;
+        // Exclude own agents
+        if (currentWalletAddress && agent.ownerAddress?.toLowerCase() === currentWalletAddress.toLowerCase()) return false;
+        return true;
     });
     
-    // Render public agents
-    if (otherPublicAgents.length > 0) {
+    // Render public agents (only interacted ones)
+    if (interactedPublicAgents.length > 0) {
         publicAgentsSection.style.display = 'block';
         const selectedId = selectedAgentForChat?.id;
-        publicAgentsList.innerHTML = otherPublicAgents.map(agent => `
+        publicAgentsList.innerHTML = interactedPublicAgents.map(agent => `
             <div class="agent-sidebar-item ${selectedId === agent.id ? 'active' : ''}" 
                  onclick="selectAgentFromSidebar('${agent.id}', 'public')"
                  data-agent-id="${agent.id}">
@@ -1812,7 +1921,7 @@ function renderAgentSidebar() {
         `).join('');
     } else {
         publicAgentsSection.style.display = 'block';
-        publicAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">No agents in Agentverse</div>';
+        publicAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">Chat with agents from Agentverse to see them here</div>';
     }
 }
 
@@ -2029,13 +2138,13 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
     
     modal.innerHTML = `
         <div class="pa-modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
-            <div class="pa-modal-header">
+            <div class="pa-modal-header" style="margin-bottom: 8px;">
                 <h2>${escapeHtml(agent.name || 'Unnamed Agent')}</h2>
                 <button class="pa-modal-close" onclick="closePublicAgentDetailsModal()">&times;</button>
             </div>
             
             <div style="padding: 0 24px 24px;">
-                <div style="display: flex; gap: 8px; margin-top: 14px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+                <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
                     <span class="pa-model-item-badge public">Public</span>
                     <span style="font-size: 13px; color: #6b7280;">Created by ${ownerDisplay}</span>
                     ${isOwner ? '<span style="background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 2px 8px; border-radius: 4px;">You own this agent</span>' : ''}
@@ -2124,6 +2233,108 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
 // Close public agent details modal
 function closePublicAgentDetailsModal() {
     const modal = document.getElementById('publicAgentDetailsModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Show agent info panel (for User Chats header - no action buttons)
+function showAgentInfoPanel(agent) {
+    if (!agent) return;
+    
+    let modal = document.getElementById('agentInfoModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'agentInfoModal';
+        modal.className = 'pa-modal-overlay';
+        document.body.appendChild(modal);
+    }
+    
+    const ownerDisplay = agent.ownerAddress 
+        ? agent.ownerAddress.slice(0, 6) + '...' + agent.ownerAddress.slice(-4) 
+        : 'Unknown';
+    
+    const isPublic = agent.isPublic !== false;
+    const isForked = !!agent.forkedFrom;
+    
+    modal.innerHTML = `
+        <div class="pa-modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+            <div class="pa-modal-header" style="margin-bottom: 8px;">
+                <h2>${escapeHtml(agent.name || 'Unnamed Agent')}</h2>
+                <button class="pa-modal-close" onclick="closeAgentInfoModal()">&times;</button>
+            </div>
+            
+            <div style="padding: 0 24px 24px;">
+                <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+                    ${isPublic ? '<span class="pa-model-item-badge public">Public</span>' : '<span class="pa-model-item-badge private">Private</span>'}
+                    ${isForked ? '<span style="background: #d1fae5; color: #059669; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Forked</span>' : ''}
+                    <span style="font-size: 13px; color: #6b7280;">Created by ${ownerDisplay}</span>
+                </div>
+                
+                ${agent.forkedFrom ? `
+                    <div style="margin-bottom: 16px; padding: 10px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                        <span style="font-size: 13px; color: #166534;">🔀 Forked from: <strong>${escapeHtml(agent.forkedFrom.name || 'Unknown')}</strong></span>
+                    </div>
+                ` : ''}
+                
+                ${agent.category || agent.industry ? `
+                    <div style="margin-bottom: 16px;">
+                        ${agent.category ? `<span style="display: inline-block; background: #f3f4f6; color: #374151; font-size: 12px; padding: 4px 10px; border-radius: 4px; margin-right: 6px;">${escapeHtml(agent.category)}</span>` : ''}
+                        ${agent.industry ? `<span style="display: inline-block; background: #f3f4f6; color: #374151; font-size: 12px; padding: 4px 10px; border-radius: 4px;">${escapeHtml(agent.industry)}</span>` : ''}
+                    </div>
+                ` : ''}
+                
+                ${agent.purpose ? `
+                    <div style="margin-bottom: 16px;">
+                        <h4 style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Purpose</h4>
+                        <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">${escapeHtml(agent.purpose)}</p>
+                    </div>
+                ` : ''}
+                
+                ${agent.useCase ? `
+                    <div style="margin-bottom: 16px;">
+                        <h4 style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Use Case</h4>
+                        <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">${escapeHtml(agent.useCase)}</p>
+                    </div>
+                ` : ''}
+                
+                <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px;">
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Token Price</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.tokenPrice ?? 'N/A'}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage Price</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.forkedUsagePrice ?? 1}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Direct Usage</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #8b5cf6;">${agent.accessCount ?? 0}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #10b981;">${agent.forkedUsage ?? 0}</div>
+                    </div>
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Count</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #f59e0b;">${agent.forkedCount ?? 0}</div>
+                    </div>
+                </div>
+                
+                <div style="padding: 16px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 8px;">
+                    <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 4px;">Total Usage</div>
+                    <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('show');
+}
+
+// Close agent info modal
+function closeAgentInfoModal() {
+    const modal = document.getElementById('agentInfoModal');
     if (modal) {
         modal.classList.remove('show');
     }
@@ -2245,6 +2456,9 @@ async function forkAgent() {
 
 // Chat with a public agent
 function chatWithPublicAgent(agentId) {
+    // Track this public agent as interacted
+    addInteractedPublicAgent(agentId);
+    
     // Switch to User Chats tab
     switchTab('user-chats');
     
@@ -2660,6 +2874,8 @@ window.chatWithPublicAgent = chatWithPublicAgent;
 window.selectAgentFromSidebar = selectAgentFromSidebar;
 window.viewPublicAgentDetails = viewPublicAgentDetails;
 window.closePublicAgentDetailsModal = closePublicAgentDetailsModal;
+window.showAgentInfoPanel = showAgentInfoPanel;
+window.closeAgentInfoModal = closeAgentInfoModal;
 window.showForkConfirmModal = showForkConfirmModal;
 window.closeForkModal = closeForkModal;
 window.forkAgent = forkAgent;

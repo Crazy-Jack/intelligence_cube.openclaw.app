@@ -863,7 +863,7 @@
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px;" id="selectedAgentAvatar"></div>
                             <div>
-                                <div style="font-weight: 600; color: #111827;" id="selectedAgentName"></div>
+                                <div style="font-weight: 600; color: #111827; cursor: pointer; transition: color 0.15s;" id="selectedAgentName" onclick="showAgentInfoPanel(selectedAgentForChat)" onmouseover="this.style.color='#8b5cf6'" onmouseout="this.style.color='#111827'"></div>
                         <div style="font-size: 13px; color: #6b7280;" id="selectedAgentPurpose"></div>
                             </div>
                     </div>

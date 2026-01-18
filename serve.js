@@ -1492,26 +1492,31 @@ app.post('/api/chat/completions', async (req, res) => {
             try {
               const db = admin.getFirestore();
               if (db) {
-                // Update this model's accessCount
+                // Get today's date in YYYY-MM-DD format
+                const today = new Date().toISOString().split('T')[0];
+                
+                // Update this model's accessCount and dailyStats
                 db.collection('models').doc(agentModelId).update({
                   accessCount: admin.firestore.FieldValue.increment(1),
+                  [`dailyStats.${today}`]: admin.firestore.FieldValue.increment(1),
                   lastAccessedAt: admin.firestore.FieldValue.serverTimestamp()
                 }).then(() => {
-                  console.log(`📊 Incremented accessCount for ${model}`);
+                  console.log(`📊 Incremented accessCount and dailyStats[${today}] for ${model}`);
                 }).catch(err => {
                   console.warn(`⚠️ Failed to increment accessCount: ${err.message}`);
                 });
                 
-                // If this model is forked from another, increment the parent's forkedUsage
+                // If this model is forked from another, increment the parent's forkedUsage and dailyStats
                 db.collection('models').doc(agentModelId).get().then(doc => {
                   if (doc.exists) {
                     const data = doc.data();
                     if (data.forkedFrom) {
-                      // Increment parent model's forkedUsage
+                      // Increment parent model's forkedUsage AND dailyStats - parent model id is stored in data.forkedFrom
                       db.collection('models').doc(data.forkedFrom).update({
-                        forkedUsage: admin.firestore.FieldValue.increment(1)
+                        forkedUsage: admin.firestore.FieldValue.increment(1),
+                        [`dailyStats.${today}`]: admin.firestore.FieldValue.increment(1)
                       }).then(() => {
-                        console.log(`📊 Incremented forkedUsage for parent model: ${data.forkedFrom}`);
+                        console.log(`📊 Incremented forkedUsage and dailyStats[${today}] for parent model: ${data.forkedFrom}`);
                       }).catch(err => {
                         console.warn(`⚠️ Failed to increment forkedUsage: ${err.message}`);
                       });
@@ -2290,6 +2295,7 @@ app.post('/api/personal-agent/models', async (req, res) => {
       accessCount: 0, // Track number of times this model is accessed
       forkedCount: 0, // Track number of times this model is forked
       forkedUsage: 0, // Track usage from forked models
+      dailyStats: {}, // Daily query counts { "2024-01-18": 5, ... }
       lastAccessedAt: null, // Timestamp of last access
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2467,6 +2473,7 @@ app.post('/api/personal-agent/fork', async (req, res) => {
       accessCount: 0,
       forkedCount: 0,
       forkedUsage: 0,
+      dailyStats: {}, // Daily query counts
       lastAccessedAt: null,
       // Fork attribution
       forkedFrom: sourceModelId,
