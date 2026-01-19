@@ -1,5 +1,19 @@
-<svg width="32" height="32" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Binance">
-  <rect width="256" height="256" rx="56" fill="#f0b90b"/>
-  <path d="M128 52.5l26.8 26.8L128 106.1l-26.8-26.8L128 52.5zm49.5 49.5l26.8 26.8-26.8 26.8-26.8-26.8 26.8-26.8zm-99 0l26.8 26.8-26.8 26.8-26.8-26.8 26.8-26.8zm49.5 49.5l26.8 26.8L128 205.1l-26.8-26.8L128 151.5zm0-26.9l26.8 26.8-26.8 26.8-26.8-26.8 26.8-26.8z" fill="#fff"/>
+<svg version="1.1" id="Layer_1" xmlns:x="ns_extend;" xmlns:i="ns_ai;" xmlns:graph="ns_graphs;" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 50 50" style="enable-background:new 0 0 50 50;" xml:space="preserve">
+ <style type="text/css">
+  .st0{fill:#F0B90B;}
+ </style>
+ <metadata>
+  <sfw xmlns="ns_sfw;">
+   <slices>
+   </slices>
+   <sliceSourceBounds bottomLeftOrigin="true" height="50" width="50" x="2497.9" y="-712.2">
+   </sliceSourceBounds>
+  </sfw>
+ </metadata>
+ <g>
+  <path class="st0" d="M11.3,25l-5.6,5.6L0,25l5.7-5.7L11.3,25z M25,11.3l9.7,9.7l5.7-5.7L25,0L9.7,15.3l5.7,5.7L25,11.3z M44.3,19.3
+		L38.7,25l5.7,5.7L50,25L44.3,19.3z M25,38.7L15.3,29l-5.7,5.7L25,50l15.3-15.3L34.7,29L25,38.7z M25,30.6l5.7-5.7L25,19.3L19.3,25
+		L25,30.6L25,30.6z">
+  </path>
+ </g>
 </svg>
-

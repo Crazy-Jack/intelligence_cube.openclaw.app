@@ -65,8 +65,22 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
   
-	  // ========== MetaMask 初始化 ==========
+	  // ========== MetaMask 初始化（安全版：不抢 Binance，不强注入） ==========
 	  async initializeSDK() {
+		  // ✅ 0) 如果当前页面是 Binance DApp Browser / 已注入 Binance provider，直接跳过 MetaMaskSDK 初始化
+		  // 目的：防止 MetaMask SDK 抢占/覆盖 window.ethereum，导致 "Binance -> Modelverse 变 MetaMask"
+		  try {
+			  const eth = window.ethereum;
+			  const hasBinance =
+				  eth?.isBinance === true ||
+				  (Array.isArray(eth?.providers) && eth.providers.some(p => p?.isBinance));
+
+			  if (hasBinance) {
+				  console.log('[wallet-manager] Binance provider detected -> skip MetaMaskSDK init');
+				  return;
+			  }
+		  } catch (_) {}
+
 		  // Wait up to ~5s for MetaMaskSDK global to appear (if loaded via script tag)
 		  let attempts = 0;
 		  while (typeof MetaMaskSDK === 'undefined' && attempts < 50) {
@@ -81,31 +95,48 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 						  name: 'Intelligence Cubed',
 						  url: 'https://intelligencecubed.netlify.app',
 						  iconUrl: [
-							  'https://intelligencecubed.netlify.app/png/i3-token-logo.png', // ← PNG 放第一个
-							  'https://intelligencecubed.netlify.app/svg/i3-token-logo.svg'      // ← 可保留 SVG 作备选
-							]
+							  'https://intelligencecubed.netlify.app/png/i3-token-logo.png',
+							  'https://intelligencecubed.netlify.app/svg/i3-token-logo.svg'
+						  ]
 					  },
 					  useDeeplink: true,
-					  forceInjectProvider: true,
+
+					  // ✅ 关键：关闭强注入（不覆盖 window.ethereum）
+					  forceInjectProvider: false,
+
 					  enableAnalytics: false
 				  });
 			  }
   
-			  this.ethereum = this.getMetaMaskProvider();
-  
+		  // ✅ 不要在页面加载时"预绑定"this.ethereum（会导致跨页 restore 选错钱包）
+		  // 只在"用户上次确实用的是 MetaMask/Coinbase/Trust"时才预绑定
+		  let lastType = '';
+		  try { lastType = (localStorage.getItem('wallet_type') || '').toLowerCase(); } catch (_) {}
+
+		  if (lastType === 'metamask' || lastType === 'coinbase' || lastType === 'trust') {
+			  this.ethereum = this.getMetaMaskProvider(lastType);
 			  if (this.ethereum) {
 				  this.setupEventListeners();
-				  console.log('MetaMask initialized');
+				  console.log('[wallet-manager] EVM provider pre-bound by last wallet_type:', lastType);
 			  } else {
-				  console.warn('MetaMask provider not found (another wallet may be default)');
+				  console.warn('[wallet-manager] No EVM provider for last wallet_type:', lastType);
 			  }
+		  } else {
+			  // lastType 是 binance / walletconnect / 空 -> 不预绑定
+			  this.ethereum = null;
+			  console.log('[wallet-manager] Skip pre-bind EVM provider (last wallet_type =', lastType || 'empty', ')');
+		  }
 		  } catch (error) {
-			  console.error('Failed to initialize wallet provider:', error);
-			  this.ethereum = this.getMetaMaskProvider();
-			  if (this.ethereum) {
-				  this.setupEventListeners();
-				  console.log('MetaMask initialized (fallback)');
-			  }
+			  console.error('[wallet-manager] Failed to initialize wallet provider:', error);
+
+			  // fallback：不要强行覆盖，只尝试拿 provider
+			  try {
+				  this.ethereum = this.getMetaMaskProvider();
+				  if (this.ethereum) {
+					  this.setupEventListeners();
+					  console.log('[wallet-manager] MetaMask initialized (fallback, safe mode)');
+				  }
+			  } catch (_) {}
 		  }
 	  }
   
