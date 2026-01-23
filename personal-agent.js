@@ -546,7 +546,7 @@ function renderModelDetails(model) {
     window.currentInlineEditModelId = model.id;
     
     // Build default system prompt for preview
-    const defaultSystemPrompt = `You are ${model.name || 'this agent'}. ${model.purpose || ''}\n\nUse Case: ${model.useCase || ''}\n\nAnswer the user's question as this specialized model would.`;
+    const defaultSystemPrompt = `You are ${model.name || 'this agent'}. ${model.purpose || ''}\n\nUse Case: ${model.useCase || ''}\n\nIMPORTANT: When "Relevant Knowledge Base Context" is provided below, prioritize information from those knowledge chunks to answer the user's question. Cite or reference the relevant chunks when applicable. If the knowledge base doesn't contain relevant information, use your general knowledge to provide a helpful response.\n\nAnswer the user's question as this specialized model would.`;
     
     detailsPanel.innerHTML = `
         <div class="pa-model-details-header">
@@ -560,7 +560,7 @@ function renderModelDetails(model) {
                     <span class="pa-model-item-badge ${model.isPublic ? 'public' : 'private'}">
                         ${model.isPublic ? 'Public' : 'Private'}
                     </span>
-                    ${model.forkedFrom ? '<span class="pa-model-item-badge forked" style="background: #d1fae5; color: #065f46;">🔀 Forked</span>' : ''}
+                    ${model.forkedFrom ? '<span class="pa-model-item-badge forked" style="background: #d1fae5; color: #065f46;">Forked</span>' : ''}
                     ${model.createdAt && formatDate(model.createdAt) ? `<span>Created: ${formatDate(model.createdAt)}</span>` : ''}
                 </div>
                 ${model.forkedFrom ? `
@@ -778,7 +778,7 @@ function updateInlineDefaultPromptPreview() {
     const previewEl = document.getElementById('inlineDefaultPromptPreview');
     
     if (previewEl) {
-        const defaultPrompt = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nAnswer the user's question as this specialized model would.`;
+        const defaultPrompt = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nIMPORTANT: When "Relevant Knowledge Base Context" is provided below, prioritize information from those knowledge chunks to answer the user's question. Cite or reference the relevant chunks when applicable. If the knowledge base doesn't contain relevant information, use your general knowledge to provide a helpful response.\n\nAnswer the user's question as this specialized model would.`;
         previewEl.textContent = defaultPrompt;
     }
 }
@@ -879,6 +879,24 @@ async function saveInlineModelChanges() {
         // Refresh current model details if this model is selected
         if (currentModelId === modelId) {
             await loadModelDetails(modelId);
+        }
+        
+        // Update User Chats header if this agent is currently selected there
+        if (selectedAgentForChat && selectedAgentForChat.id === modelId) {
+            // Get updated model from the refreshed models array
+            const updatedModel = models.find(m => m.id === modelId);
+            if (updatedModel) {
+                // Update the selectedAgentForChat object
+                selectedAgentForChat = updatedModel;
+                
+                // Update the chat header UI
+                const nameEl = document.getElementById('selectedAgentName');
+                const purposeEl = document.getElementById('selectedAgentPurpose');
+                if (nameEl) nameEl.textContent = updatedModel.name || 'Unnamed Agent';
+                if (purposeEl) purposeEl.textContent = updatedModel.purpose || 'No description';
+                
+                console.log('📝 Updated User Chats header for agent:', updatedModel.name);
+            }
         }
         
     } catch (error) {
@@ -1215,7 +1233,7 @@ function updateCreateModelDefaultPromptPreview() {
     const purpose = document.getElementById('modelPurposeInput')?.value.trim() || '{Purpose}';
     const useCase = document.getElementById('modelUseCaseInput')?.value.trim() || '{Use Case}';
     
-    preview.textContent = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nAnswer the user's question as this specialized model would.`;
+    preview.textContent = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nIMPORTANT: When "Relevant Knowledge Base Context" is provided below, prioritize information from those knowledge chunks to answer the user's question. Cite or reference the relevant chunks when applicable. If the knowledge base doesn't contain relevant information, use your general knowledge to provide a helpful response.\n\nAnswer the user's question as this specialized model would.`;
 }
 
 // Update default prompt preview for Edit Model modal
@@ -1230,7 +1248,7 @@ function updateEditModelDefaultPromptPreview() {
     const purpose = document.getElementById('editModelPurposeInput')?.value.trim() || '{Purpose}';
     const useCase = document.getElementById('editModelUseCaseInput')?.value.trim() || '{Use Case}';
     
-    preview.textContent = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nAnswer the user's question as this specialized model would.`;
+    preview.textContent = `You are ${name}. ${purpose}\n\nUse Case: ${useCase}\n\nIMPORTANT: When "Relevant Knowledge Base Context" is provided below, prioritize information from those knowledge chunks to answer the user's question. Cite or reference the relevant chunks when applicable. If the knowledge base doesn't contain relevant information, use your general knowledge to provide a helpful response.\n\nAnswer the user's question as this specialized model would.`;
 }
 
 // Set up event listeners for dynamic preview updates
@@ -3294,6 +3312,7 @@ async function showForkHistory(modelId) {
             const ownerDisplay = item.ownerAddress 
                 ? item.ownerAddress.slice(0, 6) + '...' + item.ownerAddress.slice(-4) 
                 : 'Unknown';
+            const isClickable = !isFirst && item.isPublic; // Can click non-current public agents
             
             return `
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -3309,7 +3328,12 @@ async function showForkHistory(modelId) {
                         ${!isLast ? '<div style="width: 2px; height: 24px; background: #d1d5db;"></div>' : ''}
                     </div>
                     <div style="flex: 1; padding-bottom: ${isLast ? '0' : '16px'};">
-                        <div style="font-weight: 600; color: #111827; font-size: 14px;">${escapeHtml(item.name || 'Unknown Agent')}</div>
+                        ${isClickable 
+                            ? `<a href="#" onclick="openAgentFromForkHistory('${item.id}'); return false;" 
+                                  style="font-weight: 600; color: #8b5cf6; font-size: 14px; text-decoration: underline; cursor: pointer;"
+                                  title="Click to chat with this agent">${escapeHtml(item.name || 'Unknown Agent')}</a>`
+                            : `<div style="font-weight: 600; color: ${!isFirst && !item.isPublic ? '#9ca3af' : '#111827'}; font-size: 14px;">${escapeHtml(item.name || 'Unknown Agent')}${!isFirst && !item.isPublic ? ' <span style="font-size: 10px; color: #9ca3af;">(private)</span>' : ''}</div>`
+                        }
                         <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">by ${ownerDisplay}</div>
                         ${isFirst ? '<span style="display: inline-block; margin-top: 4px; background: #ede9fe; color: #7c3aed; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Current</span>' : ''}
                         ${isLast ? '<span style="display: inline-block; margin-top: 4px; background: #d1fae5; color: #059669; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Original</span>' : ''}
@@ -3361,7 +3385,8 @@ async function fetchForkChain(modelId, chain = [], depth = 0) {
             id: model.id || modelId,
             name: model.name,
             ownerAddress: model.ownerAddress,
-            forkedFrom: model.forkedFrom
+            forkedFrom: model.forkedFrom,
+            isPublic: model.isPublic || false
         });
         
         // If this model was forked from another, continue up the chain
@@ -3376,6 +3401,51 @@ async function fetchForkChain(modelId, chain = [], depth = 0) {
     }
 }
 
+// Open chat with agent from fork history
+async function openAgentFromForkHistory(modelId) {
+    // Close the fork history modal
+    closeForkHistoryModal();
+    
+    try {
+        // Fetch the agent details
+        const response = await fetch(`/api/personal-agent/models/${modelId}`);
+        if (!response.ok) throw new Error('Failed to fetch agent');
+        
+        const data = await response.json();
+        const agent = data.model || data;
+        
+        if (!agent.isPublic) {
+            showNotification('This agent is not public and cannot be accessed', 'error');
+            return;
+        }
+        
+        // Add to interacted public agents list
+        addInteractedPublicAgent(modelId);
+        
+        // Add to publicAgents array if not already there
+        const existingAgent = publicAgents.find(a => a.id === modelId);
+        if (!existingAgent) {
+            publicAgents.push({ ...agent, id: modelId });
+        }
+        
+        // Switch to User Chats tab
+        const userChatsTab = document.querySelector('[onclick*="user-chats"]');
+        if (userChatsTab) {
+            userChatsTab.click();
+        }
+        
+        // Small delay to ensure tab switch completes, then select the agent
+        setTimeout(() => {
+            selectAgentFromSidebar(modelId, 'public');
+        }, 100);
+        
+        console.log('📖 Opening chat with agent from fork history:', agent.name);
+    } catch (error) {
+        console.error('Error opening agent from fork history:', error);
+        showNotification('Failed to open agent: ' + error.message, 'error');
+    }
+}
+
 // Close fork history modal
 function closeForkHistoryModal() {
     const modal = document.getElementById('forkHistoryModal');
@@ -3386,6 +3456,7 @@ function closeForkHistoryModal() {
 
 window.showForkHistory = showForkHistory;
 window.closeForkHistoryModal = closeForkHistoryModal;
+window.openAgentFromForkHistory = openAgentFromForkHistory;
 window.deleteModel = deleteModel;
 window.saveInlineModelChanges = saveInlineModelChanges;
 window.autoGeneratePurpose = autoGeneratePurpose;

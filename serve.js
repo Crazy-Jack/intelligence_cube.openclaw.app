@@ -1550,7 +1550,7 @@ app.post('/api/chat/completions', async (req, res) => {
               extractedSystemInstruction = agent.systemPrompt;
             } else {
               // Build default system prompt from purpose and useCase
-              const defaultPrompt = `You are ${model}. ${agent.purpose || ''}\n\nUse Case: ${agent.useCase || ''}\n\nAnswer the user's question as this specialized model would.`;
+              const defaultPrompt = `You are ${model}. ${agent.purpose || ''}\n\nUse Case: ${agent.useCase || ''}\n\nIMPORTANT: When "Relevant Knowledge Base Context" is provided below, prioritize information from those knowledge chunks to answer the user's question. Cite or reference the relevant chunks when applicable. If the knowledge base doesn't contain relevant information, use your general knowledge to provide a helpful response.\n\nAnswer the user's question as this specialized model would.`;
               console.log('🔄 Using default system prompt (built from purpose/useCase)');
               req.body.systemInstruction = defaultPrompt;
               extractedSystemInstruction = defaultPrompt; //extractedSystemInstruction is then used to build the system prompt to pass onto I3 API
