@@ -1506,25 +1506,38 @@ app.post('/api/chat/completions', async (req, res) => {
                   console.warn(`⚠️ Failed to increment accessCount: ${err.message}`);
                 });
                 
-                // If this model is forked from another, increment the parent's forkedUsage and dailyStats
-                db.collection('models').doc(agentModelId).get().then(doc => {
-                  if (doc.exists) {
-                    const data = doc.data();
-                    if (data.forkedFrom) {
-                      // Increment parent model's forkedUsage AND dailyStats - parent model id is stored in data.forkedFrom
-                      db.collection('models').doc(data.forkedFrom).update({
-                        forkedUsage: admin.firestore.FieldValue.increment(1),
-                        [`dailyStats.${today}`]: admin.firestore.FieldValue.increment(1)
-                      }).then(() => {
-                        console.log(`📊 Incremented forkedUsage and dailyStats[${today}] for parent model: ${data.forkedFrom}`);
-                      }).catch(err => {
-                        console.warn(`⚠️ Failed to increment forkedUsage: ${err.message}`);
-                      });
-                    }
+                // Recursively increment forkedUsage up the entire fork chain
+                // If A → B → C, when C is queried, both B and A get forkedUsage credit
+                const incrementForkChain = async (modelId, depth = 0) => {
+                  // Safety limit to prevent infinite loops (max 10 levels deep)
+                  if (depth > 10) {
+                    console.warn(`⚠️ Fork chain depth limit reached at ${modelId}`);
+                    return;
                   }
-                }).catch(err => {
-                  console.warn(`⚠️ Failed to fetch forkedFrom info: ${err.message}`);
-                });
+                  
+                  try {
+                    const doc = await db.collection('models').doc(modelId).get();
+                    if (!doc.exists) return;
+                    
+                    const data = doc.data();
+                    if (!data.forkedFrom) return; // Reached original model, stop
+                    
+                    // Increment parent's forkedUsage and dailyStats
+                    await db.collection('models').doc(data.forkedFrom).update({
+                      forkedUsage: admin.firestore.FieldValue.increment(1),
+                      [`dailyStats.${today}`]: admin.firestore.FieldValue.increment(1)
+                    });
+                    console.log(`📊 Incremented forkedUsage for ancestor (depth ${depth}): ${data.forkedFrom}`);
+                    
+                    // Recursively continue up the chain
+                    await incrementForkChain(data.forkedFrom, depth + 1);
+                  } catch (err) {
+                    console.warn(`⚠️ Failed to increment fork chain at depth ${depth}: ${err.message}`);
+                  }
+                };
+                
+                // Start the recursive chain from this model
+                incrementForkChain(agentModelId, 0);
               }
             } catch (accessCountError) {
               console.warn(`⚠️ Could not increment accessCount: ${accessCountError.message}`);
@@ -2435,12 +2448,12 @@ app.post('/api/personal-agent/fork', async (req, res) => {
     if (!sourceData.isPublic) {
       return res.status(403).json({ error: 'Only public agents can be forked' });
     }
-    
+    /*
     // Don't allow forking your own agent
     if (sourceData.ownerAddress?.toLowerCase() === ownerAddress.toLowerCase()) {
       return res.status(400).json({ error: 'You cannot fork your own agent' });
     }
-    
+    */
     // Step 2: Generate new model ID for the forked agent
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 15);

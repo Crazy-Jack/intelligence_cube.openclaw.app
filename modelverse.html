@@ -1357,36 +1357,38 @@
 
 		  // Generate user agents table from Firestore public agents
 		  async function generateUserAgentsTable() {
-		    const tbody = document.querySelector('#userAgentsTable tbody');
-		    if (!tbody) { console.error('User agents table tbody not found'); return; }
+		  const tbody = document.querySelector('#userAgentsTable tbody');
+		  if (!tbody) { console.error('User agents table tbody not found'); return; }
 
 		    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#6b7280;">Loading public agents...</td></tr>';
 
 		    // Fetch public agents from Firestore API
-		    try {
+		  try {
 		      const response = await fetch('/api/user-agents?publicOnly=true');
 		      if (!response.ok) throw new Error('Failed to fetch public agents');
 		      const data = await response.json();
 		      cachedPublicAgentsForTable = (data.agents || []).map(a => ({ ...a, id: a.modelId }));
-		    } catch (error) {
+		  } catch (error) {
 		      console.warn('⚠️ Error loading public agents:', error);
 		      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#6b7280;">Failed to load public agents. Please try again.</td></tr>';
-		      return;
-		    }
+		    return;
+		  }
 
 		    if (cachedPublicAgentsForTable.length === 0) {
 		      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#6b7280;">No public agents available yet.</td></tr>';
-		      return;
-		    }
+		    return;
+		  }
 
 		    tbody.innerHTML = '';
 
-		    // Sort by accessCount (queries) descending
-		    const sortedAgents = [...cachedPublicAgentsForTable].sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0));
+		    // Sort by total usage (accessCount + forkedUsage) descending
+		    const sortedAgents = [...cachedPublicAgentsForTable].sort((a, b) => 
+		      ((b.accessCount || 0) + (b.forkedUsage || 0)) - ((a.accessCount || 0) + (a.forkedUsage || 0))
+		    );
 
 		    sortedAgents.forEach(agent => {
-		      const row = document.createElement('tr');
-		      row.className = 'model-row user-agent-row';
+		    const row = document.createElement('tr');
+		    row.className = 'model-row user-agent-row';
 
 		      // Format creator address
 		      const creatorDisplay = agent.ownerAddress 
@@ -1397,28 +1399,28 @@
 		      const escapedName = (agent.name || 'Unnamed').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 		      const escapedId = (agent.id || '').replace(/'/g, "\\'");
 
-		      row.innerHTML = `
+		    row.innerHTML = `
 		        <td class="model-name" style="text-align: left;">${agent.name || 'Unnamed'}</td>
 		        <td class="purpose-cell" data-label="Purpose" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;">${agent.purpose || 'No description'}</td>
 		        <td class="creator-cell" data-label="Creator" style="font-size: 12px; color: #6b7280; text-align: center;">${creatorDisplay}</td>
-		        <td class="queries-cell" data-label="Queries" style="font-weight: 600; color: #8b5cf6; text-align: center; cursor: pointer;" onclick="showUsageChart('${escapedId}')" title="Click to view usage history">
-		          <span style="border-bottom: 1px dashed #8b5cf6;">${agent.accessCount || 0}</span>
-		        </td>
+		        <td class="queries-cell" data-label="Queries" style="font-weight: 600; color: #8b5cf6; text-align: center; cursor: pointer;" onclick="showUsageChart('${escapedId}')" title="Click to view usage history (Direct: ${agent.accessCount || 0}, From Forks: ${agent.forkedUsage || 0})">
+		          <span style="border-bottom: 1px dashed #8b5cf6;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</span>
+		      </td>
 		        <td class="action-cell" data-label="Actions" style="text-align: center;">
 		          <div class="invest" style="justify-content: center; gap: 8px;">
 		            <button class="try-btn" onclick="showPublicAgentDetailsFromModelverse('${escapedId}')">Try</button>
 		            <button class="try-btn" onclick="forkAgentFromModelverse('${escapedId}', '${escapedName}')" style="background: linear-gradient(135deg, #10b981, #059669);">Fork</button>
-		          </div>
-		        </td>
-		      `;
+		        </div>
+		      </td>
+		    `;
 
-		      tbody.appendChild(row);
-		    });
+		    tbody.appendChild(row);
+		  });
 
 		    // Update stats display
-		    const rowCount = tbody.querySelectorAll('tr').length;
-		    const resultsDiv = document.getElementById('searchResults');
-		    if (resultsDiv) {
+		  const rowCount = tbody.querySelectorAll('tr').length;
+		  const resultsDiv = document.getElementById('searchResults');
+		  if (resultsDiv) {
 		      resultsDiv.textContent = `Showing ${rowCount} public agents`;
 		    }
 		  }
@@ -1702,15 +1704,15 @@
 		  
 		  // Use cached agents if available, otherwise fetch
 		  if (cachedPublicAgentsForTable.length === 0) {
-		    try {
+		  try {
 		      const response = await fetch('/api/user-agents?publicOnly=true');
 		      if (!response.ok) throw new Error('Failed to fetch');
 		      const data = await response.json();
 		      cachedPublicAgentsForTable = (data.agents || []).map(a => ({ ...a, id: a.modelId }));
-		    } catch (error) {
+		  } catch (error) {
 		      console.warn('⚠️ Error loading public agents for mobile:', error);
 		      container.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">Failed to load public agents.</div>';
-		      return;
+		    return;
 		    }
 		  }
 
@@ -1721,8 +1723,10 @@
 		  
 		  container.innerHTML = '';
 
-		  // Sort by accessCount descending
-		  const sortedAgents = [...cachedPublicAgentsForTable].sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0));
+		  // Sort by total usage (accessCount + forkedUsage) descending
+		  const sortedAgents = [...cachedPublicAgentsForTable].sort((a, b) => 
+		    ((b.accessCount || 0) + (b.forkedUsage || 0)) - ((a.accessCount || 0) + (a.forkedUsage || 0))
+		  );
 		  
 		  sortedAgents.forEach(agent => {
 		    const item = document.createElement('div');
@@ -1742,13 +1746,13 @@
 		          <div style="font-size: 11px; color: #9ca3af;">by ${creatorDisplay}</div>
 		        </div>
 		        <div style="text-align: right;">
-		          <div style="font-size: 14px; font-weight: 600; color: #8b5cf6;">${agent.accessCount || 0}</div>
+		          <div style="font-size: 14px; font-weight: 600; color: #8b5cf6;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</div>
 		          <div style="font-size: 10px; color: #9ca3af;">queries</div>
 		        </div>
 		      </div>
 		      <div class="mobile-model-info">
 		        <div style="font-size: 13px; color: #6b7280; line-height: 1.4;">${(agent.purpose || 'No description').slice(0, 80)}${(agent.purpose?.length || 0) > 80 ? '...' : ''}</div>
-		      </div>
+		        </div>
 		      <div style="margin-top: 8px; display: flex; gap: 8px;">
 		        <button class="try-btn" style="flex: 1; padding: 8px; border-radius: 6px;" onclick="event.stopPropagation(); showPublicAgentDetailsFromModelverse('${agent.id}')">Try</button>
 		        <button class="try-btn" style="flex: 1; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981, #059669);" onclick="event.stopPropagation(); forkAgentFromModelverse('${agent.id}', '${(agent.name || 'Unknown').replace(/'/g, "\\'")}')">Fork</button>

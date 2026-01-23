@@ -4,6 +4,7 @@
 let currentWalletAddress = null;
 let currentModelId = null;
 let selectedFiles = [];
+let createModalSelectedFiles = []; // Files selected in create agent modal
 let models = [];
 let modelsLoaded = false; // Track if models have been loaded
 
@@ -209,6 +210,199 @@ function setupEventListeners() {
     });
 }
 
+// Setup upload listeners for Create Agent modal
+function setupCreateModalUploadListeners() {
+    const uploadArea = document.getElementById('createModalUploadArea');
+    const fileInput = document.getElementById('createModalFileInput');
+    
+    if (!uploadArea || !fileInput) {
+        console.log('⚠️ Create modal upload elements not found yet');
+        return;
+    }
+    
+    let isFileDialogOpen = false;
+    
+    // Click to upload
+    uploadArea.addEventListener('click', function(e) {
+        if (e.target.closest('button')) return;
+        if (isFileDialogOpen) return;
+        
+        isFileDialogOpen = true;
+        fileInput.click();
+        setTimeout(() => { isFileDialogOpen = false; }, 1000);
+    });
+    
+    // Handle file selection
+    fileInput.addEventListener('change', function(e) {
+        isFileDialogOpen = false;
+        if (e.target.files && e.target.files.length > 0) {
+            handleCreateModalFileSelect(e);
+        }
+    });
+    
+    // Drag and drop
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#8b5cf6';
+        uploadArea.style.background = '#f5f3ff';
+    });
+    
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        if (!uploadArea.contains(e.relatedTarget)) {
+            uploadArea.style.borderColor = '#d1d5db';
+            uploadArea.style.background = '#f9fafb';
+        }
+    });
+    
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#d1d5db';
+        uploadArea.style.background = '#f9fafb';
+        
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+            handleCreateModalFileSelect({ target: { files } });
+        }
+    });
+}
+
+// Handle file selection in Create Agent modal
+function handleCreateModalFileSelect(e) {
+    const files = Array.from(e.target.files || e.target);
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ['.pdf', '.txt', '.md', '.doc', '.docx'];
+    
+    files.forEach(file => {
+        // Check file size
+        if (file.size > maxSize) {
+            showNotification(`File "${file.name}" exceeds 10MB limit`, 'error');
+            return;
+        }
+        
+        // Check file type
+        const ext = '.' + file.name.split('.').pop().toLowerCase();
+        if (!allowedTypes.includes(ext)) {
+            showNotification(`File type "${ext}" not supported`, 'error');
+            return;
+        }
+        
+        // Check for duplicates
+        if (createModalSelectedFiles.some(f => f.name === file.name)) {
+            showNotification(`File "${file.name}" already added`, 'info');
+            return;
+        }
+        
+        createModalSelectedFiles.push(file);
+    });
+    
+    renderCreateModalFilePreview();
+}
+
+// Render file preview in Create Agent modal
+function renderCreateModalFilePreview() {
+    const previewContainer = document.getElementById('createModalFilePreview');
+    if (!previewContainer) return;
+    
+    if (createModalSelectedFiles.length === 0) {
+        previewContainer.innerHTML = '';
+        return;
+    }
+    
+    previewContainer.innerHTML = createModalSelectedFiles.map((file, index) => `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f3f4f6; border-radius: 6px; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <span style="font-size: 13px; color: #374151;">${escapeHtml(file.name)}</span>
+                <span style="font-size: 11px; color: #9ca3af;">(${(file.size / 1024).toFixed(1)} KB)</span>
+            </div>
+            <button onclick="removeCreateModalFile(${index})" style="background: none; border: none; cursor: pointer; color: #ef4444; padding: 4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+// Remove file from Create Agent modal preview
+function removeCreateModalFile(index) {
+    createModalSelectedFiles.splice(index, 1);
+    renderCreateModalFilePreview();
+}
+
+// Upload and process files for a newly created agent
+async function uploadFilesForNewAgent(modelId, ownerAddress) {
+    if (createModalSelectedFiles.length === 0) return;
+    
+    console.log(`📤 Uploading ${createModalSelectedFiles.length} files for new agent: ${modelId}`);
+    
+    for (const file of createModalSelectedFiles) {
+        try {
+            // Generate file ID
+            const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+            
+            // Create FormData for upload
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('fileId', fileId);
+            formData.append('modelId', modelId);
+            formData.append('ownerAddress', ownerAddress);
+            formData.append('filename', file.name);
+            formData.append('mimeType', file.type || 'application/octet-stream');
+            
+            // Upload to GCS + Firestore
+            console.log(`⬆️ Uploading: ${file.name}`);
+            const uploadResponse = await fetch('/api/personal-agent/files/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!uploadResponse.ok) {
+                const errorData = await uploadResponse.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Upload failed');
+            }
+            
+            const uploadResult = await uploadResponse.json();
+            console.log(`✅ Uploaded: ${file.name}`);
+            
+            // Trigger RAG processing
+            console.log(`🔄 Processing: ${file.name}`);
+            const processResponse = await fetch('/api/process-rag-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fileId: fileId,
+                    modelId: modelId,
+                    storagePath: uploadResult.storagePath,
+                    filename: file.name,
+                    ownerAddress: ownerAddress
+                })
+            });
+            
+            if (processResponse.ok) {
+                console.log(`✅ RAG processing started: ${file.name}`);
+            } else {
+                console.warn(`⚠️ RAG processing may have issues: ${file.name}`);
+            }
+            
+        } catch (error) {
+            console.error(`❌ Error uploading ${file.name}:`, error);
+            showNotification(`Failed to upload ${file.name}: ${error.message}`, 'error');
+        }
+    }
+    
+    // Clear the selected files
+    createModalSelectedFiles = [];
+    renderCreateModalFilePreview();
+    
+    showNotification('Files uploaded and processing started', 'success');
+}
+
 // Tab switching
 function switchTab(tabName) {
     // Update tab buttons - find the correct button by checking onclick attribute
@@ -386,6 +580,16 @@ function renderModelDetails(model) {
                 ` : ''}
             </div>
             <div class="pa-model-details-actions">
+                <button class="pa-btn-success" onclick="showForkConfirmModal('${model.id}', '${escapeHtml(model.name || 'Unnamed')}')" style="margin-right: 8px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="18" r="3"></circle>
+                        <circle cx="6" cy="6" r="3"></circle>
+                        <circle cx="18" cy="6" r="3"></circle>
+                        <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
+                        <path d="M12 12v3"></path>
+                    </svg>
+                    Fork
+                </button>
                 <button class="pa-btn-success" onclick="tryAgentFromDashboard('${model.id}', '${escapeHtml(model.name || '')}')" style="margin-right: 8px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -973,6 +1177,15 @@ function openCreateModelModal() {
         document.getElementById('modelTokenPriceInput').value = '2'; // Default value
         document.getElementById('modelIsPublicInput').checked = false;
         
+        // Clear and reset file upload
+        createModalSelectedFiles = [];
+        renderCreateModalFilePreview();
+        const fileInput = document.getElementById('createModalFileInput');
+        if (fileInput) fileInput.value = '';
+        
+        // Setup upload listeners (safe to call multiple times)
+        setupCreateModalUploadListeners();
+        
         // Update default prompt preview
         updateCreateModelDefaultPromptPreview();
     }
@@ -984,6 +1197,9 @@ function closeCreateModelModal() {
     if (modal) {
         modal.classList.remove('show');
     }
+    // Clear selected files
+    createModalSelectedFiles = [];
+    renderCreateModalFilePreview();
 }
 
 // Update default prompt preview for Create Model modal
@@ -1084,14 +1300,110 @@ async function createModel() {
         const model = await response.json();
         console.log('✅ Agent created successfully:', model);
         showNotification('Agent created successfully', 'success');
+        
+        // Capture files BEFORE closing modal (which clears the array)
+        const filesToUpload = [...createModalSelectedFiles];
+        
         closeCreateModelModal();
         
         // Reload models list to include the new model
         await loadModels();
         
-        // Select the newly created model
+        // Select the newly created model first
         if (model.id) {
             await selectModel(model.id);
+        }
+        
+        // Upload any selected files for the new agent (after model is selected)
+        if (filesToUpload.length > 0 && model.id) {
+            // Immediately show files with "PROCESSING" status (optimistic UI)
+            const pendingFiles = filesToUpload.map((file, idx) => ({
+                fileId: `pending_${idx}`,
+                filename: file.name,
+                status: 'processing',
+                createdAt: new Date().toISOString()
+            }));
+            renderFileList(pendingFiles);
+            
+            showNotification(`Uploading ${filesToUpload.length} file(s)...`, 'info');
+            
+            // Upload using captured files
+            for (const file of filesToUpload) {
+                try {
+                    const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('fileId', fileId);
+                    formData.append('modelId', model.id);
+                    formData.append('ownerAddress', currentWalletAddress.toLowerCase());
+                    formData.append('filename', file.name);
+                    formData.append('mimeType', file.type || 'application/octet-stream');
+                    
+                    const uploadResponse = await fetch('/api/personal-agent/files/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (uploadResponse.ok) {
+                        const uploadResult = await uploadResponse.json();
+                        
+                        // Trigger RAG processing
+                        fetch('/api/process-rag-file', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                fileId: fileId,
+                                modelId: model.id,
+                                storagePath: uploadResult.storagePath,
+                                filename: file.name,
+                                ownerAddress: currentWalletAddress.toLowerCase()
+                            })
+                        });
+                    }
+                } catch (error) {
+                    console.error(`Error uploading ${file.name}:`, error);
+                }
+            }
+            
+            // Refresh file list to get actual status from Firestore
+            await loadModelFiles(model.id);
+            showNotification('Files uploaded and processing started', 'success');
+            
+            // Poll for status updates until all files are ready/failed
+            const modelIdForPolling = model.id;
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/personal-agent/files?modelId=${encodeURIComponent(modelIdForPolling)}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        const files = data.files || [];
+                        const processingFiles = files.filter(f => f.status === 'processing');
+                        
+                        // Update UI
+                        if (currentModelId === modelIdForPolling) {
+                            renderFileList(files);
+                        }
+                        
+                        // Stop polling when no files are processing
+                        if (processingFiles.length === 0) {
+                            clearInterval(pollInterval);
+                            const readyFiles = files.filter(f => f.status === 'ready');
+                            const failedFiles = files.filter(f => f.status === 'failed');
+                            if (failedFiles.length > 0) {
+                                showNotification(`${failedFiles.length} file(s) failed to process`, 'error');
+                            } else if (readyFiles.length > 0) {
+                                showNotification(`${readyFiles.length} file(s) ready!`, 'success');
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 3000); // Poll every 3 seconds
+            
+            // Auto-stop polling after 5 minutes
+            setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
         }
     } catch (error) {
         console.error('Error creating model:', error);
@@ -2232,7 +2544,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                         </svg>
                         Chat with this Agent
                     </button>
-                    ${!isOwner ? `
+                    ${/* Allow owners to fork their own agents, remove true to disable */ true || !isOwner ? `
                         <button class="pa-btn-success" onclick="showForkConfirmModal('${agent.id}', '${escapeHtml(agent.name)}');" style="flex: 1;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
                                 <circle cx="12" cy="18" r="3"></circle>
@@ -2243,11 +2555,12 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                             </svg>
                             Fork Agent
                         </button>
-                    ` : `
+                    ` : ''}
+                    ${isOwner ? `
                         <button class="pa-btn-secondary" onclick="closePublicAgentDetailsModal(); switchTab('agent-creator'); setTimeout(() => selectModel('${agent.id}'), 100);">
                             Edit
                         </button>
-                    `}
+                    ` : ''}
                 </div>
             </div>
         </div>
@@ -2967,3 +3280,5 @@ window.handleFileSelect = handleFileSelect;
 window.removeFileFromPreview = removeFileFromPreview;
 window.uploadFiles = uploadFiles;
 window.deleteFile = deleteFile;
+window.removeCreateModalFile = removeCreateModalFile;
+window.removeCreateModalFile = removeCreateModalFile;

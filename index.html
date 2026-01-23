@@ -3058,10 +3058,10 @@
             modal.querySelector('#icm-buy').onclick = () => { modal.remove(); try { window.location.href = 'workflow.html'; } catch (_) {} };
             modal.querySelector('#icm-checkin').onclick = async () => {
                 try {
-                    modal.remove();
+                            modal.remove();
                     if (typeof window.handleDailyCheckin === 'function') {
                         await window.handleDailyCheckin();
-                    } else {
+                        } else {
                         alert('Check-in function not available.');
                     }
                 } catch (e) { alert('Check-in error: ' + e.message); }
@@ -5871,33 +5871,33 @@
         // ✨ 新增：Admin Check In 函数（直接获得 10000 credits）
         async function executeAdminCheckin() {
             try {
-                const address = (window.walletManager.walletAddress || '').toLowerCase();
-                
+                    const address = (window.walletManager.walletAddress || '').toLowerCase();
+                    
                 if (!window.firebaseDb || !address) {
                     alert('Firebase or wallet address not available');
                     return;
                 }
 
                 const { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment } = 
-                    await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+                            await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
 
-                const walletRef = doc(window.firebaseDb, 'wallets', address);
-                const snap = await getDoc(walletRef);
+                        const walletRef = doc(window.firebaseDb, 'wallets', address);
+                        const snap = await getDoc(walletRef);
 
-                let remoteTotalCheckins = 0;
-                
-                if (snap.exists()) {
-                    const data = snap.data() || {};
-                    remoteTotalCheckins = Number(data.totalCheckins || 0);
-                } else {
+                        let remoteTotalCheckins = 0;
+                        
+                        if (snap.exists()) {
+                            const data = snap.data() || {};
+                            remoteTotalCheckins = Number(data.totalCheckins || 0);
+                        } else {
                     // 首次签到，创建文档
-                    await setDoc(walletRef, {
-                        address: address,
-                        createdAt: serverTimestamp(),
+                            await setDoc(walletRef, {
+                                address: address,
+                                createdAt: serverTimestamp(),
                         totalCheckins: 0,
                         credits: 0
-                    }, { merge: true });
-                }
+                            }, { merge: true });
+                        }
 
                 // 💰 Admin 直接获得 10000 credits
                 const adminReward = 10000;
@@ -5907,23 +5907,23 @@
                 window.walletManager.updateUI();
                 
                 // 2️⃣ 原子操作：写入 Firebase
-                try {
-                    await updateDoc(walletRef, {
+                        try {
+                            await updateDoc(walletRef, {
                         credits: increment(adminReward),
-                        lastCheckinAt: serverTimestamp(),
+                                lastCheckinAt: serverTimestamp(),
                         totalCheckins: increment(1),
                         currentStreak: remoteTotalCheckins + 1,
-                        lastUpdated: serverTimestamp(),
-                        lastCheckinType: 'local-admin'
-                    });
+                                lastUpdated: serverTimestamp(),
+                                lastCheckinType: 'local-admin'
+                            });
                     console.log(`✅ Admin check-in successful: +${adminReward} credits`);
-                } catch (e) {
+                        } catch (e) {
                     console.error('❌ Failed to update Firebase:', e);
                     // 回滚内存
                     window.walletManager.credits -= adminReward;
                     window.walletManager.updateUI();
                     throw e;
-                }
+                    }
 
                 // 3️⃣ UI 反馈
                 alert(`✅ Check-in successful! +${adminReward} I3 tokens earned`);
