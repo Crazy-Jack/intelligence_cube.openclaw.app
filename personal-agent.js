@@ -2580,6 +2580,24 @@ function handleAgentSelection() {
     if (input) input.focus();
 }
 
+// Auto-resize chat input textarea
+function autoResizeChatInput(textarea) {
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+    
+    // Calculate new height (min 44px, max 240px for ~10 lines)
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, 44), 240);
+    textarea.style.height = newHeight + 'px';
+}
+
+// Handle chat input key down events (Enter to send, Shift+Enter for new line)
+function handleChatInputKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        handleUserChatSend();
+    }
+}
+
 // Handle sending a chat message
 async function handleUserChatSend() {
     if (!selectedAgentForChat) {
@@ -2592,8 +2610,12 @@ async function handleUserChatSend() {
     
     if (!message) return;
     
-    // Clear input
-    if (input) input.value = '';
+    // Clear input and reset height
+    if (input) {
+        input.value = '';
+        input.style.height = 'auto';
+        input.style.height = '44px';
+    }
     
     // Disable input while sending
     const sendBtn = document.getElementById('userChatSendBtn');
@@ -2906,6 +2928,8 @@ window.autoGenerateUseCase = autoGenerateUseCase;
 window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
+window.autoResizeChatInput = autoResizeChatInput;
+window.handleChatInputKeyDown = handleChatInputKeyDown;
 window.loadPublicAgents = loadPublicAgents;
 window.filterPublicAgents = filterPublicAgents;
 window.chatWithPublicAgent = chatWithPublicAgent;
