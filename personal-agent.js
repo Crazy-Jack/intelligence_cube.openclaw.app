@@ -1281,6 +1281,7 @@ function openCreateModelModal() {
         document.getElementById('modelCategoryInput').value = '';
         document.getElementById('modelIndustryInput').value = '';
         document.getElementById('modelTokenPriceInput').value = '2'; // Default value
+        document.getElementById('modelForkedUsagePriceInput').value = '1'; // Default value
         document.getElementById('modelIsPublicInput').checked = false;
         
         // Clear and reset file upload
@@ -1380,6 +1381,9 @@ async function createModel() {
         const tokenPriceInput = document.getElementById('modelTokenPriceInput').value.trim();
         const tokenPrice = tokenPriceInput ? parseFloat(tokenPriceInput) : 2; // Default to 2 if empty
         
+        const forkedUsagePriceInput = document.getElementById('modelForkedUsagePriceInput').value.trim();
+        const forkedUsagePrice = forkedUsagePriceInput ? parseFloat(forkedUsagePriceInput) : 1; // Default to 1 if empty
+        
         const response = await fetch('/api/personal-agent/models', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1392,7 +1396,8 @@ async function createModel() {
                 systemPrompt: document.getElementById('modelSystemPromptInput').value.trim() || null,
                 category: document.getElementById('modelCategoryInput').value.trim() || null,
                 industry: document.getElementById('modelIndustryInput').value.trim() || null,
-                tokenPrice: tokenPrice
+                tokenPrice: tokenPrice,
+                forkedUsagePrice: forkedUsagePrice
             })
         });
         

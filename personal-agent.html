@@ -1025,10 +1025,23 @@ Answer the user's question as this specialized model would.</pre>
                     <div id="createModalFilePreview" style="margin-top: 12px;"></div>
                     <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">Files will be processed for RAG after agent creation</small>
                 </div>
-                <div class="pa-form-group">
-                    <label>Token Price</label>
-                    <input type="number" id="modelTokenPriceInput" placeholder="2" value="2" min="0" step="0.01">
-                    <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">Default: 2</small>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="pa-form-group" style="margin-bottom: 0;">
+                        <label>Token Price</label>
+                        <input type="number" id="modelTokenPriceInput" placeholder="2" value="2" min="0" step="0.01">
+                        <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">Default: 2</small>
+                    </div>
+                    <div class="pa-form-group" style="margin-bottom: 0;">
+                        <label style="display: flex; align-items: center; gap: 6px;">Forked Usage Price
+                            <span style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-size: 12px; cursor: help;" onmouseenter="this.querySelector('.tooltip-text').style.opacity='1'; this.querySelector('.tooltip-text').style.visibility='visible';" onmouseleave="this.querySelector('.tooltip-text').style.opacity='0'; this.querySelector('.tooltip-text').style.visibility='hidden';">i
+                                <span class="tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; padding: 8px 12px; background: #1f2937; color: white; font-size: 12px; font-weight: normal; border-radius: 6px; white-space: normal; width: 280px; text-align: left; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">When other people fork your agent, a forked revenue will be routed back to you per their agent usage to value your original creation to the ecosystem.
+                                    <span style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1f2937;"></span>
+                                </span>
+                            </span>
+                        </label>
+                        <input type="number" id="modelForkedUsagePriceInput" placeholder="1" value="1" min="0" step="0.01">
+                        <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">Default: 1</small>
+                    </div>
                 </div>
                 <div class="pa-form-group">
                     <label>
