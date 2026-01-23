@@ -893,10 +893,19 @@
                         <button 
                             id="userChatSendBtn"
                             onclick="handleUserChatSend()" 
-                                style="padding: 12px 24px; background: #8b5cf6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; opacity: 0.5;"
+                                style="padding: 12px 24px; background: #8b5cf6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; opacity: 0.5; min-width: 80px; text-align: center;"
                             disabled
                         >
                             Send
+                        </button>
+                        <button 
+                            id="userChatForkBtn"
+                            onclick="forkCurrentChatAgent()" 
+                                style="padding: 12px 24px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; opacity: 0.5; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 80px;"
+                            disabled
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg>
+                            Fork
                         </button>
                         </div>
                     </div>

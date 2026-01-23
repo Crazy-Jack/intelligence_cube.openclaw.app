@@ -457,6 +457,10 @@
     transition: opacity 0.25s ease;
 }
 
+#forkAgentModal {
+    z-index: 10001;
+}
+
 .pa-modal-overlay.show {
     display: flex;
     opacity: 1;

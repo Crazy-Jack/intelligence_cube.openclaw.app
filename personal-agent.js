@@ -1987,6 +1987,7 @@ function selectAgentFromSidebar(agentId, type) {
     // Enable chat input
     const input = document.getElementById('userChatInput');
     const sendBtn = document.getElementById('userChatSendBtn');
+    const forkBtn = document.getElementById('userChatForkBtn');
     if (input) {
         input.disabled = false;
         input.placeholder = `Message ${agent.name}...`;
@@ -1995,6 +1996,10 @@ function selectAgentFromSidebar(agentId, type) {
     if (sendBtn) {
         sendBtn.disabled = false;
         sendBtn.style.opacity = '1';
+    }
+    if (forkBtn) {
+        forkBtn.disabled = false;
+        forkBtn.style.opacity = '1';
     }
     
     // Load chat history (use id for unique storage)
@@ -2329,10 +2334,19 @@ function showAgentInfoPanel(agent) {
                     </div>
                 </div>
                 
-                <div style="padding: 16px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 8px;">
+                <div style="padding: 16px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); border-radius: 8px; margin-bottom: 16px;">
                     <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 4px;">Total Usage</div>
                     <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</div>
                 </div>
+                
+                <button 
+                    id="agentInfoForkBtn"
+                    onclick="forkAgentFromInfoPanel('${agent.id}', '${(agent.name || 'Unnamed').replace(/'/g, "\\'")}');" 
+                    style="width: 100%; padding: 12px 24px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px;"
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg>
+                    Fork this Agent
+                </button>
             </div>
         </div>
     `;
@@ -2346,6 +2360,20 @@ function closeAgentInfoModal() {
     if (modal) {
         modal.classList.remove('show');
     }
+}
+
+// Fork agent from User Chats
+function forkCurrentChatAgent() {
+    if (!selectedAgentForChat) {
+        showNotification('No agent selected', 'error');
+        return;
+    }
+    showForkConfirmModal(selectedAgentForChat.id, selectedAgentForChat.name);
+}
+
+// Fork agent from info panel
+function forkAgentFromInfoPanel(agentId, agentName) {
+    showForkConfirmModal(agentId, agentName);
 }
 
 // ========== Fork Agent Functionality ==========
@@ -2436,8 +2464,9 @@ async function forkAgent() {
         
         showNotification(`Successfully forked "${forkTargetAgentName}"!`, 'success');
         
-        // Close modal
+        // Close modals
         closeForkModal();
+        closeAgentInfoModal();
         
         // Refresh my agents list
         await loadModels();
@@ -2885,6 +2914,8 @@ window.viewPublicAgentDetails = viewPublicAgentDetails;
 window.closePublicAgentDetailsModal = closePublicAgentDetailsModal;
 window.showAgentInfoPanel = showAgentInfoPanel;
 window.closeAgentInfoModal = closeAgentInfoModal;
+window.forkCurrentChatAgent = forkCurrentChatAgent;
+window.forkAgentFromInfoPanel = forkAgentFromInfoPanel;
 window.showForkConfirmModal = showForkConfirmModal;
 window.closeForkModal = closeForkModal;
 window.forkAgent = forkAgent;
