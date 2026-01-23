@@ -197,11 +197,38 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 		this.lastConnectAttempt = Date.now();
 		
 		try {
-		  // RPC 初始化：将“失败”改为“非致命警告”
-		  // 如果 RPC 加载失败，不阻止钱包连接，只是后续无法读取余额或上链
-		  if (!this.initSolanaConnection('devnet')) {
-			  console.warn('Solana RPC not initialized; skipping RPC, wallet can still connect.');
-			  // throw new Error('Failed to initialize Solana connection'); // ← 移除硬性阻断
+		  // Resolve preferred Solana/SVM network from localStorage
+		  let preferredKey = '';
+		  try {
+		    const raw = localStorage.getItem('i3_preferred_network');
+		    const data = raw ? JSON.parse(raw) : null;
+		    preferredKey = (data && data.key) ? String(data.key) : '';
+		  } catch (_) {}
+
+		  // Default to Solana Devnet if no preference or unknown
+		  let solanaHint = 'solana';
+		  let rpcNetwork = 'devnet';
+		  let customRpc = '';
+
+		  if (preferredKey === 'solana-mainnet') {
+		    solanaHint = 'solana-mainnet';
+		    rpcNetwork = 'mainnet-beta';
+		  } else if (preferredKey === 'solayer-devnet') {
+		    solanaHint = 'solayer-devnet';
+		    rpcNetwork = 'devnet';
+		    customRpc = 'https://devnet-rpc.solayer.org';
+		  } else if (preferredKey === 'solayer-mainnet') {
+		    solanaHint = 'solayer-mainnet';
+		    rpcNetwork = 'mainnet-beta';
+		    customRpc = 'https://mainnet-rpc.solayer.org';
+		  } else if (preferredKey === 'solana') {
+		    solanaHint = 'solana';
+		    rpcNetwork = 'devnet';
+		  }
+
+		  // RPC 初始化：将"失败"改为"非致命警告"
+		  if (!this.initSolanaConnection(rpcNetwork, customRpc)) {
+		    console.warn('Solana RPC not initialized; skipping RPC, wallet can still connect.');
 		  }
 		  if (kind !== 'phantom') {
 			throw new Error(`Unsupported Solana wallet: ${kind}`);
@@ -272,7 +299,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 					window.dispatchEvent(new CustomEvent('walletConnected', {
 					  detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData?.(this.walletAddress) }
 					}));
-					try { window.onWalletConnected?.(this.walletAddress, 'solana', 'devnet'); } catch {}
+					try { window.onWalletConnected?.(this.walletAddress, null, solanaHint); } catch {}
 				  }
 				});
 			  } catch {}
@@ -294,8 +321,8 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			  window.dispatchEvent(new CustomEvent('walletConnected', {
 				detail: { address: this.walletAddress, credits: this.credits, isNewUser: !this.getWalletData?.(this.walletAddress) }
 			  }));
-			  renderNetworkBadge(mapChainIdToDisplay(null, 'solana-phantom', 'devnet'));
-			  try { window.onWalletConnected?.(this.walletAddress, 'solana', 'devnet'); } catch {}
+			  renderNetworkBadge(mapChainIdToDisplay(null, 'solana-phantom', solanaHint));
+			  try { window.onWalletConnected?.(this.walletAddress, null, solanaHint); } catch {}
 			  return { success: true, address: this.walletAddress, credits: this.credits };
   
 		  } catch (connErr) {

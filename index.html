@@ -16,6 +16,7 @@
     <link rel="preload" as="image" href="/svg/chains/arbitrum.svg">
     <link rel="preload" as="image" href="/svg/chains/optimism.svg">
     <link rel="preload" as="image" href="/svg/chains/solana.svg">
+    <link rel="preload" as="image" href="/svg/chains/solayer.svg">
     <link rel="preload" as="image" href="/svg/chains/base.svg">
     <link rel="preload" as="image" href="/svg/chains/zksync.svg">
     <link rel="preload" as="image" href="/svg/chains/opbnb.svg">
@@ -1182,6 +1183,8 @@
 		}
 		.network-modal-content {
 		  width: min(420px, 92vw);
+		  max-height: 80vh;                     /* 限制最大高度 */
+		  overflow-y: auto;                     /* 允许垂直滚动 */
 		  background: #fff;
 		  border-radius: 12px;                  /* 圆角更小，更紧凑 */
 		  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
@@ -1607,54 +1610,82 @@
         </div>
     </header>
 
-    <script>
-	(function syncRenderNetworkBadge(){
-	  try {
-	    // 1) 读取本地"首选网络"（你已有 getPreferredNetwork）
-	    var pref = (window.getPreferredNetwork && window.getPreferredNetwork()) || null;
-	    // 2) 快速映射（仅用于首屏，不依赖任何 SDK）
-	    var ICON = {
-	      ethereum: '/svg/chains/ethereum.svg',
-	      bnb:      '/svg/chains/bnb.svg',
-	      polygon:  '/svg/chains/polygon-zkevm.svg',
-	      arbitrum: '/svg/chains/arbitrum.svg',
-	      optimism: '/svg/chains/optimism.svg',
-	      solana:   '/svg/chains/solana.svg',
-          opbnb:   '/svg/chains/opbnb.svg',
-          zksync:   '/svg/chains/zksync.svg',
-          base:   '/svg/chains/base.svg',   
-	    };
-	    var NAME = {
-	      ethereum: 'Ethereum',
-	      bnb:      'BNB Chain',
-	      polygon:  'Polygon',
-	      arbitrum: 'Arbitrum',
-	      optimism: 'Optimism',
-	      solana:   'Solana',
-          opbnb:   'opBNB',
-          zksync:   'Zksync',
-          base:   'Base',
-	    };
-	    // 3) 找到徽章节点（你按钮里已有这些 id）
-	    var badge  = document.getElementById('networkBadge');
-	    var iconEl = document.getElementById('networkBadgeIcon');
-	    var textEl = document.getElementById('networkBadgeText');
-	    if (!badge || !iconEl || !textEl) return;
-	    // 4) 计算首屏 key：Solana 直接显示 solana，其它默认 ethereum
-	    var key  = (pref && pref.key)  || 'ethereum';
-	    var kind = (pref && pref.kind) || 'evm';
-	    if (kind === 'solana') key = 'solana';
-	    // 5) 同步渲染，不等 SDK
-	    iconEl.src = ICON[key] || ICON.ethereum;
-	    iconEl.alt = NAME[key] || 'Network';
-	    textEl.textContent = NAME[key] || 'Network';
-	    badge.style.display = 'inline-flex';
-	    badge.style.visibility = 'visible'; // 解除初始隐藏
-	  } catch (e) {
-	    // 静默失败，避免阻塞首屏
-	  }
-	})();
-	</script>
+<script>
+(function syncRenderNetworkBadge(){
+  try {
+    // 1) 读取本地首选网络（不依赖任何 SDK）
+    var pref = (window.getPreferredNetwork && window.getPreferredNetwork()) || null;
+
+    // 2) 快速映射（仅用于首屏，不依赖钱包连接状态）
+    var ICON = {
+      ethereum: '/svg/chains/ethereum.svg',
+      bnb:      '/svg/chains/bnb.svg',
+      base:     '/svg/chains/base.svg',
+      arbitrum: '/svg/chains/arbitrum.svg',
+      optimism: '/svg/chains/optimism.svg',
+      zksync:   '/svg/chains/zksync.svg',
+      opbnb:    '/svg/chains/opbnb.svg',
+      'polygon-zkevm': '/svg/chains/polygon-zkevm.svg',
+
+      // Solana family (SVM)
+      solana:           '/svg/chains/solana.svg',
+      'solana-mainnet': '/svg/chains/solana.svg',
+      'solayer-devnet': '/svg/chains/solayer.svg',
+      'solayer-mainnet':'/svg/chains/solayer.svg'
+    };
+
+    var NAME = {
+      ethereum: 'Ethereum',
+      bnb:      'BNB Chain',
+      base:     'Base',
+      arbitrum: 'Arbitrum',
+      optimism: 'Optimism',
+      zksync:   'ZKsync',
+      opbnb:    'opBNB',
+      'polygon-zkevm': 'Polygon zkEVM',
+
+      // Solana family (SVM)
+      solana:           'Solana (Devnet)',
+      'solana-mainnet': 'Solana (Mainnet)',
+      'solayer-devnet': 'Solayer (Devnet)',
+      'solayer-mainnet':'Solayer (Mainnet)'
+    };
+
+    // 3) 找到徽章节点（当前结构用 class，不用 id）
+    var badge  = document.getElementById('networkBadge');
+    if (!badge) return;
+    var iconEl = badge.querySelector('.network-badge__icon');
+    var textEl = badge.querySelector('.network-badge__text');
+    if (!iconEl || !textEl) return;
+
+    // 4) 计算首屏 key：默认 bnb；Solana/SVM 直接用 pref.key
+    var key  = (pref && pref.key) ? pref.key : 'bnb';
+
+    // 兼容旧 key
+    if (key === 'polygon') key = 'polygon-zkevm';
+
+    // ✅ 如果本地没有首选网络：默认初始化为 BNB（只初始化一次）
+    try {
+      var rawPref = localStorage.getItem('i3_preferred_network');
+      if (!rawPref) localStorage.setItem('i3_preferred_network', JSON.stringify({ key: 'bnb' }));
+    } catch (e) {}
+
+    if (!ICON[key]) {
+      if (pref && pref.kind === 'solana') key = 'solana';
+      else key = 'bnb';
+    }
+
+    // 5) 同步渲染，不等 SDK
+    iconEl.src = ICON[key] || ICON.bnb;
+    iconEl.alt = NAME[key] || 'Network';
+    textEl.textContent = NAME[key] || 'Network';
+    badge.style.display = 'inline-flex';
+    badge.style.visibility = 'visible';
+  } catch (e) {
+    // 静默失败，避免阻塞首屏
+  }
+})();
+</script>
 
     <!-- Main Terminal -->
     <div class="terminal-container">
@@ -6330,6 +6361,8 @@
                     <option value="BASE">Base Mainnet</option>
                     <option value="SOLANA_DEVNET">Solana Devnet</option>
                     <option value="SOLANA_MAINNET">Solana Mainnet</option>
+                    <option value="SOLAYER_DEVNET">Solayer Devnet</option>
+                    <option value="SOLAYER_MAINNET">Solayer Mainnet</option>
                 </select>
             </div>
 

@@ -350,6 +350,8 @@
 		}
 		.network-modal-content {
 		  width: min(420px, 92vw);
+		  max-height: 80vh;                     /* 限制最大高度 */
+		  overflow-y: auto;                     /* 允许垂直滚动 */
 		  background: #fff;
 		  border-radius: 12px;                  /* 圆角更小，更紧凑 */
 		  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
@@ -586,12 +588,21 @@
 	    var iconEl = document.getElementById('networkBadgeIcon');
 	    var textEl = document.getElementById('networkBadgeText');
 	    if (!badge || !iconEl || !textEl) return;
-	    // 4) 计算首屏 key：Solana 直接显示 solana，其它默认 ethereum
-	    var key  = (pref && pref.key)  || 'ethereum';
+	    // 4) 计算首屏 key：Solana 直接显示 solana，其它默认 bnb
+	    var key  = (pref && pref.key)  || 'bnb';
 	    var kind = (pref && pref.kind) || 'evm';
 	    if (kind === 'solana') key = 'solana';
+	    // ✅ 如果本地没有首选网络：默认初始化为 BNB（只初始化一次）
+	    try {
+	      var rawPref = localStorage.getItem('i3_preferred_network');
+	      if (!rawPref) localStorage.setItem('i3_preferred_network', JSON.stringify({ key: 'bnb' }));
+	    } catch (e) {}
+	    if (!ICON[key]) {
+	      if (pref && pref.kind === 'solana') key = 'solana';
+	      else key = 'bnb';
+	    }
 	    // 5) 同步渲染，不等 SDK
-	    iconEl.src = ICON[key] || ICON.ethereum;
+	    iconEl.src = ICON[key] || ICON.bnb;
 	    iconEl.alt = NAME[key] || 'Network';
 	    textEl.textContent = NAME[key] || 'Network';
 	    badge.style.display = 'inline-flex';
