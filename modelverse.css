@@ -513,7 +513,7 @@ body:has(.modelverse-content.full-width) .main-layout,
 }
 
 .modelverse-container {
-    max-width: 1600px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 40px;
 }
