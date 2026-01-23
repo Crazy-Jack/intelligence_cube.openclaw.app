@@ -576,6 +576,10 @@ function renderModelDetails(model) {
                         Forked from <strong style="margin-left: 4px;">${escapeHtml(model.forkedFromName || 'Unknown Agent')}</strong>
                         <span style="color: #6b7280; margin-left: 4px;">by ${model.forkedFromOwner ? model.forkedFromOwner.slice(0, 6) + '...' + model.forkedFromOwner.slice(-4) : 'Unknown'}</span>
                     </span>
+                    <a href="#" onclick="showForkHistory('${model.id}'); return false;" 
+                       style="display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: #059669; text-decoration: underline; cursor: pointer;">
+                        Show full fork history
+                    </a>
                 </div>
                 ` : ''}
             </div>
@@ -3253,6 +3257,135 @@ window.closeEditModelModal = closeEditModelModal;
 window.updateModel = updateModel;
 window.selectModel = selectModel;
 window.toggleModelVisibility = toggleModelVisibility;
+// Show fork history popup
+async function showForkHistory(modelId) {
+    // Create or get the modal
+    let modal = document.getElementById('forkHistoryModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'forkHistoryModal';
+        modal.className = 'pa-modal-overlay';
+        document.body.appendChild(modal);
+    }
+    
+    // Show loading state
+    modal.innerHTML = `
+        <div style="background: #fff; border-radius: 16px; max-width: 500px; width: 90%; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">Fork History</h3>
+                <button onclick="closeForkHistoryModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280;">&times;</button>
+            </div>
+            <div style="text-align: center; padding: 20px;">
+                <div class="pa-spinner" style="margin: 0 auto;"></div>
+                <p style="margin-top: 12px; color: #6b7280;">Loading fork history...</p>
+            </div>
+        </div>
+    `;
+    modal.classList.add('show');
+    
+    try {
+        // Recursively fetch fork chain
+        const forkChain = await fetchForkChain(modelId);
+        
+        // Render the chain
+        const chainHtml = forkChain.map((item, index) => {
+            const isFirst = index === 0;
+            const isLast = index === forkChain.length - 1;
+            const ownerDisplay = item.ownerAddress 
+                ? item.ownerAddress.slice(0, 6) + '...' + item.ownerAddress.slice(-4) 
+                : 'Unknown';
+            
+            return `
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        <div style="width: 32px; height: 32px; border-radius: 50%; background: ${isFirst ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : isLast ? 'linear-gradient(135deg, #10b981, #059669)' : '#e5e7eb'}; display: flex; align-items: center; justify-content: center;">
+                            ${isFirst 
+                                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>'
+                                : isLast 
+                                    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+                                    : `<span style="color: #6b7280; font-size: 12px; font-weight: 600;">${forkChain.length - index}</span>`
+                            }
+                        </div>
+                        ${!isLast ? '<div style="width: 2px; height: 24px; background: #d1d5db;"></div>' : ''}
+                    </div>
+                    <div style="flex: 1; padding-bottom: ${isLast ? '0' : '16px'};">
+                        <div style="font-weight: 600; color: #111827; font-size: 14px;">${escapeHtml(item.name || 'Unknown Agent')}</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">by ${ownerDisplay}</div>
+                        ${isFirst ? '<span style="display: inline-block; margin-top: 4px; background: #ede9fe; color: #7c3aed; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Current</span>' : ''}
+                        ${isLast ? '<span style="display: inline-block; margin-top: 4px; background: #d1fae5; color: #059669; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Original</span>' : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        modal.innerHTML = `
+            <div style="background: #fff; border-radius: 16px; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #e5e7eb;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">Fork History</h3>
+                        <p style="margin: 4px 0 0; font-size: 13px; color: #6b7280;">${forkChain.length} generation${forkChain.length > 1 ? 's' : ''} in chain</p>
+                    </div>
+                    <button onclick="closeForkHistoryModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280; padding: 0; line-height: 1;">&times;</button>
+                </div>
+                <div style="padding: 24px; max-height: 400px; overflow-y: auto;">
+                    ${chainHtml}
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error fetching fork history:', error);
+        modal.innerHTML = `
+            <div style="background: #fff; border-radius: 16px; max-width: 500px; width: 90%; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">Fork History</h3>
+                    <button onclick="closeForkHistoryModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280;">&times;</button>
+                </div>
+                <p style="color: #ef4444;">Failed to load fork history: ${escapeHtml(error.message)}</p>
+            </div>
+        `;
+    }
+}
+
+// Recursively fetch fork chain
+async function fetchForkChain(modelId, chain = [], depth = 0) {
+    if (depth > 10) return chain; // Safety limit
+    
+    try {
+        const response = await fetch(`/api/personal-agent/models/${modelId}`);
+        if (!response.ok) throw new Error('Failed to fetch model');
+        
+        const data = await response.json();
+        const model = data.model || data;
+        
+        chain.push({
+            id: model.id || modelId,
+            name: model.name,
+            ownerAddress: model.ownerAddress,
+            forkedFrom: model.forkedFrom
+        });
+        
+        // If this model was forked from another, continue up the chain
+        if (model.forkedFrom) {
+            return fetchForkChain(model.forkedFrom, chain, depth + 1);
+        }
+        
+        return chain;
+    } catch (error) {
+        console.error(`Error fetching model ${modelId}:`, error);
+        return chain;
+    }
+}
+
+// Close fork history modal
+function closeForkHistoryModal() {
+    const modal = document.getElementById('forkHistoryModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+window.showForkHistory = showForkHistory;
+window.closeForkHistoryModal = closeForkHistoryModal;
 window.deleteModel = deleteModel;
 window.saveInlineModelChanges = saveInlineModelChanges;
 window.autoGeneratePurpose = autoGeneratePurpose;

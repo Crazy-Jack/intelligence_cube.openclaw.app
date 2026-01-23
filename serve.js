@@ -3674,6 +3674,50 @@ app.get('/api/personal-agent/models', async (req, res) => {
   }
 });
 
+// Get a single model by ID
+app.get('/api/personal-agent/models/:modelId', async (req, res) => {
+  try {
+    const { modelId } = req.params;
+    
+    if (!modelId) {
+      return res.status(400).json({ error: 'modelId is required' });
+    }
+    
+    const db = admin.getFirestore();
+    
+    if (!db) {
+      return res.status(500).json({ 
+        error: 'Firestore database not initialized'
+      });
+    }
+    
+    const modelDoc = await db.collection('models').doc(modelId).get();
+    
+    if (!modelDoc.exists) {
+      return res.status(404).json({ error: 'Model not found' });
+    }
+    
+    const data = modelDoc.data();
+    const modelData = { id: modelDoc.id, ...data };
+    
+    // Convert Firestore Timestamps
+    if (data.createdAt) {
+      if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+        modelData.createdAt = data.createdAt.toDate().toISOString();
+      } else if (data.createdAt.seconds !== undefined) {
+        modelData.createdAt = new Date(data.createdAt.seconds * 1000).toISOString();
+      } else if (data.createdAt._seconds !== undefined) {
+        modelData.createdAt = new Date(data.createdAt._seconds * 1000).toISOString();
+      }
+    }
+    
+    res.json({ model: modelData });
+  } catch (error) {
+    console.error('❌ Error fetching model:', error);
+    res.status(500).json({ error: 'Failed to fetch model: ' + error.message });
+  }
+});
+
 app.post('/api/process-rag-file', async (req, res) => {
   const startTime = Date.now();
   let fileId, modelId, storagePath, filename, ownerAddress;
