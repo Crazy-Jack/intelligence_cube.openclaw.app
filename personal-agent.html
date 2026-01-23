@@ -861,10 +861,10 @@
                     <!-- Selected Agent Header -->
                     <div id="selectedAgentHeader" style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff; display: none;">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px;" id="selectedAgentAvatar"></div>
-                            <div>
-                                <div style="font-weight: 600; color: #111827; cursor: pointer; transition: color 0.15s;" id="selectedAgentName" onclick="showAgentInfoPanel(selectedAgentForChat)" onmouseover="this.style.color='#8b5cf6'" onmouseout="this.style.color='#111827'"></div>
-                        <div style="font-size: 13px; color: #6b7280;" id="selectedAgentPurpose"></div>
+                            <div style="width: 40px; height: 40px; min-width: 40px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px;" id="selectedAgentAvatar"></div>
+                            <div style="flex: 1; min-width: 0; overflow: hidden;">
+                                <div style="font-weight: 600; color: #111827; cursor: pointer; transition: color 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="selectedAgentName" onclick="showAgentInfoPanel(selectedAgentForChat)" onmouseover="this.style.color='#8b5cf6'" onmouseout="this.style.color='#111827'"></div>
+                        <div style="font-size: 13px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="selectedAgentPurpose"></div>
                             </div>
                     </div>
                 </div>

@@ -466,9 +466,9 @@ function renderModelList() {
         <div class="pa-model-item ${model.id === currentModelId ? 'selected' : ''}" 
              onclick="selectModel('${model.id}')">
             <div class="pa-model-item-header">
-                <h3 class="pa-model-item-name">
-                    ${model.forkedFrom ? '<span style="color: #10b981; margin-right: 4px;" title="Forked agent">🔀</span>' : ''}
-                    ${escapeHtml(model.name || 'Unnamed')}
+                <h3 class="pa-model-item-name" style="display: flex; align-items: center; gap: 8px;">
+                    ${model.forkedFrom ? '<span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-width: 22px; flex-shrink: 0; background: linear-gradient(135deg, #10b981, #059669); border-radius: 4px;" title="Forked agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg></span>' : ''}
+                    <span style="flex: 1; min-width: 0;">${escapeHtml(model.name || 'Unnamed')}</span>
                 </h3>
                 <div class="pa-model-item-actions" onclick="event.stopPropagation()">
                     <button class="pa-model-item-action" onclick="toggleModelVisibility('${model.id}', ${!model.isPublic})" 
@@ -3129,12 +3129,52 @@ function loadUserChatHistory(agentId) {
             userChatHistory = [];
             const messagesDiv = document.getElementById('userChatMessages');
             if (messagesDiv) {
-                messagesDiv.innerHTML = '<div style="text-align: center; color: #9ca3af; margin-top: 40px;"><p>Start a conversation with your agent</p></div>';
+                // Show empty state with predefined prompt buttons
+                messagesDiv.innerHTML = `
+                    <div id="predefinedPromptsContainer" style="display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px;">
+                        <p style="color: #9ca3af; margin-bottom: 24px; font-size: 15px;">Start a conversation with your agent</p>
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 500px;">
+                            <button onclick="sendPredefinedPrompt('Summarize the key concepts from your knowledge base')" 
+                                    style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
+                                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)';"
+                                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
+                                Summarize key<br>concepts
+                            </button>
+                            <button onclick="sendPredefinedPrompt('What topics can you help me with?')" 
+                                    style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
+                                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)';"
+                                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
+                                What can you<br>help with?
+                            </button>
+                            <button onclick="sendPredefinedPrompt('Generate 5 Q&A pairs to test my understanding')" 
+                                    style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
+                                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)';"
+                                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
+                                Generate Q&A<br>pairs
+                            </button>
+                        </div>
+                    </div>
+                `;
             }
         }
     } catch (error) {
         console.error('Error loading chat history:', error);
         userChatHistory = [];
+    }
+}
+
+// Send a predefined prompt
+function sendPredefinedPrompt(message) {
+    if (!selectedAgentForChat) {
+        alert('Please select an agent first');
+        return;
+    }
+    
+    // Set the input value and trigger send
+    const input = document.getElementById('userChatInput');
+    if (input) {
+        input.value = message;
+        handleUserChatSend();
     }
 }
 
@@ -3464,6 +3504,7 @@ window.autoGenerateUseCase = autoGenerateUseCase;
 window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
+window.sendPredefinedPrompt = sendPredefinedPrompt;
 window.autoResizeChatInput = autoResizeChatInput;
 window.handleChatInputKeyDown = handleChatInputKeyDown;
 window.loadPublicAgents = loadPublicAgents;
