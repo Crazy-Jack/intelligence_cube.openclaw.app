@@ -1,3 +1,76 @@
+// ========== Mobile User Chats UI State ==========
+let isMobileChatMode = false;
+
+function isMobileView() {
+    return window.innerWidth <= 768;
+}
+
+function showAgentSidebarMobile() {
+    // 返回到 agent 列表
+    isMobileChatMode = false;
+    const sidebar = document.getElementById('agentSidebar');
+    const chatArea = document.getElementById('userChatArea');
+    
+    if (sidebar && chatArea) {
+        sidebar.classList.remove('mobile-hide-sidebar');
+        sidebar.classList.add('mobile-show-sidebar');
+        chatArea.classList.remove('mobile-show-chat');
+        chatArea.classList.add('mobile-hide-chat');
+    }
+    
+    // 隐藏返回按钮
+    const backBtn = document.getElementById('userChatsBackBtn');
+    if (backBtn) backBtn.style.display = 'none';
+}
+
+function showChatAreaMobile() {
+    isMobileChatMode = true;
+    const sidebar = document.getElementById('agentSidebar');
+    const chatArea = document.getElementById('userChatArea');
+    
+    if (sidebar && chatArea) {
+        sidebar.classList.remove('mobile-show-sidebar');
+        sidebar.classList.add('mobile-hide-sidebar');
+        chatArea.classList.remove('mobile-hide-chat');
+        chatArea.classList.add('mobile-show-chat');
+    }
+    
+    // 显示返回按钮
+    const backBtn = document.getElementById('userChatsBackBtn');
+    if (backBtn) backBtn.style.display = 'block';
+}
+
+// 初始化移动端状态
+function initMobileUserChatsState() {
+    if (isMobileView()) {
+        // 默认显示agent列表
+        showAgentSidebarMobile();
+    }
+}
+
+// 响应窗口变化
+window.addEventListener('resize', () => {
+    if (!isMobileView()) {
+        // 桌面端：移除所有移动端class，恢复默认布局
+        const sidebar = document.getElementById('agentSidebar');
+        const chatArea = document.getElementById('userChatArea');
+        if (sidebar) {
+            sidebar.classList.remove('mobile-show-sidebar', 'mobile-hide-sidebar');
+        }
+        if (chatArea) {
+            chatArea.classList.remove('mobile-show-chat', 'mobile-hide-chat');
+        }
+        const backBtn = document.getElementById('userChatsBackBtn');
+        if (backBtn) backBtn.style.display = 'none';
+    } else {
+        // 移动端根据状态切换
+        if (isMobileChatMode) {
+            showChatAreaMobile();
+        } else {
+            showAgentSidebarMobile();
+        }
+    }
+});
 // Personal Agent - Agent Creator and RAG Infrastructure
 
 // Global state
@@ -31,6 +104,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Load models (will gracefully handle if wallet isn't connected)
     await loadModels();
     setupEventListeners();
+    
+    // 初始化移动端user chats状态
+    initMobileUserChatsState();
     
     // If wallet wasn't ready yet, check again after wallet manager initializes (1s delay in wallet-manager.js)
     if (!currentWalletAddress) {
@@ -422,6 +498,14 @@ function switchTab(tabName) {
     const tabElement = document.getElementById(`${tabName}-tab`);
     if (tabElement) {
         tabElement.classList.add('active');
+    }
+    
+    // 如果切换到 user-chats 且是移动端，初始化移动端状态
+    if (tabName === 'user-chats' && isMobileView()) {
+        // 延迟执行，让DOM更新完成
+        setTimeout(() => {
+            initMobileUserChatsState();
+        }, 50);
     }
 }
 
@@ -2288,6 +2372,11 @@ function selectAgentFromSidebar(agentId, type) {
     }
     
     selectedAgentForChat = agent;
+    
+    // 移动端：切换到聊天区
+    if (isMobileView()) {
+        showChatAreaMobile();
+    }
     
     // Update sidebar active state (by ID, not name)
     document.querySelectorAll('.agent-sidebar-item').forEach(item => {

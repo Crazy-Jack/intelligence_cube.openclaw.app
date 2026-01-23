@@ -836,9 +836,9 @@
 
         <!-- User Chats Tab -->
         <div id="user-chats-tab" class="pa-tab-content">
-            <div style="display: flex; height: 100%;">
+            <div id="userChatsMainFlex" style="display: flex; height: 100%;">
                 <!-- Agent Sidebar -->
-                <div id="agentSidebar" style="width: 260px; border-right: 1px solid #e5e7eb; background: #f9fafb; display: flex; flex-direction: column; overflow: hidden;">
+                <div id="agentSidebar" class="mobile-hidden" style="width: 260px; border-right: 1px solid #e5e7eb; background: #f9fafb; display: flex; flex-direction: column; overflow: hidden;">
                 <div style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff;">
                         <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: #374151;">Agents</h3>
                     </div>
@@ -857,10 +857,14 @@
                 </div>
                 
                 <!-- Chat Area -->
-                <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                <div id="userChatArea" class="mobile-visible" style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
                     <!-- Selected Agent Header -->
-                    <div id="selectedAgentHeader" style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff; display: none;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
+                    <div id="selectedAgentHeader" style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff; display: none; position: relative;">
+                        <!-- Mobile Back Button -->
+                        <button id="userChatsBackBtn" class="mobile-visible" onclick="showAgentSidebarMobile()" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #8b5cf6; font-size: 20px; padding: 8px; display: none; z-index: 2;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                        </button>
+                        <div id="selectedAgentHeaderContent" style="display: flex; align-items: center; gap: 12px;">
                             <div style="width: 40px; height: 40px; min-width: 40px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #7c3aed); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px;" id="selectedAgentAvatar"></div>
                             <div style="flex: 1; min-width: 0; overflow: hidden;">
                                 <div style="font-weight: 600; color: #111827; cursor: pointer; transition: color 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="selectedAgentName" onclick="showAgentInfoPanel(selectedAgentForChat)" onmouseover="this.style.color='#8b5cf6'" onmouseout="this.style.color='#111827'"></div>
@@ -919,7 +923,7 @@
 
         <!-- Agentverse Tab -->
         <div id="public-agents-tab" class="pa-tab-content">
-            <div style="padding: 24px;">
+            <div style="padding: 24px; max-width: 1400px; margin: 0 auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="font-size: 20px; font-weight: 600; color: #111827; margin: 0;">Agentverse</h2>
                     <button class="pa-btn-secondary" onclick="loadPublicAgents()" style="display: flex; align-items: center; gap: 6px;">

@@ -1,3 +1,33 @@
+/* Mobile visibility helpers */
+.mobile-hidden {
+    display: block;
+}
+.mobile-visible {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobile-hidden {
+        display: none !important;
+    }
+    .mobile-visible {
+        display: block !important;
+    }
+    
+    /* 移动端：使用class来控制显示/隐藏，而不是默认样式 */
+    #agentSidebar.mobile-show-sidebar {
+        display: flex !important;
+    }
+    #agentSidebar.mobile-hide-sidebar {
+        display: none !important;
+    }
+    #userChatArea.mobile-show-chat {
+        display: flex !important;
+    }
+    #userChatArea.mobile-hide-chat {
+        display: none !important;
+    }
+}
 /* Personal Agent Styles */
 
 .personal-agent-container {
@@ -716,6 +746,16 @@
     .pa-modal-content {
         width: 95%;
         margin: 20px;
+    }
+    
+    /* 移动端返回按钮显示时，内容区需要额外左侧padding */
+    #selectedAgentHeader .mobile-visible {
+        display: block !important;
+    }
+    
+    /* 移动端给header内容区添加左侧padding，为返回按钮留出空间 */
+    #selectedAgentHeaderContent {
+        padding-left: 52px !important;
     }
 }
 
