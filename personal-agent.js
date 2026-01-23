@@ -735,7 +735,7 @@ function renderModelDetails(model) {
                            onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Forked Usage Price
+                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Fork Price
                         <span style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-size: 12px; cursor: help;" onmouseenter="this.querySelector('.tooltip-text').style.opacity='1'; this.querySelector('.tooltip-text').style.visibility='visible';" onmouseleave="this.querySelector('.tooltip-text').style.opacity='0'; this.querySelector('.tooltip-text').style.visibility='hidden';">i
                             <span class="tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; padding: 8px 12px; background: #1f2937; color: white; font-size: 12px; font-weight: normal; border-radius: 6px; white-space: normal; width: 280px; text-align: left; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">When other people fork your agent, a forked revenue will be routed back to you per their agent usage to value your original creation to the ecosystem.
                                 <span style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1f2937;"></span>
@@ -2631,7 +2631,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                         <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.tokenPrice ?? 'N/A'}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage Price</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Fork Price</div>
                         <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.forkedUsagePrice ?? 1}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
@@ -2732,7 +2732,7 @@ function showAgentInfoPanel(agent) {
                 
                 ${agent.forkedFrom ? `
                     <div style="margin-bottom: 16px; padding: 10px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
-                        <span style="font-size: 13px; color: #166534;">🔀 Forked from: <strong>${escapeHtml(agent.forkedFrom.name || 'Unknown')}</strong></span>
+                        <span style="font-size: 13px; color: #166534;">🔀 Forked from: <strong>${escapeHtml(agent.forkedFromName || 'Unknown Agent')}</strong>${agent.forkedFromOwner ? ` <span style="color: #6b7280;">by ${agent.forkedFromOwner.slice(0, 6) + '...' + agent.forkedFromOwner.slice(-4)}</span>` : ''}</span>
                     </div>
                 ` : ''}
                 
@@ -2763,7 +2763,7 @@ function showAgentInfoPanel(agent) {
                         <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.tokenPrice ?? 'N/A'}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Forked Usage Price</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Fork Price</div>
                         <div style="font-size: 18px; font-weight: 600; color: #111827;">${agent.forkedUsagePrice ?? 1}</div>
                     </div>
                     <div style="padding: 12px; background: #f9fafb; border-radius: 8px;">
