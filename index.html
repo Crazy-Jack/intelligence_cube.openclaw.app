@@ -6162,167 +6162,172 @@
         // - 若 currentUser 存在，则写入 users/<uid> 与其子集合 wallets/<address>
         // - 无论是否登录，都会写入顶层 wallets/<address> 文档，便于独立管理钱包
         window.onWalletConnected = async function(address, chainId, networkName) {
+    try {
+        if (!firebaseDb) throw new Error('Firebase 未初始化');
+        if (!address) throw new Error('address 不能为空');
+
+        const { doc, setDoc, getDoc, updateDoc, serverTimestamp } =
+            await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+        // ✅ 统一 docId（EVM 小写；Solana 保持原样）
+        const isEvm = /^0x/i.test(address);
+        const docId = isEvm ? address.toLowerCase() : address;
+
+        // 1) 顶层集合：wallets/<docId> - 先检查用户是否已存在
+        const walletRef = doc(firebaseDb, 'wallets', docId);
+        const walletSnap = await getDoc(walletRef);
+
+        let existingCredits = 0;
+        let isExistingUser = false;
+
+        if (walletSnap.exists()) {
+            // 用户已存在，保留现有积分
+            const walletData = walletSnap.data() || {};
+            existingCredits = Number(walletData.credits || 0);
+            isExistingUser = true;
+            console.log('🔍 Existing user found with credits:', existingCredits);
+
+            // 只更新连接信息，不重置积分
+            await updateDoc(walletRef, {
+                chainId: chainId || null,
+                networkName: networkName || null,
+                lastConnectedAt: serverTimestamp()
+            });
+        } else {
+            // 新用户，创建文档
+            console.log('🆕 New user detected, creating wallet document');
+            await setDoc(walletRef, {
+                address: address, // 保留原 address 字段（显示/审计更友好）
+                chainId: chainId || null,
+                networkName: networkName || null,
+                lastConnectedAt: serverTimestamp(),
+                credits: 0, // 新用户从0开始
+                createdAt: serverTimestamp()
+            }, { merge: true });
+        }
+
+        // 1.5) 新增：wallet-only 用户档案 users_by_wallet/<docId>（仅未登录时）
+        if (!window.currentUser || !window.currentUser.uid) {
             try {
-                if (!firebaseDb) throw new Error('Firebase 未初始化');
-                if (!address) throw new Error('address 不能为空');
-
-                const { doc, setDoc, getDoc, updateDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-
-                // 1) 顶层集合：wallets/<address> - 先检查用户是否已存在
-                const walletRef = doc(firebaseDb, 'wallets', address);
-                const walletSnap = await getDoc(walletRef);
-                
-                let existingCredits = 0;
-                let isExistingUser = false;
-                
-                if (walletSnap.exists()) {
-                    // 用户已存在，保留现有积分
-                    const walletData = walletSnap.data() || {};
-                    existingCredits = Number(walletData.credits || 0);
-                    isExistingUser = true;
-                    console.log('🔍 Existing user found with credits:', existingCredits);
-                    
-                    // 只更新连接信息，不重置积分
-                    await updateDoc(walletRef, {
+                const walletUserRef = doc(firebaseDb, 'users_by_wallet', docId);
+                const stageSnap = await getDoc(walletUserRef);
+                if (stageSnap.exists()) {
+                    // 仅更新连接信息，保留首次 createdAt
+                    await updateDoc(walletUserRef, {
+                        lastConnectedAt: serverTimestamp(),
                         chainId: chainId || null,
                         networkName: networkName || null,
-                        lastConnectedAt: serverTimestamp()
+                        userType: 'wallet-only'
                     });
                 } else {
-                    // 新用户，创建文档
-                    console.log('🆕 New user detected, creating wallet document');
-                    await setDoc(walletRef, {
+                    // 首次创建，写入 createdAt
+                    await setDoc(walletUserRef, {
                         address: address,
+                        createdAt: serverTimestamp(),
+                        lastConnectedAt: serverTimestamp(),
                         chainId: chainId || null,
                         networkName: networkName || null,
-                        lastConnectedAt: serverTimestamp(),
-                        credits: 0, // 新用户从0开始
-                        createdAt: serverTimestamp()
+                        userType: 'wallet-only'
                     }, { merge: true });
                 }
-
-                // 1.5) 新增：wallet-only 用户档案 users_by_wallet/<address>（仅未登录时）
-                if (!window.currentUser || !window.currentUser.uid) {
-                    try {
-                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', address.toLowerCase());
-                        const stageSnap = await getDoc(walletUserRef);
-                        if (stageSnap.exists()) {
-                            // 仅更新连接信息，保留首次 createdAt
-                            await updateDoc(walletUserRef, {
-                                lastConnectedAt: serverTimestamp(),
-                                chainId: chainId || null,
-                                networkName: networkName || null,
-                                userType: 'wallet-only'
-                            });
-                        } else {
-                            // 首次创建，写入 createdAt
-                            await setDoc(walletUserRef, {
-                                address: address,
-                                createdAt: serverTimestamp(),
-                                lastConnectedAt: serverTimestamp(),
-                                chainId: chainId || null,
-                                networkName: networkName || null,
-                                userType: 'wallet-only'
-                            }, { merge: true });
-                        }
-                    } catch (e) {
-                        console.warn('写入 users_by_wallet 失败（开发环境可忽略）:', e);
-                    }
-                }
-
-                // 1.6) 更新钱包管理器的积分（如果是现有用户，使用现有积分）
-                if (window.walletManager && isExistingUser) {
-                    console.log('🔄 Updating wallet manager credits from existing user:', existingCredits);
-                    window.walletManager.credits = existingCredits;
-                    window.walletManager.saveToStorage();
-                    window.walletManager.updateUI();
-                }
-
-                // 2) 如已登录 Google，则同步到用户空间
-                if (window.currentUser && window.currentUser.uid) {
-                    const userRef = doc(firebaseDb, 'users', window.currentUser.uid);
-                    const userDocSnap = await getDoc(userRef);
-                    if (!userDocSnap.exists()) {
-                        await setDoc(userRef, {
-                            uid: window.currentUser.uid,
-                            email: window.currentUser.email || null,
-                            displayName: window.currentUser.displayName || null,
-                            createdAt: serverTimestamp(),
-                            isActive: true
-                        }, { merge: true });
-                    }
-
-                    // 尝试从 staging 文档(users_by_wallet)合并数据（不再合并 credits）
-                    let stagedTotalCheckins = 0;
-                    try {
-                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', address.toLowerCase());
-                        const stageSnap = await getDoc(walletUserRef);
-                        if (stageSnap.exists()) {
-                            const s = stageSnap.data() || {};
-                            stagedTotalCheckins = Number(s.totalCheckins || 0);
-                        }
-                    } catch (e) {
-                        console.warn('读取 users_by_wallet staging 失败（可忽略）:', e);
-                    }
-
-                    await updateDoc(userRef, {
-                        primaryWallet: address,
-                        primaryChainId: chainId || null,
-                        primaryNetwork: networkName || null,
-                        walletLinkedAt: serverTimestamp(),
-                        walletOnlyProfile: address.toLowerCase()
-                    });
-
-                    const userWalletRef = doc(firebaseDb, 'users', window.currentUser.uid, 'wallets', address);
-                    await setDoc(userWalletRef, {
-                        address: address,
-                        chainId: chainId || null,
-                        networkName: networkName || null,
-                        lastConnectedAt: serverTimestamp(),
-                        totalCheckins: stagedTotalCheckins
-                    }, { merge: true });
-
-                    // 标记钱包与用户已链接
-                    try {
-                        await updateDoc(walletRef, {
-                            linkedUid: window.currentUser.uid,
-                            linkedAt: serverTimestamp()
-                        });
-                    } catch (e) {
-                        console.warn('标记钱包链接失败（可忽略）:', e);
-                    }
-
-                    // 标记 staging 文档为已链接（保留以兼容历史逻辑）
-                    try {
-                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', address.toLowerCase());
-                        await setDoc(walletUserRef, {
-                            linked: true,
-                            linkedUid: window.currentUser.uid,
-                            linkedAt: serverTimestamp()
-                        }, { merge: true });
-                    } catch (e) {
-                        console.warn('标记 users_by_wallet 已链接失败（可忽略）:', e);
-                    }
-                }
-
-                // 3) UI 提示
-                const info = document.getElementById('walletInfo');
-                if (info) {
-                    info.style.display = 'block';
-                    info.textContent = `已连接钱包：${address}${chainId ? `（链ID: ${chainId}）` : ''}`;
-                }
-
-                // Log client-side connection time
-                console.log('🕒 Wallet connected at (client):', new Date().toISOString());
-
-                console.log('✅ 钱包信息已写入 Firestore', { address, chainId, networkName });
-                // 标记钱包已连接
-                localStorage.setItem('walletConnected', 'true');
-            } catch (err) {
-                console.error('❌ 写入钱包信息到 Firestore 失败:', err);
-                alert('保存钱包信息失败：' + err.message);
+            } catch (e) {
+                console.warn('写入 users_by_wallet 失败（开发环境可忽略）:', e);
             }
-        };
+        }
+
+        // 1.6) 更新钱包管理器的积分（如果是现有用户，使用现有积分）
+        if (window.walletManager && isExistingUser) {
+            console.log('🔄 Updating wallet manager credits from existing user:', existingCredits);
+            window.walletManager.credits = existingCredits;
+            window.walletManager.saveToStorage();
+            window.walletManager.updateUI();
+        }
+
+        // 2) 如已登录 Google，则同步到用户空间
+        if (window.currentUser && window.currentUser.uid) {
+            const userRef = doc(firebaseDb, 'users', window.currentUser.uid);
+            const userDocSnap = await getDoc(userRef);
+            if (!userDocSnap.exists()) {
+                await setDoc(userRef, {
+                    uid: window.currentUser.uid,
+                    email: window.currentUser.email || null,
+                    displayName: window.currentUser.displayName || null,
+                    createdAt: serverTimestamp(),
+                    isActive: true
+                }, { merge: true });
+            }
+
+            // 尝试从 staging 文档(users_by_wallet)合并数据（不再合并 credits）
+            let stagedTotalCheckins = 0;
+            try {
+                const walletUserRef = doc(firebaseDb, 'users_by_wallet', docId);
+                const stageSnap = await getDoc(walletUserRef);
+                if (stageSnap.exists()) {
+                    const s = stageSnap.data() || {};
+                    stagedTotalCheckins = Number(s.totalCheckins || 0);
+                }
+            } catch (e) {
+                console.warn('读取 users_by_wallet staging 失败（可忽略）:', e);
+            }
+
+            await updateDoc(userRef, {
+                primaryWallet: address,
+                primaryChainId: chainId || null,
+                primaryNetwork: networkName || null,
+                walletLinkedAt: serverTimestamp(),
+                walletOnlyProfile: docId
+            });
+
+            const userWalletRef = doc(firebaseDb, 'users', window.currentUser.uid, 'wallets', address);
+            await setDoc(userWalletRef, {
+                address: address,
+                chainId: chainId || null,
+                networkName: networkName || null,
+                lastConnectedAt: serverTimestamp(),
+                totalCheckins: stagedTotalCheckins
+            }, { merge: true });
+
+            // 标记钱包与用户已链接
+            try {
+                await updateDoc(walletRef, {
+                    linkedUid: window.currentUser.uid,
+                    linkedAt: serverTimestamp()
+                });
+            } catch (e) {
+                console.warn('标记钱包链接失败（可忽略）:', e);
+            }
+
+            // 标记 staging 文档为已链接（保留以兼容历史逻辑）
+            try {
+                const walletUserRef = doc(firebaseDb, 'users_by_wallet', docId);
+                await setDoc(walletUserRef, {
+                    linked: true,
+                    linkedUid: window.currentUser.uid,
+                    linkedAt: serverTimestamp()
+                }, { merge: true });
+            } catch (e) {
+                console.warn('标记 users_by_wallet 已链接失败（可忽略）:', e);
+            }
+        }
+
+        // 3) UI 提示
+        const info = document.getElementById('walletInfo');
+        if (info) {
+            info.style.display = 'block';
+            info.textContent = `已连接钱包：${address}${chainId ? `（链ID: ${chainId}）` : ''}`;
+        }
+
+        // Log client-side connection time
+        console.log('🕒 Wallet connected at (client):', new Date().toISOString());
+
+        console.log('✅ 钱包信息已写入 Firestore', { address, chainId, networkName });
+        // 记录最近钱包类型（而不是依赖 walletConnected flag）
+        localStorage.setItem('wallet_type', window.walletManager?.walletType || 'metamask');
+    } catch (err) {
+        console.error('❌ 写入钱包信息到 Firestore 失败:', err);
+        alert('保存钱包信息失败：' + err.message);
+    }
+};
 
         // —— 全局错误监听，便于排查初始化被阻断的问题 ——
         window.addEventListener('error', function(e) {

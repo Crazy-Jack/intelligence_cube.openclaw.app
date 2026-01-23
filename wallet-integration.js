@@ -649,41 +649,53 @@ async function connectMetaMaskWallet() {
   if (isMobileEnv) {
     const provider = window.ethereum;
     const hasMetaMaskProvider = provider && provider.isMetaMask === true;
-    
+
     console.log('[Connect][MetaMask] Mobile env, hasMetaMaskProvider:', hasMetaMaskProvider);
-    
-    // 如果没有任何 MetaMask provider，直接打开 deep link
+
+    // 没有 MetaMask provider -> deep link
     if (!hasMetaMaskProvider) {
       console.log('[Connect][MetaMask] No MetaMask provider → opening deep link');
       try { closeWalletModal?.(); } catch (_) {}
-      
+
       const currentUrl = window.location.href;
       const urlWithoutProtocol = currentUrl.replace(/^https?:\/\//, '');
       const metamaskDeepLink = `https://metamask.app.link/dapp/${urlWithoutProtocol}`;
-      
+
       window.location.href = metamaskDeepLink;
       return;
     }
-    
-    // 有 provider，尝试直接连接（带超时），如果失败则回退到 deep link
+
+    // 有 provider -> 先授权账户，再尝试切链（避免"请先 eth_requestAccounts"）
     console.log('[Connect][MetaMask] Has provider, trying direct connection...');
     try {
-      // 先确保切到正确的链
-      await enforcePreferredEvmChain(provider);
-      
-      // 尝试请求账户，设置超时（3秒）
-      const accountsPromise = provider.request({ method: 'eth_requestAccounts' });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Connection timeout')), 1500)
-      );
-      
-      await Promise.race([accountsPromise, timeoutPromise]);
+      // ① 先检查是否已有授权（NO prompt）
+      let accts = [];
+      try {
+        accts = await provider.request({ method: 'eth_accounts' });
+      } catch (_) {}
+
+      // ② 没授权才 requestAccounts（有 prompt）
+      if (!Array.isArray(accts) || accts.length === 0) {
+        const accountsPromise = provider.request({ method: 'eth_requestAccounts' });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timeout')), 6000) // 移动端 1.5s 太短
+        );
+        await Promise.race([accountsPromise, timeoutPromise]);
+      }
+
       const address = await waitForAccounts(provider);
-      
-      // 连接成功！
+
+      // ③ 再尝试切链（失败不阻塞，只提示）
+      try {
+        await enforcePreferredEvmChain(provider);
+      } catch (switchErr) {
+        console.warn('[Connect][MetaMask] Network switch failed (non-fatal):', switchErr?.message);
+      }
+
       const chainId = await provider.request({ method: 'eth_chainId' });
-      
+
       if (window.walletManager) {
+        window.walletManager.ethereum = provider;
         window.walletManager.walletType = 'metamask';
         window.walletManager.walletAddress = address;
         window.walletManager.isConnected = true;
@@ -697,14 +709,14 @@ async function connectMetaMaskWallet() {
           }
         }));
       }
-      
+
       // 关闭弹窗
       const modal = document.getElementById('walletModal');
       if (modal) {
         modal.classList.remove('show');
         modal.style.display = 'none';
       }
-      
+
       if (window.bscGuide && typeof window.bscGuide.showSuccessMessage === 'function') {
         window.bscGuide.showSuccessMessage(address, chainId);
       } else {
@@ -712,23 +724,22 @@ async function connectMetaMaskWallet() {
       }
       console.log('[Connect][MetaMask] Mobile direct connection success ->', address);
       return;
-      
+
     } catch (e) {
-      // 连接失败（超时或用户拒绝），回退到 deep link
-      console.log('[Connect][MetaMask] Direct connection failed:', e.message, '→ opening deep link');
-      
-      // 如果是用户主动拒绝，不要跳转 deep link
-      if (e.code === 4001 || e.message?.includes('User rejected') || e.message?.includes('user rejected')) {
-        showNotification('Connection cancelled by user(binance wallet is not available in US region.))error');
+      console.log('[Connect][MetaMask] Direct connection failed:', e?.message, '→ fallback/deeplink');
+
+      // 用户拒绝：只提示，不 deeplink（修正文案）
+      if (e?.code === 4001 || String(e?.message || '').toLowerCase().includes('user rejected')) {
+        showNotification('Connection cancelled by user', 'info');
         return;
       }
-      
+
       try { closeWalletModal?.(); } catch (_) {}
-      
+
       const currentUrl = window.location.href;
       const urlWithoutProtocol = currentUrl.replace(/^https?:\/\//, '');
       const metamaskDeepLink = `https://metamask.app.link/dapp/${urlWithoutProtocol}`;
-      
+
       window.location.href = metamaskDeepLink;
       return;
     }
@@ -1470,16 +1481,7 @@ async function connectBinanceWallet() {
     if (window.walletManager) {
       window.walletManager.ethereum = provider;
     }
-    
-    // 🔑 桌面端可以尝试切链（扩展支持较好）
-    try {
-      await enforcePreferredEvmChain(provider);
-      console.log('[Connect][Binance] Network switched to', preferred.name);
-    } catch (switchErr) {
-      console.warn('[Connect][Binance] Network switch failed:', switchErr);
-      // 如果切链失败，不要阻止连接，继续尝试
-    }
-    
+
     // 请求账户授权
     console.log('[Connect][Binance] Requesting accounts...');
     try {
@@ -1492,12 +1494,21 @@ async function connectBinanceWallet() {
       }
       console.warn('[Connect][Binance] eth_requestAccounts warning:', requestErr?.message);
     }
-    
+
     // 等待账户地址返回
     console.log('[Connect][Binance] Waiting for accounts...');
     const address = await waitForAccounts(provider);
     if (!address) {
       throw new Error('Failed to get account address from Binance Wallet');
+    }
+
+    // 🔑 桌面端再尝试切链（扩展支持较好）
+    try {
+      await enforcePreferredEvmChain(provider);
+      console.log('[Connect][Binance] Network switched to', preferred.name);
+    } catch (switchErr) {
+      console.warn('[Connect][Binance] Network switch failed:', switchErr);
+      // 切链失败不阻塞连接
     }
     
     console.log('[Connect][Binance] Account retrieved:', address.slice(0, 6) + '...' + address.slice(-4));
@@ -1682,12 +1693,15 @@ async function connectCoinbaseWallet() {
     const { address } = await window.cdpConnect();
     if (!address) throw new Error('CDP returned empty address');
 
-    // ② 若有 provider，补齐切链与账户授权
+    // ② 若有 provider，补齐账户授权与切链（顺序：先授权，再切链）
     const provider = window.walletManager?.ethereum || window.ethereum;
     if (provider?.request) {
-      try { await enforcePreferredEvmChain(provider); } catch (e) { console.warn('[CDP] switch chain skipped:', e); }
       try { await provider.request({ method: 'eth_requestAccounts' }); } catch {}
       try { await waitForAccounts(provider); } catch {}
+
+      try { await enforcePreferredEvmChain(provider); } catch (e) {
+        console.warn('[CDP] switch chain skipped:', e);
+      }
     }
 
     // ③ 写入状态 & 刷UI & 广播
@@ -2062,6 +2076,12 @@ function initializeWalletUI() {
             } catch (e) {
                 console.error('Failed to render preferred network badge:', e);
             }
+
+            // ✅ after UI init, try restore once (desktop included)
+            attemptRestoreOnLoad();
+
+            // ✅ keep your existing mobile/binance dapp browser auto-connect (optional)
+            // attemptDappBrowserAutoConnect();
         }
     } catch (error) {
         console.error('Error initializing wallet UI:', error);
@@ -2257,6 +2277,20 @@ function checkWalletManager() {
 // 钱包事件监听器 - 更新为I3 tokens术语
 window.addEventListener('walletConnected', function(event) {
     console.log('Wallet connected event received:', event.detail);
+
+    // ✅ 只在"用户主动连接"时清除手动断开锁
+    // - restore/autoconnect 不清锁（否则锁会被自动恢复自己清掉）
+    const src = String(event?.detail?.source || '').toLowerCase();
+    const isAuto = (src === 'restore' || src === 'autoconnect' || src === 'auto');
+
+    if (!isAuto) {
+      try {
+        localStorage.removeItem('i3_manual_disconnect');
+        localStorage.removeItem('i3_manual_disconnect_addr');
+        localStorage.removeItem('i3_manual_disconnect_at');
+      } catch (_) {}
+    }
+
     const { address, credits, isNewUser } = event.detail;
     
     updateWalletUI(address, credits);
@@ -2265,22 +2299,34 @@ window.addEventListener('walletConnected', function(event) {
     
     // Persist wallet linkage to Firestore after Firebase is ready
     const writeWalletLinkage = () => {
-        try {
-            if (typeof window.onWalletConnected !== 'function') return;
-            const mm = window.walletManager?.getMetaMaskProvider?.();
-			if (mm && typeof mm.request === 'function') {
-			  mm.request({ method: 'eth_chainId' }).then((cid) => {
-			    const networkName = mapChainIdToName(cid);
-                const info = mapChainIdToDisplay(cid, window.walletManager?.walletType);
-                renderNetworkBadge(info);
-			    window.onWalletConnected(address, cid, networkName);
-			  }).catch(() => window.onWalletConnected(address));
-			} else {
-			  window.onWalletConnected(address);
-			}
-        } catch (e) {
-            console.warn('Failed to write wallet linkage to Firestore:', e);
+      try {
+        if (typeof window.onWalletConnected !== 'function') return;
+
+        const wm = window.walletManager;
+
+        // Solana：没有 eth_chainId，直接写入即可
+        if (wm?.walletType && String(wm.walletType).startsWith('solana')) {
+          const info = mapChainIdToDisplay(null, wm.walletType, 'devnet');
+          if (info) renderNetworkBadge(info);
+          window.onWalletConnected(address, null, 'solana');
+          return;
         }
+
+        // EVM：用"当前连接的 provider"，不要强行拿 MetaMask provider
+        const provider = i3_pickBestEvmProvider({ preferWalletManager: true });
+        if (provider?.request) {
+          provider.request({ method: 'eth_chainId' }).then((cid) => {
+            const networkName = mapChainIdToName(cid);
+            const info = mapChainIdToDisplay(cid, wm?.walletType);
+            if (info) renderNetworkBadge(info);
+            window.onWalletConnected(address, cid, networkName);
+          }).catch(() => window.onWalletConnected(address));
+        } else {
+          window.onWalletConnected(address);
+        }
+      } catch (e) {
+        console.warn('Failed to write wallet linkage to Firestore:', e);
+      }
     };
     if (window.firebaseDb) {
         writeWalletLinkage();
@@ -2372,9 +2418,138 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
+// ===== EVM provider / walletType helpers (SSOT) =====
+function i3_guessEvmWalletType(provider) {
+  try {
+    // ✅ Binance 强信号：优先级最高（避免 Binance provider 带 isMetaMask 兼容标记被误判）
+    const inBinanceStrong =
+      (typeof detectBinanceDappBrowser === 'function' && detectBinanceDappBrowser()) ||
+      (typeof hasStrongBinanceEvmProvider === 'function' && hasStrongBinanceEvmProvider()) ||
+      (typeof isInBinanceEnv === 'function' && isInBinanceEnv());
+
+    if (inBinanceStrong) return 'binance';
+
+    // 再按 provider flags 判
+    if (provider?.isBinance) return 'binance';
+    if (provider?.isCoinbaseWallet) return 'coinbase';
+    if (provider?.isMetaMask) return 'metamask';
+  } catch (_) {}
+
+  return 'injected';
+}
+
+function i3_pickBestEvmProvider({ preferWalletManager = true } = {}) {
+  // ✅ 0) Binance 强信号：优先拿 Binance provider（即使 window.ethereum 带 isMetaMask）
+  try {
+    const inBinanceStrong =
+      (typeof detectBinanceDappBrowser === 'function' && detectBinanceDappBrowser()) ||
+      (typeof hasStrongBinanceEvmProvider === 'function' && hasStrongBinanceEvmProvider()) ||
+      (typeof isInBinanceEnv === 'function' && isInBinanceEnv());
+
+    if (inBinanceStrong) {
+      const p =
+        (typeof getCachedBinanceProvider === 'function' ? getCachedBinanceProvider() : null) ||
+        (typeof getBinanceProvider === 'function' ? getBinanceProvider() : null) ||
+        window.ethereum;
+
+      if (p && typeof p.request === 'function') return p;
+    }
+  } catch (_) {}
+
+  // 1) Prefer the actually-connected provider (prevents "jumping providers")
+  const wm = window.walletManager;
+  if (preferWalletManager && wm?.ethereum && typeof wm.ethereum.request === 'function') {
+    return wm.ethereum;
+  }
+
+  const eth = window.ethereum;
+  if (!eth) return null;
+
+  // 2) Multi-provider env: pick by strongest signals
+  if (Array.isArray(eth.providers) && eth.providers.length) {
+    const pBinance = eth.providers.find(p => p?.isBinance);
+    if (pBinance) return pBinance;
+
+    const pCoinbase = eth.providers.find(p => p?.isCoinbaseWallet);
+    if (pCoinbase) return pCoinbase;
+
+    const pMetaMask = eth.providers.find(p => p?.isMetaMask);
+    if (pMetaMask) return pMetaMask;
+
+    return eth.providers[0];
+  }
+
+  // 3) Single provider
+  if (typeof eth.request === 'function') return eth;
+
+  return null;
+}
+
+// ===== Universal Restore (desktop included) =====
+// ✅ NEW: Universal restore (desktop included), NO popup
+async function attemptRestoreOnLoad() {
+  try {
+    if (!window.walletManager || window.walletManager.isConnected) return false;
+
+    // 手动断开锁：不自动恢复
+    if (i3_isManualDisconnectLocked()) {
+      console.log('[RestoreOnLoad] manual-disconnect lock active -> skip restore');
+      return false;
+    }
+
+    // ✅ 选择"最合理"的 EVM provider（优先当前 provider；否则按 isBinance/isCoinbase/isMetaMask 选）
+    const provider = i3_pickBestEvmProvider({ preferWalletManager: true });
+    if (!provider || typeof provider.request !== 'function') return false;
+
+    const accounts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+    if (!accounts || !accounts.length) return false;
+
+    const addr = accounts[0];
+
+    // 双保险：锁里记录地址也阻止该地址恢复
+    if (i3_isManualDisconnectLocked(addr)) {
+      console.log('[RestoreOnLoad] manual-disconnect lock matches addr -> skip restore', addr);
+      return false;
+    }
+
+    const walletType = i3_guessEvmWalletType(provider);
+
+    const r = await window.walletManager.hydrateEvmSession({
+      walletType,
+      provider,
+      address: addr,
+      emitEvent: true
+    });
+
+    console.log('[RestoreOnLoad] hydrated:', r);
+    return !!r?.success;
+  } catch (e) {
+    console.warn('[RestoreOnLoad] failed:', e);
+    return false;
+  }
+}
+
+// ===== Utility: Check Manual Disconnect Lock =====
+function i3_isManualDisconnectLocked(expectedAddr = null) {
+  try {
+    if (localStorage.getItem('i3_manual_disconnect') !== '1') return false;
+    const lockedAddr = (localStorage.getItem('i3_manual_disconnect_addr') || '').toLowerCase();
+    if (!expectedAddr) return true; // A方案：只要锁存在，就不允许任何自动恢复
+    return !lockedAddr || lockedAddr === String(expectedAddr).toLowerCase();
+  } catch (_) {
+    return false;
+  }
+}
+
 // ===== DApp Browser Auto-Connect =====
 // Automatically connect when opened in a DApp browser with injected provider
 async function attemptDappBrowserAutoConnect() {
+    // ✅ 检查手动断开锁
+    if (i3_isManualDisconnectLocked()) {
+      console.log('[AutoConnect] manual-disconnect lock active -> skip auto-connect');
+      return false;
+    }
+
     // Skip if already connected
     if (window.walletManager?.isConnected) {
         console.log('[AutoConnect] Already connected, skipping auto-connect');
@@ -2552,7 +2727,8 @@ async function attemptDappBrowserAutoConnect() {
             detail: {
                 address,
                 credits: window.walletManager.credits || 0,
-                isNewUser: !window.walletManager.getWalletData?.(address)
+                isNewUser: !window.walletManager.getWalletData?.(address),
+                source: 'autoconnect'
             }
         }));
 
@@ -2870,17 +3046,29 @@ const makeRow = (net) => {
       const isConnected = !!(window.walletManager?.isConnected);
       if (isConnected) {
         if (net.kind === 'evm') {
-          const provider =
-            window.walletManager?.getMetaMaskProvider?.() ||
-            window.walletManager?.ethereum ||
-            window.ethereum;
+          const wm = window.walletManager;
+          const provider = i3_pickBestEvmProvider({ preferWalletManager: true });
 
-          if (provider?.request) {
-            // 复用你已有的切链助手：内部会判断当前链 & 处理 4902 add+switch
-            await enforcePreferredEvmChain(provider);
-          } else {
-            throw new Error('No EVM provider available');
+          if (!provider?.request) throw new Error('No EVM provider available');
+
+          // ✅ 先确认已授权账户（避免"请先 eth_requestAccounts"）
+          const accts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+          if (!Array.isArray(accts) || accts.length === 0) {
+            window.showNotification?.('Please connect your wallet first.', 'error');
+            return;
           }
+
+          // ✅ Binance mobile in-app：不强制切链（避免刷新/断连）
+          const isMobileEnv = isMobileDevice?.() || isRealMobileDevice?.();
+          if (isMobileEnv && wm?.walletType === 'binance') {
+            window.showNotification?.(
+              'On Binance mobile, please switch network inside the wallet to avoid page refresh.',
+              'info'
+            );
+            return;
+          }
+
+          await enforcePreferredEvmChain(provider);
         } else if (net.kind === 'solana') {
           // 目前已连的是 EVM 钱包时，提示使用 Solana 钱包
           window.showNotification?.(

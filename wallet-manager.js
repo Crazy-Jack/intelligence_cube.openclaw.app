@@ -65,8 +65,22 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
   
-	  // ========== MetaMask 初始化 ==========
+	  // ========== MetaMask 初始化（安全版：不抢 Binance，不强注入） ==========
 	  async initializeSDK() {
+		  // ✅ 0) 如果当前页面是 Binance DApp Browser / 已注入 Binance provider，直接跳过 MetaMaskSDK 初始化
+		  // 目的：防止 MetaMask SDK 抢占/覆盖 window.ethereum，导致 "Binance -> Modelverse 变 MetaMask"
+		  try {
+			  const eth = window.ethereum;
+			  const hasBinance =
+				  eth?.isBinance === true ||
+				  (Array.isArray(eth?.providers) && eth.providers.some(p => p?.isBinance));
+
+			  if (hasBinance) {
+				  console.log('[wallet-manager] Binance provider detected -> skip MetaMaskSDK init');
+				  return;
+			  }
+		  } catch (_) {}
+
 		  // Wait up to ~5s for MetaMaskSDK global to appear (if loaded via script tag)
 		  let attempts = 0;
 		  while (typeof MetaMaskSDK === 'undefined' && attempts < 50) {
@@ -81,31 +95,48 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 						  name: 'Intelligence Cubed',
 						  url: 'https://intelligencecubed.netlify.app',
 						  iconUrl: [
-							  'https://intelligencecubed.netlify.app/png/i3-token-logo.png', // ← PNG 放第一个
-							  'https://intelligencecubed.netlify.app/svg/i3-token-logo.svg'      // ← 可保留 SVG 作备选
-							]
+							  'https://intelligencecubed.netlify.app/png/i3-token-logo.png',
+							  'https://intelligencecubed.netlify.app/svg/i3-token-logo.svg'
+						  ]
 					  },
 					  useDeeplink: true,
-					  forceInjectProvider: true,
+
+					  // ✅ 关键：关闭强注入（不覆盖 window.ethereum）
+					  forceInjectProvider: false,
+
 					  enableAnalytics: false
 				  });
 			  }
   
-			  this.ethereum = this.getMetaMaskProvider();
-  
+		  // ✅ 不要在页面加载时"预绑定"this.ethereum（会导致跨页 restore 选错钱包）
+		  // 只在"用户上次确实用的是 MetaMask/Coinbase/Trust"时才预绑定
+		  let lastType = '';
+		  try { lastType = (localStorage.getItem('wallet_type') || '').toLowerCase(); } catch (_) {}
+
+		  if (lastType === 'metamask' || lastType === 'coinbase' || lastType === 'trust') {
+			  this.ethereum = this.getMetaMaskProvider(lastType);
 			  if (this.ethereum) {
 				  this.setupEventListeners();
-				  console.log('MetaMask initialized');
+				  console.log('[wallet-manager] EVM provider pre-bound by last wallet_type:', lastType);
 			  } else {
-				  console.warn('MetaMask provider not found (another wallet may be default)');
+				  console.warn('[wallet-manager] No EVM provider for last wallet_type:', lastType);
 			  }
+		  } else {
+			  // lastType 是 binance / walletconnect / 空 -> 不预绑定
+			  this.ethereum = null;
+			  console.log('[wallet-manager] Skip pre-bind EVM provider (last wallet_type =', lastType || 'empty', ')');
+		  }
 		  } catch (error) {
-			  console.error('Failed to initialize wallet provider:', error);
-			  this.ethereum = this.getMetaMaskProvider();
-			  if (this.ethereum) {
-				  this.setupEventListeners();
-				  console.log('MetaMask initialized (fallback)');
-			  }
+			  console.error('[wallet-manager] Failed to initialize wallet provider:', error);
+
+			  // fallback：不要强行覆盖，只尝试拿 provider
+			  try {
+				  this.ethereum = this.getMetaMaskProvider();
+				  if (this.ethereum) {
+					  this.setupEventListeners();
+					  console.log('[wallet-manager] MetaMask initialized (fallback, safe mode)');
+				  }
+			  } catch (_) {}
 		  }
 	  }
   
@@ -465,10 +496,88 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 			  this.disconnectWallet();
 		  });
 	  }
-  
+
+
+// ✅ NEW: hydrate an already-authorized EVM account (NO popup)
+async hydrateEvmSession({ walletType = 'metamask', provider = null, address = null, emitEvent = true } = {}) {
+  try {
+    // 1) provider default
+    if (!provider) {
+      provider =
+        (typeof this.getMetaMaskProvider === 'function' ? this.getMetaMaskProvider(walletType) : null) ||
+        window.ethereum;
+    }
+    if (!provider || typeof provider.request !== 'function') {
+      return { success: false, error: 'No EVM provider available' };
+    }
+
+    // 2) address default: read eth_accounts (NO prompt)
+    if (!address) {
+      const accs = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+      address = accs && accs[0] ? accs[0] : null;
+    }
+    if (!address) {
+      return { success: false, error: 'No authorized accounts (eth_accounts empty)' };
+    }
+
+    // ✅ A方案：如果用户手动断开过，则不允许 hydrate 自动恢复
+    try {
+      const locked = localStorage.getItem('i3_manual_disconnect') === '1';
+      const lockedAddr = (localStorage.getItem('i3_manual_disconnect_addr') || '').toLowerCase();
+      if (locked) {
+        const addrLower = String(address).toLowerCase();
+        // A：只要锁存在就拦；也兼容“锁了特定地址”
+        if (!lockedAddr || lockedAddr === addrLower) {
+          return { success: false, error: 'Manual disconnect lock active' };
+        }
+      }
+    } catch (_) {}
+
+    // 3) ✅ 写回会话状态（关键）
+    this.walletType = walletType || 'metamask';
+    this.ethereum = provider;
+    this.walletAddress = address;
+    this.isConnected = true;
+
+    // 4) credits: fetch from Firebase if ready
+    if (typeof this.fetchCreditsFromFirebase === 'function') {
+      this.credits = await this.fetchCreditsFromFirebase().catch(() => this.credits || 0);
+    }
+
+    // 5) refresh UI
+    this.updateUI?.();
+
+    // 6) optional: broadcast
+    if (emitEvent) {
+      window.dispatchEvent(
+        new CustomEvent('walletConnected', {
+          detail: {
+            address: this.walletAddress,
+            credits: this.credits || 0,
+            isNewUser: false,
+            source: 'restore'
+          }
+        })
+      );
+    }
+
+    return { success: true, address: this.walletAddress, credits: this.credits || 0 };
+  } catch (e) {
+    console.error('[hydrateEvmSession] failed:', e);
+    return { success: false, error: e?.message || String(e) };
+  }
+}
+
   
 	  // ========== 统一连接入口（MetaMask 默认） ==========
 	  async connectWallet(walletType = 'metamask') {
+		  // ✅ FIX: user is explicitly reconnecting, so clear manual-disconnect lock
+		  try {
+			  localStorage.removeItem('i3_manual_disconnect');
+			  localStorage.removeItem('i3_manual_disconnect_addr');
+			  localStorage.removeItem('i3_manual_disconnect_at');
+		  } catch (_) {}
+
 		  if (walletType === 'walletconnect') {
 			  return this.connectWalletConnect();
 		  }
@@ -585,6 +694,14 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 	  }
   
   disconnectWallet() {
+		  // ✅ FIX: mark manual disconnect so auto-restore won't reconnect after refresh
+		  const prevAddr = this.walletAddress;
+		  try {
+			  localStorage.setItem('i3_manual_disconnect', '1');
+			  if (prevAddr) localStorage.setItem('i3_manual_disconnect_addr', String(prevAddr).toLowerCase());
+			  localStorage.setItem('i3_manual_disconnect_at', String(Date.now()));
+		  } catch (_) {}
+
 		  // 不再保存 wallet 特定数据到 localStorage
 		  // AppKit 断开连接方式（原样保留）
 		  if (this.walletType === 'walletconnect') {
@@ -628,6 +745,7 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 		  // Clear current session data (do not delete per-wallet archives)
 		  try {
 			  localStorage.removeItem('wallet_connected');
+			  localStorage.removeItem('walletConnected');
 			  localStorage.removeItem('wallet_type');
 			  localStorage.removeItem('user_credits');
 			  localStorage.removeItem('total_earned');
