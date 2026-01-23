@@ -1997,9 +1997,22 @@ function selectAgentFromSidebar(agentId, type) {
         sendBtn.disabled = false;
         sendBtn.style.opacity = '1';
     }
+    
+    // Check if agent belongs to current user
+    const currentWallet = getWalletAddress();
+    const isOwnAgent = type === 'my' || (currentWallet && agent.ownerAddress?.toLowerCase() === currentWallet.toLowerCase());
+    
+    // Show/hide fork button based on ownership
     if (forkBtn) {
-        forkBtn.disabled = false;
-        forkBtn.style.opacity = '1';
+        if (isOwnAgent) {
+            // Hide fork button for own agents
+            forkBtn.style.display = 'none';
+        } else {
+            // Show fork button for public agents
+            forkBtn.style.display = 'flex';
+            forkBtn.disabled = false;
+            forkBtn.style.opacity = '1';
+        }
     }
     
     // Load chat history (use id for unique storage)
@@ -2270,6 +2283,10 @@ function showAgentInfoPanel(agent) {
     const isPublic = agent.isPublic !== false;
     const isForked = !!agent.forkedFrom;
     
+    // Check if agent belongs to current user
+    const currentWallet = getWalletAddress();
+    const isOwnAgent = currentWallet && agent.ownerAddress?.toLowerCase() === currentWallet.toLowerCase();
+    
     modal.innerHTML = `
         <div class="pa-modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
             <div class="pa-modal-header" style="margin-bottom: 8px;">
@@ -2339,6 +2356,7 @@ function showAgentInfoPanel(agent) {
                     <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</div>
                 </div>
                 
+                ${!isOwnAgent ? `
                 <button 
                     id="agentInfoForkBtn"
                     onclick="forkAgentFromInfoPanel('${agent.id}', '${(agent.name || 'Unnamed').replace(/'/g, "\\'")}');" 
@@ -2347,6 +2365,7 @@ function showAgentInfoPanel(agent) {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg>
                     Fork this Agent
                 </button>
+                ` : ''}
             </div>
         </div>
     `;

@@ -138,6 +138,150 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 				  }
 			  } catch (_) {}
 		  }
+
+		  // 🚀 页面加载时，尝试自动恢复已授权的钱包连接（避免切页后回到登录态）
+		  this.tryAutoReconnect();
+	  }
+
+	  // 自动检测并恢复已授权的钱包连接（仅在未手动断开时）
+	  async tryAutoReconnect() {
+		  try {
+			  // 检查用户是否手动断开了连接（如果手动断开，不自动恢复）
+			  const manualDisconnect = localStorage.getItem('i3_manual_disconnect');
+			  const disconnectAt = parseInt(localStorage.getItem('i3_manual_disconnect_at') || '0', 10);
+			  const now = Date.now();
+			  const HOUR = 60 * 60 * 1000;
+			  
+			  // 如果在1小时内手动断开过，则不自动恢复
+			  if (manualDisconnect === '1' && (now - disconnectAt) < HOUR) {
+				  console.log('[wallet-manager] Manual disconnect recent, skipping auto-reconnect');
+				  return;
+			  }
+
+			  // 尝试从已授权的 EVM 钱包恢复
+			  if (this.ethereum && typeof this.ethereum.request === 'function') {
+				  const accounts = await this.ethereum.request({ method: 'eth_accounts' }).catch(() => []);
+				  if (accounts && accounts.length > 0) {
+					  this.walletAddress = accounts[0];
+					  this.isConnected = true;
+					  
+					  // 确定钱包类型
+					  if (this.ethereum.isCoinbaseWallet) {
+						  this.walletType = 'coinbase';
+					  } else if (this.ethereum.isTrust) {
+						  this.walletType = 'trust';
+					  } else {
+						  this.walletType = 'metamask';
+					  }
+					  
+					  // 从 Firebase 拉取最新 credits
+					  this.credits = await this.fetchCreditsFromFirebase().catch(() => 0);
+					  
+					  this.updateUI();
+					  
+					  window.dispatchEvent(new CustomEvent('walletConnected', {
+						  detail: { 
+							  address: this.walletAddress, 
+							  credits: this.credits,
+							  isAutoReconnect: true
+						  }
+					  }));
+					  
+					  // Wait for Firebase before calling onWalletConnected to avoid "Firebase 未初始化" error
+					  if (typeof window.onWalletConnected === 'function') {
+						  // Give Firebase some time to initialize (if not ready)
+						  const waitForFirebaseReady = () => {
+							  if (window.firebaseDb) {
+								  try { window.onWalletConnected(this.walletAddress, 'evm', 'auto'); } catch (e) {
+									  console.warn('[wallet-manager] onWalletConnected failed:', e);
+								  }
+							  } else {
+								  console.warn('[wallet-manager] Firebase not ready, skipping onWalletConnected');
+							  }
+						  };
+						  // Delay slightly to allow Firebase to initialize
+						  setTimeout(waitForFirebaseReady, 500);
+					  }
+					  
+					  console.log('[wallet-manager] ✅ Auto-reconnected to wallet:', this.walletAddress);
+					  
+					  // 清除旧的断开标记
+					  try {
+						  localStorage.removeItem('i3_manual_disconnect');
+						  localStorage.removeItem('i3_manual_disconnect_addr');
+						  localStorage.removeItem('i3_manual_disconnect_at');
+					  } catch (_) {}
+					  
+					  return;
+				  }
+			  }
+
+			  // 如果 EVM 失败，尝试 Solana Phantom
+			  if (!this.walletAddress) {
+				  await this.tryAutoReconnectSolana();
+			  }
+
+		  } catch (e) {
+			  console.warn('[wallet-manager] Auto-reconnect check failed:', e?.message || e);
+		  }
+	  }
+
+	  // 自动恢复 Solana 连接
+	  async tryAutoReconnectSolana() {
+		  try {
+			  let provider = null;
+			  if (window.phantom && window.phantom.solana) {
+				  provider = window.phantom.solana;
+			  } else if (window.solana) {
+				  provider = window.solana;
+			  }
+
+			  if (!provider || !provider.isPhantom) return;
+
+			  const resp = await provider.connect({ onlyIfTrusted: true }).catch(() => null);
+			  if (resp?.publicKey) {
+				  this.walletType = 'solana-phantom';
+				  this.solana = provider;
+				  this.solanaAddress = String(resp.publicKey.toBase58());
+				  this.walletAddress = this.solanaAddress;
+				  this.isConnected = true;
+
+				  this.credits = await this.fetchCreditsFromFirebase().catch(() => 0);
+				  this.updateUI();
+
+				  window.dispatchEvent(new CustomEvent('walletConnected', {
+					  detail: { 
+						  address: this.walletAddress, 
+						  credits: this.credits,
+						  isAutoReconnect: true
+					  }
+				  }));
+
+				  console.log('[wallet-manager] ✅ Auto-reconnected to Solana:', this.solanaAddress);
+
+				  // Wait for Firebase before calling onWalletConnected
+				  if (typeof window.onWalletConnected === 'function') {
+					  const waitForFirebaseReady = () => {
+						  if (window.firebaseDb) {
+							  try { window.onWalletConnected(this.walletAddress, 'solana', 'auto'); } catch (e) {
+								  console.warn('[wallet-manager] onWalletConnected failed:', e);
+							  }
+						  } else {
+							  console.warn('[wallet-manager] Firebase not ready, skipping onWalletConnected');
+						  }
+					  };
+					  setTimeout(waitForFirebaseReady, 500);
+				  }
+
+				  try {
+					  localStorage.removeItem('i3_manual_disconnect');
+					  localStorage.removeItem('i3_manual_disconnect_addr');
+					  localStorage.removeItem('i3_manual_disconnect_at');
+				  } catch (_) {}
+			  }
+		  } catch (e) {
+			  console.warn('[wallet-manager] Solana auto-reconnect failed:', e?.message || e);
+		  }
 	  }
   
 	  async initializeWalletConnect() {
