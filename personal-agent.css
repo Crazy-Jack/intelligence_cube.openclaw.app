@@ -17,6 +17,7 @@
     /* 移动端：使用class来控制显示/隐藏，而不是默认样式 */
     #agentSidebar.mobile-show-sidebar {
         display: flex !important;
+        width: 100% !important;
     }
     #agentSidebar.mobile-hide-sidebar {
         display: none !important;
