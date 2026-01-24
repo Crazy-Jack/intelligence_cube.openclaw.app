@@ -2525,16 +2525,19 @@ function selectAgentFromSidebar(agentId, type) {
     const currentWallet = getWalletAddress();
     const isOwnAgent = type === 'my' || (currentWallet && agent.ownerAddress?.toLowerCase() === currentWallet.toLowerCase());
     
-    // Show/hide fork button based on ownership and device type
+    // Show/hide fork button based on device type and agent visibility
     if (forkBtn) {
-        if (isOwnAgent || isMobileView()) {
-            // Hide fork button for own agents or on mobile
+        if (isMobileView()) {
+            // Hide fork button on mobile
             forkBtn.style.display = 'none';
-        } else {
-            // Show fork button for public agents on desktop
+        } else if (agent.isPublic !== false) {
+            // Show fork button for all public agents on desktop (including own agents and forked agents)
             forkBtn.style.display = 'flex';
             forkBtn.disabled = false;
             forkBtn.style.opacity = '1';
+        } else {
+            // Hide fork button for private agents
+            forkBtn.style.display = 'none';
         }
     }
     
@@ -2880,7 +2883,7 @@ function showAgentInfoPanel(agent) {
                     <div style="font-size: 24px; font-weight: 700; color: #ffffff;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</div>
                 </div>
                 
-                ${!isOwnAgent ? `
+                ${isPublic ? `
                 <button 
                     id="agentInfoForkBtn"
                     onclick="forkAgentFromInfoPanel('${agent.id}', '${(agent.name || 'Unnamed').replace(/'/g, "\\'")}');" 
