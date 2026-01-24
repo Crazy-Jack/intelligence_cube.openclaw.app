@@ -3234,7 +3234,7 @@ function loadUserChatHistory(agentId) {
                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
                                 Summarize key<br>concepts
                             </button>
-                            <button onclick="sendPredefinedPrompt('Explain something that users typically found confusing.')"
+                            <button onclick="sendExplainPrompt()"
                                     style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
                                     onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)';"
                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
@@ -3263,8 +3263,30 @@ function sendPredefinedPrompt(message) {
         alert('Please select an agent first');
         return;
     }
-    
+
     // Set the input value and trigger send
+    const input = document.getElementById('userChatInput');
+    if (input) {
+        input.value = message;
+        handleUserChatSend();
+    }
+}
+
+// Send explain prompt - conditional based on agent purpose/use case
+function sendExplainPrompt() {
+    if (!selectedAgentForChat) {
+        alert('Please select an agent first');
+        return;
+    }
+
+    // Check if agent has a purpose or use case defined
+    const hasPurposeOrUseCase = selectedAgentForChat.purpose || selectedAgentForChat.useCase;
+
+    // Default to decentralized AI if no purpose/use case
+    const message = hasPurposeOrUseCase
+        ? 'Explain something that users typically found confusing.'
+        : 'Explain something unknown about decentralized AI that users typically find confusing.';
+
     const input = document.getElementById('userChatInput');
     if (input) {
         input.value = message;
@@ -3630,6 +3652,7 @@ window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
 window.sendPredefinedPrompt = sendPredefinedPrompt;
+window.sendExplainPrompt = sendExplainPrompt;
 window.clearCurrentChatHistory = clearCurrentChatHistory;
 window.autoResizeChatInput = autoResizeChatInput;
 window.handleChatInputKeyDown = handleChatInputKeyDown;
