@@ -592,13 +592,15 @@ async function selectModel(modelId) {
 // Load model details
 async function loadModelDetails(modelId) {
     if (!currentWalletAddress) return;
-    
+
     try {
+        // Load files first to check processing status
+        const files = await loadModelFiles(modelId);
+
         // Find model in already loaded models list
         const model = models.find(m => m.id === modelId);
         if (model) {
-            renderModelDetails(model);
-            await loadModelFiles(modelId);
+            renderModelDetails(model, files);
         } else {
             // If not found in list, try to load from API
             const response = await fetch(`/api/personal-agent/models?ownerAddress=${encodeURIComponent(currentWalletAddress.toLowerCase())}`);
@@ -606,8 +608,7 @@ async function loadModelDetails(modelId) {
                 const data = await response.json();
                 const foundModel = data.models.find(m => m.id === modelId);
                 if (foundModel) {
-                    renderModelDetails(foundModel);
-                    await loadModelFiles(modelId);
+                    renderModelDetails(foundModel, files);
                 } else {
                     showNotification('Agent not found', 'error');
                 }
@@ -622,16 +623,19 @@ async function loadModelDetails(modelId) {
 }
 
 // Render model details with inline editing
-function renderModelDetails(model) {
+function renderModelDetails(model, files = []) {
     const detailsPanel = document.getElementById('model-details');
     if (!detailsPanel) return;
-    
+
     // Store current model ID for inline save
     window.currentInlineEditModelId = model.id;
-    
+
+    // Check if any files are still processing
+    const hasProcessingFiles = files.some(f => f.status === 'processing');
+
     // Build default system prompt for preview
     const defaultSystemPrompt = `You are ${model.name || 'this agent'}. ${model.purpose || ''}\n\nUse Case: ${model.useCase || ''}\n\nIMPORTANT: When "Relevant Knowledge Base Context" is provided below, prioritize information from those knowledge chunks to answer the user's question. Cite or reference the relevant chunks when applicable. If the knowledge base doesn't contain relevant information, use your general knowledge to provide a helpful response.\n\nAnswer the user's question as this specialized model would.`;
-    
+
     detailsPanel.innerHTML = `
         <div class="pa-model-details-header">
             <div style="flex: 1;">
@@ -678,11 +682,14 @@ function renderModelDetails(model) {
                     </svg>
                     Fork
                 </button>
-                <button class="pa-btn-success" onclick="tryAgentFromDashboard('${model.id}', '${escapeHtml(model.name || '')}')" style="margin-right: 8px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff;">
+                <button class="pa-btn-success"
+                        ${hasProcessingFiles ? 'disabled' : `onclick="tryAgentFromDashboard('${model.id}', '${escapeHtml(model.name || '')}')"`}
+                        style="margin-right: 8px; ${hasProcessingFiles ? 'opacity: 0.5; cursor: not-allowed; background: #9ca3af;' : 'background: linear-gradient(135deg, #10b981, #059669);'} border: none; color: #fff;"
+                        ${hasProcessingFiles ? 'title="Knowledge base updating..."' : ''}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
                     </svg>
-                    Try
+                    Try${hasProcessingFiles ? ' (Processing...)' : ''}
                 </button>
                 <button class="pa-btn-primary" onclick="saveInlineModelChanges()" style="margin-right: 8px;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1194,18 +1201,21 @@ async function autoGenerateUseCase(modelId) {
 
 // Load model files from backend API
 async function loadModelFiles(modelId) {
-    if (!modelId) return;
-    
+    if (!modelId) return [];
+
     try {
         const response = await fetch(`/api/personal-agent/files?modelId=${encodeURIComponent(modelId)}`);
         if (!response.ok) {
             throw new Error('Failed to load files');
         }
         const data = await response.json();
-        renderFileList(data.files || []);
+        const files = data.files || [];
+        renderFileList(files);
+        return files;
     } catch (error) {
         console.error('Error loading files:', error);
         showNotification('Failed to load files', 'error');
+        return [];
     }
 }
 
@@ -1251,6 +1261,55 @@ function renderFileList(files) {
             </div>
         </div>
     `).join('');
+}
+
+// Update Try button state based on file processing status
+function updateTryButtonState(hasProcessingFiles) {
+    // Find all Try buttons in the model details section
+    const tryButtons = document.querySelectorAll('.pa-model-details-actions .pa-btn-success');
+
+    tryButtons.forEach(button => {
+        const buttonText = button.textContent.trim();
+        // Only update the "Try" button, not the "Fork" button
+        if (buttonText.includes('Try')) {
+            if (hasProcessingFiles) {
+                // Disable the button
+                button.disabled = true;
+                button.onclick = null;
+                button.style.opacity = '0.5';
+                button.style.cursor = 'not-allowed';
+                button.style.background = '#9ca3af';
+                button.title = 'Knowledge base updating...';
+
+                // Update button text
+                const svg = button.querySelector('svg');
+                button.innerHTML = '';
+                if (svg) button.appendChild(svg);
+                button.appendChild(document.createTextNode('Try (Processing...)'));
+            } else {
+                // Enable the button
+                button.disabled = false;
+                button.style.opacity = '1';
+                button.style.cursor = 'pointer';
+                button.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                button.title = '';
+
+                // Restore onclick - need to get model info from data attribute or global
+                if (window.currentInlineEditModelId) {
+                    const model = models.find(m => m.id === window.currentInlineEditModelId);
+                    if (model) {
+                        button.onclick = () => tryAgentFromDashboard(model.id, model.name || '');
+                    }
+                }
+
+                // Update button text
+                const svg = button.querySelector('svg');
+                button.innerHTML = '';
+                if (svg) button.appendChild(svg);
+                button.appendChild(document.createTextNode('Try'));
+            }
+        }
+    });
 }
 
 // ========== Model CRUD ==========
@@ -1435,7 +1494,8 @@ async function createModel() {
                 createdAt: new Date().toISOString()
             }));
             renderFileList(pendingFiles);
-            
+            updateTryButtonState(true); // Disable Try button immediately
+
             showNotification(`Uploading ${filesToUpload.length} file(s)...`, 'info');
             
             // Upload using captured files
@@ -1494,8 +1554,9 @@ async function createModel() {
                         // Update UI
                         if (currentModelId === modelIdForPolling) {
                             renderFileList(files);
+                            updateTryButtonState(processingFiles.length > 0);
                         }
-                        
+
                         // Stop polling when no files are processing
                         if (processingFiles.length === 0) {
                             clearInterval(pollInterval);
@@ -1506,6 +1567,8 @@ async function createModel() {
                             } else if (readyFiles.length > 0) {
                                 showNotification(`${readyFiles.length} file(s) ready!`, 'success');
                             }
+                            // Ensure button is enabled when polling stops
+                            updateTryButtonState(false);
                         }
                     }
                 } catch (error) {
@@ -1743,12 +1806,35 @@ async function handleFileSelect(event) {
     }
     
     console.log(`📁 Selected ${files.length} file(s):`, files.map(f => f.name));
-    
+
+    const maxSize = 10 * 1024 * 1024; // 10MB
+
+    // Check file sizes and filter out files that are too large
+    const validFiles = [];
+    const invalidFiles = [];
+
+    files.forEach(file => {
+        if (file.size > maxSize) {
+            invalidFiles.push(file.name);
+        } else {
+            validFiles.push(file);
+        }
+    });
+
+    // Show error for oversized files
+    if (invalidFiles.length > 0) {
+        showNotification(`File(s) exceed 10MB limit: ${invalidFiles.join(', ')}`, 'error');
+    }
+
+    if (validFiles.length === 0) {
+        return;
+    }
+
     // Add new files to selectedFiles array (avoid duplicates)
-    const newFiles = files.filter(file => 
-        !selectedFiles.some(existing => 
-            existing.name === file.name && 
-            existing.size === file.size && 
+    const newFiles = validFiles.filter(file =>
+        !selectedFiles.some(existing =>
+            existing.name === file.name &&
+            existing.size === file.size &&
             existing.lastModified === file.lastModified
         )
     );
@@ -1942,7 +2028,8 @@ async function uploadFiles() {
         closeUploadFileModal();
         // Refresh file list to show all files with 'processing' status
         await loadModelFiles(currentModelId);
-        
+        updateTryButtonState(true); // Disable Try button while processing
+
         // Set up smart polling to check file status updates
         // Poll every 5 seconds, but stop when no processing files remain
         const modelIdForPolling = currentModelId; // Capture current model ID
@@ -1984,15 +2071,17 @@ async function uploadFiles() {
                     // Only update UI if status changed (reduces unnecessary DOM updates)
                     if (processingFiles.length !== lastProcessingCount) {
                         renderFileList(files);
+                        updateTryButtonState(hasProcessingFiles);
                         lastProcessingCount = processingFiles.length;
                     }
-                    
+
                     // Stop polling if no files are processing
                     if (!hasProcessingFiles) {
                         clearInterval(pollInterval);
                         console.log('⏹️  Stopped polling: No processing files remaining');
                         // Final UI update
                         renderFileList(files);
+                        updateTryButtonState(false);
                         return;
                     }
                 }
