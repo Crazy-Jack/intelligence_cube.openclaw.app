@@ -546,31 +546,19 @@ function renderModelList() {
         return;
     }
     
-    modelList.innerHTML = models.map(model => {
-        // Calculate font size based on name length
-        const nameLength = (model.name || 'Unnamed').length;
-        let fontSize = '16px'; // default
-        if (nameLength > 50) {
-            fontSize = '12px';
-        } else if (nameLength > 35) {
-            fontSize = '13px';
-        } else if (nameLength > 25) {
-            fontSize = '14px';
-        }
-
-        return `
+    modelList.innerHTML = models.map(model => `
         <div class="pa-model-item ${model.id === currentModelId ? 'selected' : ''}"
              onclick="selectModel('${model.id}')">
             <div class="pa-model-item-header">
                 <h3 class="pa-model-item-name" style="display: flex; align-items: center; gap: 8px;">
                     ${model.forkedFrom ? '<span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-width: 22px; flex-shrink: 0; background: linear-gradient(135deg, #10b981, #059669); border-radius: 4px;" title="Forked agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg></span>' : ''}
-                    <span style="flex: 1; min-width: 0; font-size: ${fontSize}; word-break: break-word; overflow-wrap: break-word;">${escapeHtml(model.name || 'Unnamed')}</span>
+                    <span style="flex: 1; min-width: 0; word-break: break-word; overflow-wrap: break-word;">${escapeHtml(model.name || 'Unnamed')}</span>
                 </h3>
                 <div class="pa-model-item-actions" onclick="event.stopPropagation()">
-                    <button class="pa-model-item-action" onclick="toggleModelVisibility('${model.id}', ${!model.isPublic})" 
+                    <button class="pa-model-item-action" onclick="toggleModelVisibility('${model.id}', ${!model.isPublic})"
                             title="${model.isPublic ? 'Make private' : 'Make public'}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            ${model.isPublic 
+                            ${model.isPublic
                                 ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
                                 : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'}
                         </svg>
@@ -591,8 +579,7 @@ function renderModelList() {
                 ${model.createdAt ? `<span>${formatDate(model.createdAt) || ''}</span>` : ''}
             </div>
         </div>
-    `;
-    }).join('');
+    `).join('');
 }
 
 // Select a model
