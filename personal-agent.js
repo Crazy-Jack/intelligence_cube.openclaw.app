@@ -546,13 +546,25 @@ function renderModelList() {
         return;
     }
     
-    modelList.innerHTML = models.map(model => `
-        <div class="pa-model-item ${model.id === currentModelId ? 'selected' : ''}" 
+    modelList.innerHTML = models.map(model => {
+        // Calculate font size based on name length
+        const nameLength = (model.name || 'Unnamed').length;
+        let fontSize = '16px'; // default
+        if (nameLength > 50) {
+            fontSize = '12px';
+        } else if (nameLength > 35) {
+            fontSize = '13px';
+        } else if (nameLength > 25) {
+            fontSize = '14px';
+        }
+
+        return `
+        <div class="pa-model-item ${model.id === currentModelId ? 'selected' : ''}"
              onclick="selectModel('${model.id}')">
             <div class="pa-model-item-header">
                 <h3 class="pa-model-item-name" style="display: flex; align-items: center; gap: 8px;">
                     ${model.forkedFrom ? '<span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-width: 22px; flex-shrink: 0; background: linear-gradient(135deg, #10b981, #059669); border-radius: 4px;" title="Forked agent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg></span>' : ''}
-                    <span style="flex: 1; min-width: 0;">${escapeHtml(model.name || 'Unnamed')}</span>
+                    <span style="flex: 1; min-width: 0; font-size: ${fontSize}; word-break: break-word; overflow-wrap: break-word;">${escapeHtml(model.name || 'Unnamed')}</span>
                 </h3>
                 <div class="pa-model-item-actions" onclick="event.stopPropagation()">
                     <button class="pa-model-item-action" onclick="toggleModelVisibility('${model.id}', ${!model.isPublic})" 
@@ -579,7 +591,8 @@ function renderModelList() {
                 ${model.createdAt ? `<span>${formatDate(model.createdAt) || ''}</span>` : ''}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Select a model
