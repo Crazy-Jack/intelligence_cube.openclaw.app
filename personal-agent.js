@@ -2544,7 +2544,7 @@ function selectAgentFromSidebar(agentId, type) {
     // Load chat history (use id for unique storage)
     loadUserChatHistory(agent.id);
     
-    console.log(`✅ Selected agent: ${agent.name} (id: ${uniqueAgentId})`);
+    console.log(`✅ Selected agent: ${agent.name} (id: ${agent.id})`);
 }
 
 // ========== Public Agents Functionality ==========
@@ -2771,7 +2771,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                         </button>
                     ` : ''}
                     ${isOwner ? `
-                        <button class="pa-btn-secondary" onclick="closePublicAgentDetailsModal(); switchTab('agent-creator'); setTimeout(() => selectModel('${agent.id}'), 100);">
+                        <button class="pa-btn-secondary" onclick="closePublicAgentDetailsModal(); switchTab('model-creator'); setTimeout(() => selectModel('${agent.id}'), 100);">
                             Edit
                         </button>
                     ` : ''}
