@@ -661,7 +661,7 @@ function renderModelDetails(model, files = []) {
                             <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
                             <path d="M12 12v3"></path>
                         </svg>
-                        Forked from <strong style="margin-left: 4px;">${escapeHtml(model.forkedFromName || 'Unknown Agent')}</strong>
+                        Forked from <strong style="margin-left: 4px;" title="${escapeHtml(model.forkedFromName || 'Unknown Agent')}">${escapeHtml((model.forkedFromName || 'Unknown Agent').length > 20 ? (model.forkedFromName || 'Unknown Agent').slice(0, 20) + '...' : (model.forkedFromName || 'Unknown Agent'))}</strong>
                         <span style="color: #6b7280; margin-left: 4px;">by ${model.forkedFromOwner ? model.forkedFromOwner.slice(0, 6) + '...' + model.forkedFromOwner.slice(-4) : 'Unknown'}</span>
                     </span>
                     <a href="#" onclick="showForkHistory('${model.id}'); return false;" 
