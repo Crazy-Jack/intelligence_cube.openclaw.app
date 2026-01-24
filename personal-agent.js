@@ -3234,11 +3234,11 @@ function loadUserChatHistory(agentId) {
                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
                                 Summarize key<br>concepts
                             </button>
-                            <button onclick="sendPredefinedPrompt('What topics can you help me with?')" 
+                            <button onclick="sendPredefinedPrompt('Explain something that users typically found confusing.')"
                                     style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
                                     onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)';"
                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
-                                What can you<br>help with?
+                                Explain a difficult<br>topic
                             </button>
                             <button onclick="sendPredefinedPrompt('Generate 5 Q&A pairs to test my understanding')" 
                                     style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
@@ -3449,7 +3449,7 @@ async function showForkHistory(modelId) {
             const isClickable = !isFirst && item.isPublic; // Can click non-current public agents
             
             return `
-                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <div style="display: flex; align-items: stretch; gap: 12px;">
                     <div style="display: flex; flex-direction: column; align-items: center;">
                         <div style="width: 32px; height: 32px; border-radius: 50%; background: ${isFirst ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : isLast ? 'linear-gradient(135deg, #10b981, #059669)' : '#e5e7eb'}; display: flex; align-items: center; justify-content: center;">
                             ${isFirst 
@@ -3459,16 +3459,17 @@ async function showForkHistory(modelId) {
                                     : `<span style="color: #6b7280; font-size: 12px; font-weight: 600;">${forkChain.length - index}</span>`
                             }
                         </div>
-                        ${!isLast ? '<div style="width: 2px; height: 24px; background: #d1d5db;"></div>' : ''}
+                        ${!isLast ? '<div style="width: 2px; flex: 1; min-height: 24px; background: #d1d5db;"></div>' : ''}
                     </div>
                     <div style="flex: 1; padding-bottom: ${isLast ? '0' : '16px'};">
-                        ${isClickable 
-                            ? `<a href="#" onclick="openAgentFromForkHistory('${item.id}'); return false;" 
+                        ${isClickable
+                            ? `<a href="#" onclick="openAgentFromForkHistory('${item.id}'); return false;"
                                   style="font-weight: 600; color: #8b5cf6; font-size: 14px; text-decoration: underline; cursor: pointer;"
                                   title="Click to chat with this agent">${escapeHtml(item.name || 'Unknown Agent')}</a>`
                             : `<div style="font-weight: 600; color: ${!isFirst && !item.isPublic ? '#9ca3af' : '#111827'}; font-size: 14px;">${escapeHtml(item.name || 'Unknown Agent')}${!isFirst && !item.isPublic ? ' <span style="font-size: 10px; color: #9ca3af;">(private)</span>' : ''}</div>`
                         }
                         <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">by ${ownerDisplay}</div>
+                        ${item.isPublic && item.purpose ? `<div style="font-size: 11px; color: #6b7280; margin-top: 4px; font-style: italic; line-height: 1.4;">${escapeHtml(item.purpose)}</div>` : ''}
                         ${isFirst ? '<span style="display: inline-block; margin-top: 4px; background: #ede9fe; color: #7c3aed; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Current</span>' : ''}
                         ${isLast ? '<span style="display: inline-block; margin-top: 4px; background: #d1fae5; color: #059669; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Original</span>' : ''}
                     </div>
@@ -3520,7 +3521,8 @@ async function fetchForkChain(modelId, chain = [], depth = 0) {
             name: model.name,
             ownerAddress: model.ownerAddress,
             forkedFrom: model.forkedFrom,
-            isPublic: model.isPublic || false
+            isPublic: model.isPublic || false,
+            purpose: model.purpose || ''
         });
         
         // If this model was forked from another, continue up the chain
