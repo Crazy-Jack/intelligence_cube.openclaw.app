@@ -87,7 +87,14 @@ const I3_NETWORKS = {
   'polygon-zkevm': { kind:'evm', key:'polygon-zkevm', name:'Polygon zkEVM', icon:'svg/chains/polygon-zkevm.svg', chainId:'0x44d' },
   optimism: { kind:'evm', key:'optimism', name:'Optimism', icon:'svg/chains/optimism.svg', chainId:'0xa' },
   opbnb: { kind:'evm', key:'opbnb', name:'opBNB', icon:'svg/chains/opbnb.svg', chainId:'0xcc' },
-  solana:   { kind:'solana', key:'solana', name:'Solana (Devnet)', icon:'svg/chains/solana.svg', network:'devnet' },
+
+  // Solana family (SVM)
+  solana:   { kind:'solana', key:'solana',         name:'Solana (Devnet)',  icon:'svg/chains/solana.svg',  network:'devnet' },
+  'solana-mainnet': { kind:'solana', key:'solana-mainnet', name:'Solana (Mainnet)', icon:'svg/chains/solana.svg', network:'mainnet-beta' },
+
+  // Solayer (InfiniSVM) - Solana-compatible RPC
+  'solayer-devnet':  { kind:'solana', key:'solayer-devnet',  name:'Solayer (Devnet)',  icon:'svg/chains/solayer.svg', network:'devnet',       rpc:'https://devnet-rpc.solayer.org' },
+  'solayer-mainnet': { kind:'solana', key:'solayer-mainnet', name:'Solayer (Mainnet)', icon:'svg/chains/solayer.svg', network:'mainnet-beta', rpc:'https://mainnet-rpc.solayer.org' },
 };
 
 function getPreferredNetwork() {
@@ -100,8 +107,19 @@ function getPreferredNetwork() {
   return null; 
 }
 
+// ✅ 只在第一次进入站点时初始化默认网络为 BNB（不覆盖用户已有选择）
+function i3_ensureDefaultPreferredNetwork() {
+  try {
+    const raw = localStorage.getItem('i3_preferred_network');
+    if (raw) return;
+    localStorage.setItem('i3_preferred_network', JSON.stringify({ key: 'bnb' }));
+  } catch {}
+}
+i3_ensureDefaultPreferredNetwork();
+
 function setPreferredNetwork(key) {
-  const n = I3_NETWORKS[key] || I3_NETWORKS.ethereum;
+  // ✅ 兜底改成 BNB（避免无效 key 回到 Ethereum）
+  const n = I3_NETWORKS[key] || I3_NETWORKS.bnb;
   localStorage.setItem('i3_preferred_network', JSON.stringify({ key: n.key }));
   // 刷新徽章
   renderNetworkBadge({ name: n.name, icon: n.icon });
@@ -631,9 +649,9 @@ function getBinanceProvider() {
 // 1) MetaMask —— 桌面走 extension，手机走 deep link 到 MetaMask App
 async function connectMetaMaskWallet() {
   let preferred = getPreferredNetwork();
-  // Auto-select Ethereum if no preference is set
+  // Auto-select BNB if no preference is set
   if (!preferred) {
-      setPreferredNetwork('ethereum');
+      setPreferredNetwork('bnb');
       preferred = getPreferredNetwork();
   }
   
@@ -868,8 +886,16 @@ async function connectBinanceWallet() {
       }
       
       const address = accounts[0];
-      
-      // Get chain ID
+
+      // ✅ 真切链：连接后将钱包链对齐到用户选择的 preferred network（默认 BNB）
+      try {
+        await enforcePreferredEvmChain(provider);
+        await new Promise(r => setTimeout(r, 150));
+      } catch (switchErr) {
+        console.warn('[Connect][Binance] Network switch failed (non-fatal):', switchErr?.message || switchErr);
+      }
+
+      // Get chain ID (authoritative)
       const chainId = await provider.request({ method: 'eth_chainId' });
       
       // Update wallet manager
@@ -1020,6 +1046,14 @@ async function connectBinanceWallet() {
             isNewUser: !window.walletManager.getWalletData?.(address)
           }
         }));
+
+        // ✅ 真切链：连接后将钱包链对齐到用户选择的 preferred network（默认 BNB）
+        try {
+          await enforcePreferredEvmChain(provider);
+          await new Promise(r => setTimeout(r, 150));
+        } catch (switchErr) {
+          console.warn('[Binance] Network switch failed (non-fatal):', switchErr?.message || switchErr);
+        }
 
         // 更新网络徽章
         try {
@@ -1738,7 +1772,7 @@ async function connectCoinbaseWallet() {
 async function connectWalletConnect() {
   let preferred = getPreferredNetwork();
   if (!preferred) {
-    setPreferredNetwork('ethereum');
+    setPreferredNetwork('bnb');
     preferred = getPreferredNetwork();
   }
 
@@ -2304,11 +2338,13 @@ window.addEventListener('walletConnected', function(event) {
 
         const wm = window.walletManager;
 
-        // Solana：没有 eth_chainId，直接写入即可
+        // Solana/SVM：没有 eth_chainId，写入 preferred key（solana / solana-mainnet / solayer-...）
         if (wm?.walletType && String(wm.walletType).startsWith('solana')) {
-          const info = mapChainIdToDisplay(null, wm.walletType, 'devnet');
+          const preferred = (typeof getPreferredNetwork === 'function' && getPreferredNetwork()) || null;
+          const hintKey = (preferred && preferred.key) ? preferred.key : 'solana';
+          const info = mapChainIdToDisplay(null, wm.walletType, hintKey);
           if (info) renderNetworkBadge(info);
-          window.onWalletConnected(address, null, 'solana');
+          window.onWalletConnected(address, null, hintKey);
           return;
         }
 
@@ -2660,7 +2696,7 @@ async function attemptDappBrowserAutoConnect() {
         } else if (walletType === 'coinbase') {
             setPreferredNetwork('base');
         } else if (!getPreferredNetwork()) {
-            setPreferredNetwork('ethereum');
+            setPreferredNetwork('bnb');
         }
 
         // Request accounts from injected provider
@@ -2889,10 +2925,24 @@ function mapChainIdToDisplay(chainId, walletType, solanaNetworkHint) {
     '0x144':   { name:'ZKsync Era',    icon:'svg/chains/zksync.svg' },
     '0xcc':    { name:'opBNB', icon:'svg/chains/opbnb.svg' },
   };
-  // Solana（用 walletType + network hint）
+  // Solana/SVM（用 walletType + network hint / preferred key）
   if ((walletType || '').startsWith('solana')) {
-    const net = (solanaNetworkHint || 'devnet').toLowerCase();
-    return { name: `Solana ${net[0].toUpperCase()+net.slice(1)}`, icon:'svg/chains/solana.svg' };
+    const hint = String(solanaNetworkHint || 'devnet').toLowerCase();
+
+    // Solayer preferred keys: solayer-devnet / solayer-mainnet
+    if (hint.startsWith('solayer')) {
+      const isMain = hint.includes('main');
+      return { name: `Solayer ${isMain ? 'Mainnet' : 'Devnet'}`, icon:'svg/chains/solayer.svg' };
+    }
+
+    // Solana preferred keys / network strings
+    const isMain = (
+      hint === 'mainnet' ||
+      hint === 'mainnet-beta' ||
+      hint === 'solana-mainnet' ||
+      hint.includes('mainnet')
+    );
+    return { name: `Solana ${isMain ? 'Mainnet' : 'Devnet'}`, icon:'svg/chains/solana.svg' };
   }
   return CHAINS[chainId] || null; // 未匹配则不显示
 }
@@ -3014,7 +3064,11 @@ function openNetworkPickerModal() {
   list.style.flexDirection = 'column';
   list.style.gap = '12px';
 
-  const order = ['bnb','opbnb','ethereum','base','arbitrum','zksync','polygon-zkevm','optimism','solana'];
+  const order = [
+    'bnb','opbnb','ethereum','base','arbitrum','zksync','polygon-zkevm','optimism',
+    // Solana family (SVM)
+    'solana','solana-mainnet','solayer-devnet','solayer-mainnet'
+  ];
 
   // ✅ 和 Login 保持一致的结构：wallet-option + wallet-icon-wrap + wallet-info/wallet-name
 const makeRow = (net) => {
@@ -3022,7 +3076,14 @@ const makeRow = (net) => {
   row.className = 'wallet-option available';
 
   // ✅ 检查是否支持签到
-  const supportsCheckIn = (net.key === 'bnb' || net.key === 'opbnb' || net.key === 'solana');
+  const supportsCheckIn = (
+    net.key === 'bnb' ||
+    net.key === 'opbnb' ||
+    net.key === 'solana' ||
+    net.key === 'solana-mainnet' ||
+    net.key === 'solayer-devnet' ||
+    net.key === 'solayer-mainnet'
+  );
   
   row.innerHTML = `
     <span class="wallet-icon-wrap">
@@ -3035,56 +3096,91 @@ const makeRow = (net) => {
     </div>
   `;
 
-  // ✅ 改为异步：点选后立即切链（若已连接）
-  row.onclick = async () => {
-    try {
-      // 1) 先写入首选网络 & 立刻刷新左上角徽章
-      setPreferredNetwork(net.key);
-      renderNetworkBadge({ name: net.name, icon: net.icon });
+row.onclick = async () => {
+  try {
+    // 1) 先写入首选网络（EVM 会尝试真切链；SVM 走连接/切 RPC）
+    setPreferredNetwork(net.key);
 
-      // 2) 如果当前已连接：EVM 直接切链；Solana 给提示
-      const isConnected = !!(window.walletManager?.isConnected);
-      if (isConnected) {
-        if (net.kind === 'evm') {
-          const wm = window.walletManager;
-          const provider = i3_pickBestEvmProvider({ preferWalletManager: true });
+    const wm = window.walletManager;
+    const isConnected = !!(wm?.isConnected);
 
-          if (!provider?.request) throw new Error('No EVM provider available');
-
-          // ✅ 先确认已授权账户（避免"请先 eth_requestAccounts"）
-          const accts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
-          if (!Array.isArray(accts) || accts.length === 0) {
-            window.showNotification?.('Please connect your wallet first.', 'error');
-            return;
-          }
-
-          // ✅ Binance mobile in-app：不强制切链（避免刷新/断连）
-          const isMobileEnv = isMobileDevice?.() || isRealMobileDevice?.();
-          if (isMobileEnv && wm?.walletType === 'binance') {
-            window.showNotification?.(
-              'On Binance mobile, please switch network inside the wallet to avoid page refresh.',
-              'info'
-            );
-            return;
-          }
-
-          await enforcePreferredEvmChain(provider);
-        } else if (net.kind === 'solana') {
-          // 目前已连的是 EVM 钱包时，提示使用 Solana 钱包
-          window.showNotification?.(
-            'Please connect with a Solana wallet (e.g., Phantom) to use Solana.',
-            'info'
-          );
-        }
-      }
-    } catch (e) {
-      console.error('[NetworkPicker] switch failed:', e);
-      window.showNotification?.(e?.message || 'Failed to switch network', 'error');
-    } finally {
-      // 不论成功/失败都关闭弹窗
-      close();
+    // 未连接：仅更新徽章（首屏/预选）
+    if (!isConnected) {
+      try { renderNetworkBadge({ name: net.name, icon: net.icon }); } catch {}
+      return;
     }
-  };
+
+    // 已连接：按网络类型处理
+    if (net.kind === 'evm') {
+      const provider = i3_pickBestEvmProvider({ preferWalletManager: true });
+      if (!provider?.request) throw new Error('No EVM provider available');
+
+      // 先确认已授权账户
+      const accts = await provider.request({ method: 'eth_accounts' }).catch(() => []);
+      if (!Array.isArray(accts) || accts.length === 0) {
+        window.showNotification?.('Please connect your wallet first.', 'error');
+        return;
+      }
+
+      // ✅ Binance Mobile 也走真切链（不再"假切链"）
+      try {
+        await enforcePreferredEvmChain(provider);
+        // 部分钱包切链后需要一个 tick 才更新 chainId
+        await new Promise(r => setTimeout(r, 150));
+      } catch (switchErr) {
+        // 切链失败：徽章回滚到真实链
+        try {
+          const curId = await provider.request({ method: 'eth_chainId' });
+          const curDisplay = mapChainIdToDisplay(curId, wm?.walletType);
+          if (curDisplay) renderNetworkBadge(curDisplay);
+        } catch {}
+        throw switchErr;
+      }
+
+      // 用真实 chainId 渲染徽章（避免 UI 与链不一致）
+      try {
+        const nowId = await provider.request({ method: 'eth_chainId' });
+        const display = mapChainIdToDisplay(nowId, wm?.walletType);
+        if (display) renderNetworkBadge(display);
+        else renderNetworkBadge({ name: net.name, icon: net.icon });
+      } catch {
+        try { renderNetworkBadge({ name: net.name, icon: net.icon }); } catch {}
+      }
+
+      try { window.onWalletConnected?.(wm?.walletAddress, null, net.key); } catch {}
+      window.showNotification?.(`Switched to ${net.name}.`, 'success');
+      return;
+    }
+
+    if (net.kind === 'solana') {
+      const isSolWallet = String(wm?.walletType || '').startsWith('solana');
+
+      if (isSolWallet) {
+        try {
+          wm?.initSolanaConnection?.(net.network || 'devnet', net.rpc || '');
+        } catch (e) {
+          console.warn('[NetworkPicker] Solana RPC switch failed:', e);
+        }
+
+        try { renderNetworkBadge({ name: net.name, icon: net.icon }); } catch {}
+        try { window.onWalletConnected?.(wm?.walletAddress, null, net.key); } catch {}
+
+        window.showNotification?.(`Switched to ${net.name}.`, 'success');
+      } else {
+        window.showNotification?.(
+          'Please connect with a Solana wallet (e.g., Phantom) to use Solana/SVM networks.',
+          'info'
+        );
+      }
+      return;
+    }
+  } catch (e) {
+    console.error('[NetworkPicker] switch failed:', e);
+    window.showNotification?.(e?.message || 'Failed to switch network', 'error');
+  } finally {
+    close();
+  }
+};
 
   return row;
 };
