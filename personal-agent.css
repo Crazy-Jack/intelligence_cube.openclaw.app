@@ -757,6 +757,33 @@
     #selectedAgentHeaderContent {
         padding-left: 52px !important;
     }
+
+    /* 移动端 send button 改为小正方形，只显示图标 */
+    #userChatSendBtn {
+        padding: 12px !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
+        border-radius: 8px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* 移动端隐藏 fork button */
+    #userChatForkBtn {
+        display: none !important;
+    }
+
+    /* 移动端消息内容占满宽度 */
+    #userChatMessages {
+        max-width: 100% !important;
+    }
+
+    .user-chat-message {
+        max-width: 100% !important;
+    }
 }
 
 /* Agent Sidebar Styles */

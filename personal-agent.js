@@ -2424,19 +2424,25 @@ function selectAgentFromSidebar(agentId, type) {
     if (sendBtn) {
         sendBtn.disabled = false;
         sendBtn.style.opacity = '1';
+        // 在移动端显示纸飞机图标
+        if (isMobileView()) {
+            sendBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+        } else {
+            sendBtn.textContent = 'Send';
+        }
     }
     
     // Check if agent belongs to current user
     const currentWallet = getWalletAddress();
     const isOwnAgent = type === 'my' || (currentWallet && agent.ownerAddress?.toLowerCase() === currentWallet.toLowerCase());
     
-    // Show/hide fork button based on ownership
+    // Show/hide fork button based on ownership and device type
     if (forkBtn) {
-        if (isOwnAgent) {
-            // Hide fork button for own agents
+        if (isOwnAgent || isMobileView()) {
+            // Hide fork button for own agents or on mobile
             forkBtn.style.display = 'none';
         } else {
-            // Show fork button for public agents
+            // Show fork button for public agents on desktop
             forkBtn.style.display = 'flex';
             forkBtn.disabled = false;
             forkBtn.style.opacity = '1';
@@ -3183,15 +3189,22 @@ function appendUserChatMessage(role, content) {
     const messageEl = document.createElement('div');
     messageEl.id = messageId;
     messageEl.className = role === 'user' ? 'user-chat-message user' : 'user-chat-message assistant';
+    
+    // 移动端消息占满宽度，桌面端最宽 75%
+    const maxWidth = isMobileView() ? '100%' : '75%';
+    const marginStyle = role === 'user' 
+        ? `margin-left: auto; margin-right: 0;`
+        : `margin-right: auto; margin-left: 0;`;
+    
     messageEl.style.cssText = `
         margin-bottom: 16px;
         padding: ${role === 'user' ? '12px 16px' : '16px 20px 16px 28px'};
-        max-width: 75%;
+        max-width: ${maxWidth};
         width: fit-content;
         word-wrap: break-word;
         ${role === 'user' 
-            ? 'background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; margin-left: auto; margin-right: 0; border-radius: 18px 18px 4px 18px;' 
-            : 'background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; margin-right: auto; margin-left: 0; border-radius: 18px 18px 18px 4px;'}
+            ? `background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; border-radius: 18px 18px 4px 18px; ${marginStyle}` 
+            : `background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; border-radius: 18px 18px 18px 4px; ${marginStyle}`}
     `;
     
     if (content) {
