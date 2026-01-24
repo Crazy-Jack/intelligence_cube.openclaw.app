@@ -3281,6 +3281,35 @@ function saveUserChatHistory(agentId) {
     }
 }
 
+// Clear chat history for current agent
+function clearCurrentChatHistory() {
+    if (!selectedAgentForChat) {
+        alert('No agent selected');
+        return;
+    }
+
+    // Confirm before clearing
+    if (!confirm('Are you sure you want to clear all chat history with this agent? This cannot be undone.')) {
+        return;
+    }
+
+    // Clear from localStorage
+    try {
+        localStorage.removeItem(`userChatHistory_${selectedAgentForChat.id}`);
+        console.log('Cleared chat history for agent:', selectedAgentForChat.id);
+    } catch (error) {
+        console.error('Error clearing chat history:', error);
+        alert('Failed to clear chat history. Please try again.');
+        return;
+    }
+
+    // Reset in-memory history
+    userChatHistory = [];
+
+    // Reload the chat UI to show empty state with predefined prompts
+    loadUserChatHistory(selectedAgentForChat.id);
+}
+
 // Helper: Escape HTML
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -3601,6 +3630,7 @@ window.openUploadFileModal = openUploadFileModal;
 window.handleAgentSelection = handleAgentSelection;
 window.handleUserChatSend = handleUserChatSend;
 window.sendPredefinedPrompt = sendPredefinedPrompt;
+window.clearCurrentChatHistory = clearCurrentChatHistory;
 window.autoResizeChatInput = autoResizeChatInput;
 window.handleChatInputKeyDown = handleChatInputKeyDown;
 window.loadPublicAgents = loadPublicAgents;
