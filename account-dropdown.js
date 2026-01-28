@@ -6,7 +6,7 @@
     <div class="account-dropdown">
       <button class="account-btn" onclick="toggleAccountDropdown()" id="accountBtn">
         <span id="accountBtnText">Login</span>
-        <span id="creditsDisplay" style="display:none;margin-left:8px;font-size:12px;color:#ffffff;font-weight:600;opacity:0.98;text-shadow:0 1px 2px rgba(0,0,0,0.35);"></span>
+        <span id="creditsDisplay" style="display:none;margin-left:8px;color:#ffffff;font-weight:600;opacity:0.98;text-shadow:0 1px 2px rgba(0,0,0,0.35);"></span>
       </button>
       <div class="dropdown-content" id="accountDropdown">
         <div id="walletSection" style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
@@ -241,6 +241,7 @@
 
   async function refreshWalletInfoUI(){
     const infoEl = document.getElementById('walletInfo');
+    const accountBtn = document.getElementById('accountBtn');
     if (!infoEl) return;
     const wm = window.walletManager;
     if (wm && wm.isConnected && wm.walletAddress) {
@@ -248,9 +249,13 @@
       const shortAddr = formatAddressShort(wm.walletAddress);
       infoEl.style.display = 'block';
       infoEl.textContent = `Connected Wallet：${shortAddr}`;
+      // Add connected class for smaller styling
+      if (accountBtn) accountBtn.classList.add('connected');
     } else {
       infoEl.style.display = 'none';
       infoEl.textContent = '';
+      // Remove connected class for larger styling
+      if (accountBtn) accountBtn.classList.remove('connected');
     }
   }
 

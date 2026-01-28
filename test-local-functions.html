@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Cloud Functions Locally</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        button { padding: 12px 24px; margin: 8px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; }
+        button.primary { background: #10b981; color: white; }
+        button.secondary { background: #3b82f6; color: white; }
+        button:hover { opacity: 0.9; }
+        .result { background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0; white-space: pre-wrap; font-family: monospace; }
+        .success { border-left: 4px solid #10b981; }
+        .error { border-left: 4px solid #ef4444; }
+        h1 { color: #111827; }
+        h2 { color: #374151; margin-top: 32px; }
+        input { padding: 12px; font-size: 16px; width: 100%; margin: 8px 0; border: 1px solid #d1d5db; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Cloud Functions (Local Emulator)</h1>
+    
+    <p>Make sure emulators are running: <code>firebase emulators:start --only functions,firestore,auth</code></p>
+    
+    <h2>1. Setup Test User</h2>
+    <button class="secondary" onclick="createTestUser()">Create Test User & Sign In</button>
+    <div id="authResult" class="result" style="display:none;"></div>
+
+    <h2>2. Test Wallet Address</h2>
+    <input type="text" id="walletInput" placeholder="Enter wallet address (e.g., 0x1234...)" 
+           value="0x1234567890123456789012345678901234567890">
+
+    <h2>3. Test Functions</h2>
+    <button class="primary" onclick="testInitializeWallet()">Initialize Wallet</button>
+    <button class="primary" onclick="testDailyCheckin()">Daily Check-in</button>
+    <button class="secondary" onclick="testGetWalletInfo()">Get Wallet Info</button>
+    
+    <h2>Results</h2>
+    <div id="results" class="result">Click a button to test...</div>
+
+    <script type="module">
+        // Firebase SDK imports
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+        import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
+        import { getFirestore, connectFirestoreEmulator } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        // Your Firebase config (only projectId matters for emulators)
+        const firebaseConfig = {
+            apiKey: "fake-api-key",
+            authDomain: "i3-testnet.firebaseapp.com",
+            projectId: "i3-testnet"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const functions = getFunctions(app);
+        const db = getFirestore(app);
+
+        // Connect to emulators
+        connectAuthEmulator(auth, 'http://localhost:9099');
+        connectFunctionsEmulator(functions, 'localhost', 5001);
+        connectFirestoreEmulator(db, 'localhost', 8081);
+
+        console.log('✅ Connected to Firebase Emulators');
+
+        const TEST_EMAIL = 'test@example.com';
+        const TEST_PASSWORD = 'testpassword123';
+
+        // Helper to show results
+        function showResult(data, isError = false) {
+            const el = document.getElementById('results');
+            el.style.display = 'block';
+            el.className = `result ${isError ? 'error' : 'success'}`;
+            el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+
+        function showAuthResult(data, isError = false) {
+            const el = document.getElementById('authResult');
+            el.style.display = 'block';
+            el.className = `result ${isError ? 'error' : 'success'}`;
+            el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+
+        // Create/sign in test user
+        window.createTestUser = async function() {
+            try {
+                // Try to create user
+                try {
+                    await createUserWithEmailAndPassword(auth, TEST_EMAIL, TEST_PASSWORD);
+                    showAuthResult(`✅ Created and signed in as: ${TEST_EMAIL}`);
+                } catch (e) {
+                    if (e.code === 'auth/email-already-in-use') {
+                        // User exists, sign in
+                        await signInWithEmailAndPassword(auth, TEST_EMAIL, TEST_PASSWORD);
+                        showAuthResult(`✅ Signed in as existing user: ${TEST_EMAIL}`);
+                    } else {
+                        throw e;
+                    }
+                }
+            } catch (error) {
+                showAuthResult(`❌ Auth Error: ${error.message}`, true);
+            }
+        };
+
+        // Test initializeWallet
+        window.testInitializeWallet = async function() {
+            const wallet = document.getElementById('walletInput').value;
+            if (!wallet) {
+                showResult('❌ Please enter a wallet address', true);
+                return;
+            }
+            
+            if (!auth.currentUser) {
+                showResult('❌ Please sign in first (click "Create Test User & Sign In")', true);
+                return;
+            }
+
+            try {
+                showResult('⏳ Calling initializeWallet...');
+                const initializeWallet = httpsCallable(functions, 'initializeWallet');
+                const result = await initializeWallet({ 
+                    walletAddress: wallet,
+                    chainId: 1,
+                    networkName: 'Ethereum'
+                });
+                showResult({
+                    status: '✅ SUCCESS',
+                    function: 'initializeWallet',
+                    ...result.data
+                });
+            } catch (error) {
+                showResult({
+                    status: '❌ ERROR',
+                    function: 'initializeWallet',
+                    code: error.code,
+                    message: error.message
+                }, true);
+            }
+        };
+
+        // Test dailyCheckin
+        window.testDailyCheckin = async function() {
+            const wallet = document.getElementById('walletInput').value;
+            if (!wallet) {
+                showResult('❌ Please enter a wallet address', true);
+                return;
+            }
+
+            if (!auth.currentUser) {
+                showResult('❌ Please sign in first (click "Create Test User & Sign In")', true);
+                return;
+            }
+
+            try {
+                showResult('⏳ Calling dailyCheckin...');
+                const dailyCheckin = httpsCallable(functions, 'dailyCheckin');
+                const result = await dailyCheckin({ walletAddress: wallet });
+                showResult({
+                    status: '✅ SUCCESS',
+                    function: 'dailyCheckin',
+                    ...result.data
+                });
+            } catch (error) {
+                showResult({
+                    status: '❌ ERROR',
+                    function: 'dailyCheckin',
+                    code: error.code,
+                    message: error.message
+                }, true);
+            }
+        };
+
+        // Test getWalletInfo
+        window.testGetWalletInfo = async function() {
+            const wallet = document.getElementById('walletInput').value;
+            if (!wallet) {
+                showResult('❌ Please enter a wallet address', true);
+                return;
+            }
+
+            if (!auth.currentUser) {
+                showResult('❌ Please sign in first (click "Create Test User & Sign In")', true);
+                return;
+            }
+
+            try {
+                showResult('⏳ Calling getWalletInfo...');
+                const getWalletInfo = httpsCallable(functions, 'getWalletInfo');
+                const result = await getWalletInfo({ walletAddress: wallet });
+                showResult({
+                    status: '✅ SUCCESS',
+                    function: 'getWalletInfo',
+                    ...result.data
+                });
+            } catch (error) {
+                showResult({
+                    status: '❌ ERROR',
+                    function: 'getWalletInfo',
+                    code: error.code,
+                    message: error.message
+                }, true);
+            }
+        };
+    </script>
+</body>
+</html>

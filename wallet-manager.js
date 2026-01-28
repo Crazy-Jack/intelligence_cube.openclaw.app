@@ -174,8 +174,11 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 						  this.walletType = 'metamask';
 					  }
 					  
-					  // 从 Firebase 拉取最新 credits
-					  this.credits = await this.fetchCreditsFromFirebase().catch(() => 0);
+					  // 从 Firebase 拉取最新 credits（仅在读取成功时覆盖）
+					  const fetchedCredits = await this.fetchCreditsFromFirebase().catch(() => null);
+					  if (Number.isFinite(fetchedCredits)) {
+						  this.credits = fetchedCredits;
+					  }
 					  
 					  this.updateUI();
 					  
@@ -246,7 +249,10 @@ async function waitForAccounts(p, { totalMs = 15000, stepMs = 400 } = {}) {
 				  this.walletAddress = this.solanaAddress;
 				  this.isConnected = true;
 
-				  this.credits = await this.fetchCreditsFromFirebase().catch(() => 0);
+				  const fetchedCredits = await this.fetchCreditsFromFirebase().catch(() => null);
+				  if (Number.isFinite(fetchedCredits)) {
+					  this.credits = fetchedCredits;
+				  }
 				  this.updateUI();
 
 				  window.dispatchEvent(new CustomEvent('walletConnected', {
@@ -712,7 +718,10 @@ async hydrateEvmSession({ walletType = 'metamask', provider = null, address = nu
 
     // 4) credits: fetch from Firebase if ready
     if (typeof this.fetchCreditsFromFirebase === 'function') {
-      this.credits = await this.fetchCreditsFromFirebase().catch(() => this.credits || 0);
+      const fetchedCredits = await this.fetchCreditsFromFirebase().catch(() => null);
+      if (Number.isFinite(fetchedCredits)) {
+        this.credits = fetchedCredits;
+      }
     }
 
     // 5) refresh UI
@@ -800,7 +809,12 @@ async hydrateEvmSession({ walletType = 'metamask', provider = null, address = nu
 				  }
   
 				  // ✨ 新方式：从 Firebase 读取 credits（唯一数据源）
-				  this.credits = await this.fetchCreditsFromFirebase();
+				  {
+					  const fetchedCredits = await this.fetchCreditsFromFirebase().catch(() => null);
+					  if (Number.isFinite(fetchedCredits)) {
+						  this.credits = fetchedCredits;
+					  }
+				  }
 				  this.updateUI();
   
 				  console.log('Wallet connected:', this.walletAddress, 'Credits:', this.credits);
@@ -830,7 +844,12 @@ async hydrateEvmSession({ walletType = 'metamask', provider = null, address = nu
 						  this.walletAddress = accounts[0];
 						  this.isConnected = true;
 						  // ✨ 从 Firebase 读取 credits
-						  this.credits = await this.fetchCreditsFromFirebase();
+						  {
+							  const fetchedCredits = await this.fetchCreditsFromFirebase().catch(() => null);
+							  if (Number.isFinite(fetchedCredits)) {
+								  this.credits = fetchedCredits;
+							  }
+						  }
 						  this.updateUI();
 						  window.dispatchEvent(new CustomEvent('walletConnected', {
 							  detail: { address: this.walletAddress, credits: this.credits }
@@ -848,7 +867,12 @@ async hydrateEvmSession({ walletType = 'metamask', provider = null, address = nu
 						  this.walletAddress = accounts[0];
 						  this.isConnected = true;
 						  // ✨ 从 Firebase 读取 credits
-						  this.credits = await this.fetchCreditsFromFirebase();
+						  {
+							  const fetchedCredits = await this.fetchCreditsFromFirebase().catch(() => null);
+							  if (Number.isFinite(fetchedCredits)) {
+								  this.credits = fetchedCredits;
+							  }
+						  }
 						  this.updateUI();
 						  window.dispatchEvent(new CustomEvent('walletConnected', {
 							  detail: { address: this.walletAddress, credits: this.credits }
@@ -937,7 +961,7 @@ async hydrateEvmSession({ walletType = 'metamask', provider = null, address = nu
 	  async fetchCreditsFromFirebase() {
 		  if (!this.walletAddress || !window.firebaseDb) {
 			  console.warn('⚠️ Cannot fetch credits: missing wallet address or Firebase');
-			  return 0;
+			  return null;
 		  }
 		  try {
 			  const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
@@ -957,11 +981,11 @@ async hydrateEvmSession({ walletType = 'metamask', provider = null, address = nu
 				  return credits;
 			  } else {
 				  console.log(`🆕 No Firebase record for ${this.walletAddress}`);
-				  return 0;
+				  return null;
 			  }
 		  } catch (e) {
 			  console.error('❌ Failed to fetch credits from Firebase:', e);
-			  return 0;
+			  return null;
 		  }
 	  }
   

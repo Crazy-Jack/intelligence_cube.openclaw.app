@@ -71,7 +71,7 @@ window.addEventListener('resize', () => {
         }
     }
 });
-// Personal Agent - Agent Creator and RAG Infrastructure
+// Personal Co-Creation - Agent Creator and RAG Infrastructure
 
 // Global state
 let currentWalletAddress = null;
@@ -2441,7 +2441,7 @@ function renderAgentSidebar() {
         `).join('');
     } else {
         publicAgentsSection.style.display = 'block';
-        publicAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">Chat with agents from Agentverse to see them here</div>';
+        publicAgentsList.innerHTML = '<div style="padding: 8px 12px; font-size: 13px; color: #9ca3af;">Chat with Models from Co-Creations to see them here</div>';
     }
 }
 
@@ -2699,7 +2699,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                 <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
                     <span class="pa-model-item-badge public">Public</span>
                     <span style="font-size: 13px; color: #6b7280;">Created by ${ownerDisplay}</span>
-                    ${isOwner ? '<span style="background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 2px 8px; border-radius: 4px;">You own this agent</span>' : ''}
+                    ${isOwner ? '<span style="background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 2px 8px; border-radius: 4px;">You own this co-creation</span>' : ''}
                 </div>
                 
                 ${agent.category || agent.industry ? `
@@ -2756,7 +2756,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                         </svg>
-                        Chat with this Agent
+                        Chat with this Co-Creation
                     </button>
                     ${/* Allow owners to fork their own agents, remove true to disable */ true || !isOwner ? `
                         <button class="pa-btn-success" onclick="showForkConfirmModal('${agent.id}', '${escapeHtml(agent.name)}');" style="flex: 1;">
@@ -2767,7 +2767,7 @@ function showPublicAgentDetailsPanel(agent, isOwner) {
                                 <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
                                 <path d="M12 12v3"></path>
                             </svg>
-                            Fork Agent
+                            Fork Co-Creation
                         </button>
                     ` : ''}
                     ${isOwner ? `
@@ -2890,7 +2890,7 @@ function showAgentInfoPanel(agent) {
                     style="width: 100%; padding: 12px 24px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px;"
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path><path d="M12 12v3"></path></svg>
-                    Fork this Agent
+                    Fork this Co-Creation
                 </button>
                 ` : ''}
             </div>

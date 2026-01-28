@@ -192,7 +192,7 @@ The Express.js backend server provides the following endpoints:
 - `GET /api/user-agents` - List all user agents
 - `GET /api/user-agents/:name` - Get specific user agent by name
 
-### Personal Agent (RAG System)
+### Personal Co-Creation (RAG System)
 - `GET /api/personal-agent/models` - List personal agent models
 - `POST /api/personal-agent/models` - Create new model
 - `PATCH /api/personal-agent/models/:modelId` - Update model

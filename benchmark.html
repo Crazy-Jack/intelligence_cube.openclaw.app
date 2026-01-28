@@ -829,14 +829,14 @@
                             <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
                             <path d="M12 12l-10 5 10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
                         </svg>
-                        Personal Agent
+                        Personal Co-Creation
                     </button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                             <path d="M7 4V2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             <path d="M5 4h14l-1 14H6L5 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        MyCart
+                        My Cart
                     </button>
                 </nav>
 
@@ -853,7 +853,7 @@
                     <button class="nav-item active" onclick="window.location.href='benchmark.html'">Benchmark</button>
                     <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
                     <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
-                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Agent</button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Co-Creation</button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
                 </div>
             </div>
@@ -1645,7 +1645,10 @@
                 const { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment } = 
                     await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
 
-                const walletRef = doc(window.firebaseDb, 'wallets', address);
+                // ✅ FIX: Normalize EVM address to lowercase to avoid case mismatch
+                const isEvm = /^0x/i.test(address);
+                const docId = isEvm ? address.toLowerCase() : address;
+                const walletRef = doc(window.firebaseDb, 'wallets', docId);
                 const snap = await getDoc(walletRef);
 
                 let remoteTotalCheckins = 0;
@@ -1656,7 +1659,7 @@
                 } else {
                     // 首次签到，创建文档
                     await setDoc(walletRef, {
-                        address: address,
+                        address: docId,  // ✅ Use normalized address
                         createdAt: serverTimestamp(),
                         totalCheckins: 0,
                         credits: 0

@@ -1724,7 +1724,7 @@ app.post('/api/chat/completions', async (req, res) => {
   }
 });
 
-// ========== Personal Agent RAG Processing API ==========
+// ========== Personal Co-Creation RAG Processing API ==========
 
 // Helper: Clean text for database storage (remove null bytes and invalid UTF-8)
 function cleanTextForDatabase(text) {
@@ -2038,7 +2038,7 @@ async function updateFileStatus(fileId, status, error = null) {
 }
 
 // Main API: Process RAG file
-// ========== Personal Agent - Model Management APIs ==========
+// ========== Personal Co-Creation - Model Management APIs ==========
 
 // Test endpoint: List ALL models in the database (for debugging)
 app.get('/api/personal-agent/list-all-models', async (req, res) => {

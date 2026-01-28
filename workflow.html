@@ -698,7 +698,7 @@
                             <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
                             <path d="M12 12l-10 5 10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
                         </svg>
-                        Personal Agent
+                        Personal Co-Creation
                     </button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -722,8 +722,8 @@
                     <button class="nav-item" onclick="window.location.href='benchmark.html'">Benchmark</button>
                     <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
                     <button class="nav-item active" onclick="window.location.href='workflow.html'">Workflows</button>
-                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Agent</button>
-                    <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
+                    <button class="nav-item" onclick="window.location.href='personal-agent.html'">Personal Co-Creation</button>
+                    <button class="nav-item" onclick="window.location.href='mycart.html'">My Cart</button>
                 </div>
             </div>
 
@@ -740,24 +740,6 @@
 			    <div id="accountDropdownMount"></div>
 			  </div>
 			</div>
-        </div>
-    </header>
-
-                <!-- Right Section -->
-            <div class="header-right">
-                <!-- Current Network badge (shows only after wallet connected) -->
-                <button id="networkBadge" class="network-badge" type="button" style="display:none" onclick="openNetworkPickerModal()">
-				  <img class="network-badge__icon" src="" alt="">
-				  <span class="network-badge__text">Network</span>
-			        <svg class="network-badge__caret" width="12" height="12" viewBox="0 0 24 24">
-				        <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/>
-				    </svg>
-				</button>
-                <div id="networkPickerMount"></div>
-                <div class="user-section">
-                    <div id="accountDropdownMount"></div>
-                </div>
-            </div>
         </div>
     </header>
 
@@ -1396,7 +1378,10 @@
                 const { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment } = 
                     await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
 
-                const walletRef = doc(window.firebaseDb, 'wallets', address);
+                // ✅ FIX: Normalize EVM address to lowercase to avoid case mismatch
+                const isEvm = /^0x/i.test(address);
+                const docId = isEvm ? address.toLowerCase() : address;
+                const walletRef = doc(window.firebaseDb, 'wallets', docId);
                 const snap = await getDoc(walletRef);
 
                 let remoteTotalCheckins = 0;
@@ -1407,7 +1392,7 @@
                 } else {
                     // 首次签到，创建文档
                     await setDoc(walletRef, {
-                        address: address,
+                        address: docId,  // ✅ Use normalized address
                         createdAt: serverTimestamp(),
                         totalCheckins: 0,
                         credits: 0

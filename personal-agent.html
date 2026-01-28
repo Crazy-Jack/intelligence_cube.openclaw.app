@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Agent - Intelligence Cubed</title>
+    <title>Personal Co-Creation - Intelligence Cubed</title>
     <link rel="icon" type="image/svg+xml" href="/svg/i3-token-logo.svg">
     <link rel="icon" type="image/png" sizes="192x192" href="/png/i3-token-logo.png">  
     <link rel="apple-touch-icon" sizes="192x192" href="/png/i3-token-logo.png">
@@ -691,7 +691,7 @@
                             <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
                             <path d="M12 12l-10 5 10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" fill="none"/>
                         </svg>
-                        Personal Agent
+                        Personal Co-Creation
                     </button>
                     <button class="nav-item" onclick="window.location.href='mycart.html'">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -715,8 +715,8 @@
                     <button class="nav-item" onclick="window.location.href='benchmark.html'">Benchmark</button>
                     <button class="nav-item" onclick="window.location.href='canvas.html'">Canvas</button>
                     <button class="nav-item" onclick="window.location.href='workflow.html'">Workflows</button>
-                    <button class="nav-item active" onclick="window.location.href='personal-agent.html'">Personal Agent</button>
-                    <button class="nav-item" onclick="window.location.href='mycart.html'">MyCart</button>
+                    <button class="nav-item active" onclick="window.location.href='personal-agent.html'">Personal Co-Creation</button>
+                    <button class="nav-item" onclick="window.location.href='mycart.html'">My Cart</button>
                 </div>
             </div>
 
@@ -790,13 +790,13 @@
         <!-- Tabs -->
         <div class="pa-tabs">
             <button class="pa-tab active" onclick="switchTab('model-creator')">
-                Agent Creator
+                Create
             </button>
             <button class="pa-tab" onclick="switchTab('user-chats')">
                 User Chats
             </button>
             <button class="pa-tab" onclick="switchTab('public-agents')">
-                Agentverse
+                Public Co-Creations
             </button>
         </div>
 
@@ -806,13 +806,13 @@
                 <!-- Left: Model List -->
                 <div class="pa-left-panel">
                     <div class="pa-panel-header">
-                        <h2>My Agents</h2>
+                        <h2>My Models</h2>
                         <button class="pa-btn-primary" onclick="openCreateModelModal()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
-                            New Agent
+                            New
                         </button>
                     </div>
                     <div id="model-list" class="pa-model-list">
@@ -840,17 +840,17 @@
                 <!-- Agent Sidebar -->
                 <div id="agentSidebar" class="mobile-hidden" style="width: 260px; border-right: 1px solid #e5e7eb; background: #f9fafb; display: flex; flex-direction: column; overflow: hidden;">
                 <div style="padding: 16px; border-bottom: 1px solid #e5e7eb; background: #fff;">
-                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: #374151;">Agents</h3>
+                        <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: #374151;">Co-Creations</h3>
                     </div>
                     <div id="agentSidebarList" style="flex: 1; overflow-y: auto; padding: 8px;">
                         <!-- My Agents Section -->
                         <div id="myAgentsSidebarSection">
-                            <div style="padding: 8px 12px; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">My Agents</div>
+                            <div style="padding: 8px 12px; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">My Co-Creations</div>
                             <div id="myAgentsSidebarList"></div>
                         </div>
                         <!-- Agentverse Section -->
                         <div id="publicAgentsSidebarSection" style="margin-top: 8px;">
-                            <div style="padding: 8px 12px; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">Agentverse</div>
+                            <div style="padding: 8px 12px; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">Public Co-Creations</div>
                             <div id="publicAgentsSidebarList"></div>
                         </div>
                     </div>
@@ -933,7 +933,7 @@
         <div id="public-agents-tab" class="pa-tab-content">
             <div style="padding: 24px; max-width: 1400px; margin: 0 auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="font-size: 20px; font-weight: 600; color: #111827; margin: 0;">Agentverse</h2>
+                    <h2 style="font-size: 20px; font-weight: 600; color: #111827; margin: 0;">Co-Creations</h2>
                     <button class="pa-btn-secondary" onclick="loadPublicAgents()" style="display: flex; align-items: center; gap: 6px;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M23 4v6h-6"></path>
@@ -943,7 +943,7 @@
                         Refresh
                     </button>
                 </div>
-                <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">Discover and chat with agents shared by the community.</p>
+                <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">Discover and chat with Model Co-Creations shared by the community.</p>
                 
                 <!-- Search Bar -->
                 <div style="margin-bottom: 20px;">
@@ -951,7 +951,7 @@
                         <input 
                             type="text" 
                             id="agentverseSearchInput" 
-                            placeholder="Search agents by name, purpose, category, or industry..." 
+                            placeholder="Search Co-Creations by name, purpose, category, or industry..." 
                             oninput="filterPublicAgents()"
                             style="width: 100%; padding: 10px 40px 10px 16px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: border-color 0.2s;"
                             onfocus="this.style.borderColor='#8b5cf6'" 
@@ -977,13 +977,13 @@
     <div id="createModelModal" class="pa-modal-overlay">
         <div class="pa-modal-content">
             <div class="pa-modal-header">
-                <h2>Create New Agent</h2>
+                <h2>Create</h2>
                 <button class="pa-modal-close" onclick="closeCreateModelModal()">&times;</button>
             </div>
             <div class="pa-modal-body">
                 <div class="pa-form-group">
-                    <label>Agent Name *</label>
-                    <input type="text" id="modelNameInput" placeholder="Enter model name" required>
+                    <label>Co-Creation Name *</label>
+                    <input type="text" id="modelNameInput" placeholder="Enter name" required>
                 </div>
                 <div class="pa-form-group">
                     <label>Purpose</label>
@@ -1031,7 +1031,7 @@ Answer the user's question as this specialized model would.</pre>
                         </div>
                     </div>
                     <div id="createModalFilePreview" style="margin-top: 12px;"></div>
-                    <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">Files will be processed for RAG after agent creation</small>
+                    <small style="color: #6b7280; font-size: 12px; margin-top: 4px; display: block;">Files will be processed for RAG after creation</small>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <div class="pa-form-group" style="margin-bottom: 0;">
@@ -1042,7 +1042,7 @@ Answer the user's question as this specialized model would.</pre>
                     <div class="pa-form-group" style="margin-bottom: 0;">
                         <label style="display: flex; align-items: center; gap: 6px;">Forked Usage Price
                             <span style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-size: 12px; cursor: help;" onmouseenter="this.querySelector('.tooltip-text').style.opacity='1'; this.querySelector('.tooltip-text').style.visibility='visible';" onmouseleave="this.querySelector('.tooltip-text').style.opacity='0'; this.querySelector('.tooltip-text').style.visibility='hidden';">i
-                                <span class="tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; padding: 8px 12px; background: #1f2937; color: white; font-size: 12px; font-weight: normal; border-radius: 6px; white-space: normal; width: 280px; text-align: left; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">When other people fork your agent, a forked revenue will be routed back to you per their agent usage to value your original creation to the ecosystem.
+                                <span class="tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; padding: 8px 12px; background: #1f2937; color: white; font-size: 12px; font-weight: normal; border-radius: 6px; white-space: normal; width: 280px; text-align: left; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">When other people fork your co-creation, a forked revenue will be routed back to you per their usage to value your contribution to the ecosystem.
                                     <span style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1f2937;"></span>
                                 </span>
                             </span>
@@ -1056,6 +1056,9 @@ Answer the user's question as this specialized model would.</pre>
                         <input type="checkbox" id="modelIsPublicInput">
                         Make this model public
                     </label>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: #6b7280;">
+                    Co-creation is based on I3-Foundational-Models.
                 </div>
             </div>
             <div class="pa-modal-footer">
@@ -1147,7 +1150,7 @@ Answer the user's question as this specialized model would.</pre>
     <div id="forkAgentModal" class="pa-modal-overlay">
         <div class="pa-modal-content" style="max-width: 480px;">
             <div class="pa-modal-header">
-                <h2>Fork Agent</h2>
+                <h2>Fork Co-Creation</h2>
                 <button class="pa-modal-close" onclick="closeForkModal()">&times;</button>
             </div>
             <div class="pa-modal-body">
@@ -1162,14 +1165,14 @@ Answer the user's question as this specialized model would.</pre>
                         </svg>
                     </div>
                     <h3 style="margin: 0 0 8px; color: #111827;">Fork "<span id="forkAgentName"></span>"?</h3>
-                    <p style="color: #6b7280; font-size: 14px; margin: 0;">Create your own copy of this agent</p>
+                    <p style="color: #6b7280; font-size: 14px; margin: 0;">Create your own copy of this co-creation</p>
                 </div>
                 <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
                     <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
-                        <span style="font-size: 14px; color: #374151;">Agent metadata (name, purpose, system prompt) will be copied</span>
+                        <span style="font-size: 14px; color: #374151;">Metadata (name, purpose, system prompt) will be copied</span>
                     </div>
                     <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
@@ -1185,7 +1188,7 @@ Answer the user's question as this specialized model would.</pre>
                     </div>
                 </div>
                 <p style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0;">
-                    The forked agent will appear in your "My Agents" list
+                    The forked co-creation will appear in your "My Co-Creations" list
                 </p>
             </div>
             <div class="pa-modal-footer">
@@ -1198,7 +1201,7 @@ Answer the user's question as this specialized model would.</pre>
                         <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"></path>
                         <path d="M12 12v3"></path>
                     </svg>
-                    Fork Agent
+                    Fork Co-Creation
                 </button>
             </div>
         </div>
@@ -1989,20 +1992,54 @@ Answer the user's question as this specialized model would.</pre>
 
                 const { doc, setDoc, getDoc, updateDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
 
-                // 1) 顶层集合：wallets/<address>
-                const walletRef = doc(firebaseDb, 'wallets', address);
-                await setDoc(walletRef, {
-                    address: address,
-                    chainId: chainId || null,
-                    networkName: networkName || null,
-                    lastConnectedAt: serverTimestamp(),
-                    credits: (window.walletManager && typeof window.walletManager.credits === 'number') ? window.walletManager.credits : 0
-                }, { merge: true });
+                // ✅ FIX: Normalize EVM address to lowercase to avoid case mismatch
+                const isEvm = /^0x/i.test(address);
+                const docId = isEvm ? address.toLowerCase() : address;
 
-                // 1.5) 新增：wallet-only 用户档案 users_by_wallet/<address>（仅未登录时）
+                // 1) 顶层集合：wallets/<docId> - 先检查用户是否存在
+                const walletRef = doc(firebaseDb, 'wallets', docId);
+                const snap = await getDoc(walletRef);
+                const isExistingUser = snap.exists();
+                const existingCredits = isExistingUser ? Number(snap.data().credits ?? 0) : 0;
+
+                if (isExistingUser) {
+                    console.log('🔍 Existing user found with credits:', existingCredits);
+
+                    // ✅ 同步到内存/UI（用 Firestore 的值）
+                    if (window.walletManager) {
+                        window.walletManager.credits = existingCredits;
+                        window.walletManager.updateUI?.();
+                    }
+
+                    // ✅ 只更新连接信息，不碰 credits
+                    await updateDoc(walletRef, {
+                        chainId: chainId || null,
+                        networkName: networkName || null,
+                        lastConnectedAt: serverTimestamp()
+                    });
+                } else {
+                    console.log('🆕 New user detected, creating wallet document');
+
+                    // ✅ 新用户才写 credits:0
+                    await setDoc(walletRef, {
+                        address: docId,
+                        chainId: chainId || null,
+                        networkName: networkName || null,
+                        lastConnectedAt: serverTimestamp(),
+                        credits: 0,
+                        createdAt: serverTimestamp()
+                    }, { merge: true });
+
+                    if (window.walletManager) {
+                        window.walletManager.credits = 0;
+                        window.walletManager.updateUI?.();
+                    }
+                }
+
+                // 1.5) 新增：wallet-only 用户档案 users_by_wallet/<docId>（仅未登录时）
                 if (!window.currentUser || !window.currentUser.uid) {
                     try {
-                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', address.toLowerCase());
+                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', docId);
                         const stageSnap = await getDoc(walletUserRef);
                         if (stageSnap.exists()) {
                             // 仅更新连接信息，保留首次 createdAt
@@ -2015,7 +2052,7 @@ Answer the user's question as this specialized model would.</pre>
                         } else {
                             // 首次创建，写入 createdAt
                             await setDoc(walletUserRef, {
-                                address: address,
+                                address: docId,
                                 createdAt: serverTimestamp(),
                                 lastConnectedAt: serverTimestamp(),
                                 chainId: chainId || null,
@@ -2045,7 +2082,7 @@ Answer the user's question as this specialized model would.</pre>
                     // 尝试从 staging 文档(users_by_wallet)合并数据（不再合并 credits）
                     let stagedTotalCheckins = 0;
                     try {
-                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', address.toLowerCase());
+                        const walletUserRef = doc(firebaseDb, 'users_by_wallet', docId);
                         const stageSnap = await getDoc(walletUserRef);
                         if (stageSnap.exists()) {
                             const s = stageSnap.data() || {};
@@ -2056,16 +2093,16 @@ Answer the user's question as this specialized model would.</pre>
                     }
 
                     await updateDoc(userRef, {
-                        primaryWallet: address,
+                        primaryWallet: docId,
                         primaryChainId: chainId || null,
                         primaryNetwork: networkName || null,
                         walletLinkedAt: serverTimestamp(),
-                        walletOnlyProfile: address.toLowerCase()
+                        walletOnlyProfile: docId
                     });
 
-                    const userWalletRef = doc(firebaseDb, 'users', window.currentUser.uid, 'wallets', address);
+                    const userWalletRef = doc(firebaseDb, 'users', window.currentUser.uid, 'wallets', docId);
                     await setDoc(userWalletRef, {
-                        address: address,
+                        address: docId,
                         chainId: chainId || null,
                         networkName: networkName || null,
                         lastConnectedAt: serverTimestamp(),
@@ -2181,6 +2218,18 @@ Answer the user's question as this specialized model would.</pre>
             </div>
 
             <div class="wallet-options">
+
+                <!-- Binance Wallet 选项 -->
+                <div class="wallet-option available" onclick="connectBinanceWallet()">
+                    <span class="wallet-icon-wrap">
+                        <!-- 使用 binance_wallet.jpeg 作为图标 -->
+                        <img src="png/binance_wallet.jpeg" alt="Binance Wallet">
+                    </span>
+                    <div class="wallet-info">
+                        <div class="wallet-name">Binance Wallet</div>
+                    </div>
+                </div>
+
                 <!-- MetaMask 选项 -->
                 <div class="wallet-option available" onclick="connectMetaMaskWallet()">
                     <span class="wallet-icon-wrap">
@@ -2215,16 +2264,7 @@ Answer the user's question as this specialized model would.</pre>
                     </div>
                 </div>
 
-                <!-- Binance Wallet 选项 -->
-                <div class="wallet-option available" onclick="connectBinanceWallet()">
-                    <span class="wallet-icon-wrap">
-                        <!-- 使用 binance_wallet.jpeg 作为图标 -->
-                        <img src="png/binance_wallet.jpeg" alt="Binance Wallet">
-                    </span>
-                    <div class="wallet-info">
-                        <div class="wallet-name">Binance Wallet</div>
-                    </div>
-                </div>
+                
 
                 <!-- Phantom (Solana) -->
 				<div class="wallet-option available" onclick="connectSolanaPhantom()">

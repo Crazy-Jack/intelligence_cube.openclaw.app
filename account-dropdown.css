@@ -65,15 +65,15 @@
     margin: 8px 0;
 }
 
-/* Account button styling */
+/* Account button styling - not logged in */
 .account-btn {
   background: linear-gradient(135deg,#8b5cf6,#7c3aed);
   color:#fff;
   border:0;
   border-radius:12px;
-  padding:12px 24px;
+  padding:10px 10px;
   font-weight:600;
-  font-size:15px;
+  font-size:14px;
   cursor:pointer;
   transition:all .25s ease;
   box-shadow:0 4px 12px rgba(139,92,246,.25);
@@ -84,17 +84,27 @@
   box-shadow:0 6px 16px rgba(124,58,237,.30);
 }
 
+/* Account button styling - when wallet connected */
+.account-btn.connected {
+  padding: 7px 7px;
+  font-size: 10px;
+}
+
 /* Mobile: make the purple wallet pill smaller and truncatable */
 @media (max-width: 768px) {
   .account-btn {
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: 8px 10px;
+    font-size: 12px;
     border-radius: 10px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     max-width: 62vw;
     white-space: nowrap;
+  }
+  .account-btn.connected {
+    padding: 7px 7px;
+    font-size: 10px;
   }
   #accountBtnText {
     max-width: 38vw;
@@ -111,10 +121,14 @@
 
 @media (max-width: 480px) {
   .account-btn {
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: 6px 8px;
+    font-size: 11px;
     border-radius: 10px;
     max-width: 58vw;
+  }
+  .account-btn.connected {
+    padding: 5px 5px;
+    font-size: 10px;
   }
   #accountBtnText {
     max-width: 36vw;
