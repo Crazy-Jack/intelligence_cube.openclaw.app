@@ -821,6 +821,7 @@ async function loadModelDetails(modelId) {
         const model = models.find(m => m.id === modelId);
         if (model) {
             renderModelDetails(model, files);
+            renderFileList(files);
         } else {
             // If not found in list, try to load from API
             const response = await fetch(`/api/personal-agent/models?ownerAddress=${encodeURIComponent(currentWalletAddress.toLowerCase())}`);
@@ -829,6 +830,7 @@ async function loadModelDetails(modelId) {
                 const foundModel = data.models.find(m => m.id === modelId);
                 if (foundModel) {
                     renderModelDetails(foundModel, files);
+                    renderFileList(files);
                 } else {
                     showNotification('Agent not found', 'error');
                 }
