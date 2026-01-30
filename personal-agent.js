@@ -80,6 +80,7 @@ let selectedFiles = [];
 let createModalSelectedFiles = []; // Files selected in create agent modal
 let models = [];
 let modelsLoaded = false; // Track if models have been loaded
+let pendingSystemPromptInstruction = null;
 
 // ===== Credit/Usage accounting helpers (same pattern as index.html) =====
 function estimateTokenCount(text) {
@@ -3431,9 +3432,14 @@ async function handleUserChatSend() {
     if (!message) return;
     
     // Build system prompt from agent data (needed for credit check)
-    const systemPrompt = selectedAgentForChat.purpose 
+    let systemPrompt = selectedAgentForChat.purpose 
         ? `You are ${selectedAgentForChat.name}. ${selectedAgentForChat.purpose}\n\nUse Case: ${selectedAgentForChat.useCase || 'General assistance'}`
         : `You are ${selectedAgentForChat.name}, a helpful AI assistant.`;
+
+    if (pendingSystemPromptInstruction) {
+        systemPrompt = `${systemPrompt}\n\n${pendingSystemPromptInstruction}`;
+        pendingSystemPromptInstruction = null;
+    }
     
     // Preflight credit check (block if insufficient)
     if (!ensureCreditsOrBlock(selectedAgentForChat.name, systemPrompt, message, undefined, selectedAgentForChat)) {
@@ -3681,6 +3687,9 @@ function sendExplainPrompt() {
     const message = hasPurposeOrUseCase
         ? 'Explain something that users typically found confusing.'
         : 'Explain something unknown about decentralized AI that users typically find confusing.';
+
+    // Add a one-time system instruction for this predefined prompt
+    pendingSystemPromptInstruction = 'Do not mention "AI Platform Ops industry".';
 
     const input = document.getElementById('userChatInput');
     if (input) {
