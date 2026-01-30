@@ -81,6 +81,226 @@ let createModalSelectedFiles = []; // Files selected in create agent modal
 let models = [];
 let modelsLoaded = false; // Track if models have been loaded
 
+// ===== Credit/Usage accounting helpers (same pattern as index.html) =====
+function estimateTokenCount(text) {
+    try {
+        const t = (text || '').toString();
+        // Rough heuristic: ~4 chars per token for English-like text
+        return Math.max(0, Math.ceil(t.length / 4));
+    } catch (_) { return 0; }
+}
+
+function getModelTokenPrice(modelName) {
+    // Original pricing logic: get price from MODEL_DATA
+    try {
+        if (typeof MODEL_DATA !== 'undefined' && MODEL_DATA[modelName] && typeof MODEL_DATA[modelName].tokenPrice === 'number') {
+            return Number(MODEL_DATA[modelName].tokenPrice);
+        }
+    } catch (_) {}
+    // Fallback default price per 1K tokens in i3
+    return 1.0;
+}
+
+function getAgentTokenPrice(agentName, agentData) {
+    try {
+        const raw = agentData && agentData.tokenPrice;
+        if (raw !== null && raw !== undefined && raw !== '') {
+            const parsed = Number(raw);
+            if (!Number.isNaN(parsed)) {
+                return parsed; // price per 1k tokens
+            }
+        }
+    } catch (_) {}
+    return getModelTokenPrice(agentName);
+}
+
+function estimateCostI3(modelName, systemPrompt, userText, expectedOutTokens, priceOverridePerK) {
+    try {
+        const inT = estimateTokenCount(systemPrompt || '') + estimateTokenCount(userText || '');
+        const outT = Math.max(0, Number(expectedOutTokens || 0));
+        const total = inT + outT;
+        const pricePerK = Number.isFinite(priceOverridePerK) ? priceOverridePerK : getModelTokenPrice(modelName);
+        return Number(((pricePerK * total) / 1000).toFixed(3));
+    } catch (_) { return 0; }
+}
+
+function getAvailableCredits() {
+    try {
+        if (window.walletManager && typeof window.walletManager.getUserInfo === 'function') {
+            return Number(window.walletManager.getUserInfo().credits || 0);
+        }
+    } catch (_) {}
+    return 0;
+}
+
+async function firebasePersistCredits(newCredits) {
+    try {
+        if (!window.firebaseDb || !window.walletManager || !window.walletManager.walletAddress) return;
+        const { doc, setDoc, updateDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+        const addrLower = (window.walletManager.walletAddress || '').toLowerCase();
+        const walletRef = doc(window.firebaseDb, 'wallets', addrLower);
+        await setDoc(walletRef, { address: addrLower }, { merge: true });
+        await updateDoc(walletRef, {
+            credits: Number(newCredits || 0),
+            lastUpdated: serverTimestamp()
+        });
+        console.log('📡 Synced credits to Firestore:', newCredits);
+    } catch (e) {
+        console.warn('⚠️ Failed to sync credits to Firestore:', e.message);
+    }
+}
+
+function showInsufficientCreditsModal(required, available) {
+    try { const old = document.getElementById('insufficientCreditsModal'); if (old) old.remove(); } catch (_) {}
+    const hasWallet = !!getWalletAddress();
+    const modal = document.createElement('div');
+    modal.id = 'insufficientCreditsModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.2);max-width:460px;width:92%;padding:20px;border:1px solid #e5e7eb;">
+            <h3 style="margin:0 0 8px 0;font-size:18px;">${hasWallet ? 'Insufficient I3 tokens' : 'Connect your wallet'}</h3>
+            ${hasWallet ? `
+                <p style="margin:0 0 4px 0;color:#374151;">Needed now: <strong>${required.toFixed(3)} I3</strong></p>
+                <p style="margin:0 0 16px 0;color:#374151;">Current balance: <strong>${available.toFixed(3)} I3</strong></p>
+            ` : `
+                <p style="margin:0 0 16px 0;color:#374151;">Please connect your wallet to check your balance and continue.</p>
+            `}
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button id="icm-cancel" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;">Cancel</button>
+                ${hasWallet ? '<button id="icm-checkin" style="padding:8px 12px;border:1px solid #10b981;border-radius:8px;background:#34d399;color:#fff;cursor:pointer;">Daily Check-in (+30)</button>' : '<button id="icm-account" style="padding:8px 12px;border:1px solid #111827;border-radius:8px;background:#111827;color:#fff;cursor:pointer;">Open Account Menu</button>'}
+                <button id="icm-buy" style="padding:8px 12px;border:1px solid #2563eb;border-radius:8px;background:#3b82f6;color:#fff;cursor:pointer;">Go to Public Co-Creations</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector('#icm-cancel').onclick = () => modal.remove();
+    if (!hasWallet) {
+        const accountBtn = modal.querySelector('#icm-account');
+        if (accountBtn) {
+            accountBtn.onclick = () => {
+                modal.remove();
+                try {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    if (typeof window.toggleAccountDropdown === 'function') {
+                        window.toggleAccountDropdown();
+                    }
+                } catch (_) {}
+            };
+        }
+    }
+    modal.querySelector('#icm-buy').onclick = () => {
+        modal.remove();
+        try {
+            if (typeof switchTab === 'function') {
+                switchTab('public-agents');
+            } else {
+                window.location.href = 'personal-agent.html?tab=public-agents';
+            }
+        } catch (_) {}
+    };
+    if (hasWallet) {
+        modal.querySelector('#icm-checkin').onclick = async () => {
+            try {
+                modal.remove();
+                if (typeof window.handleDailyCheckin === 'function') {
+                    await window.handleDailyCheckin();
+                } else {
+                    alert('Check-in function not available.');
+                }
+            } catch (e) { alert('Check-in error: ' + e.message); }
+        };
+    }
+}
+
+function ensureCreditsOrBlock(agentName, systemPrompt, userText, expectedOutTokens, agentData) {
+    // Estimate conservative output tokens: mirror user tokens x1.5 with floor 300
+    const outGuess = expectedOutTokens != null ? expectedOutTokens : Math.max(300, Math.floor(estimateTokenCount(userText || '') * 1.5));
+    const pricePerK = getAgentTokenPrice(agentName, agentData);
+    const need = estimateCostI3(agentName, systemPrompt, userText, outGuess, pricePerK);
+
+    const have = getAvailableCredits();
+    if (have < need) {
+        console.warn('I3 preflight gating: insufficient credits', { agentName, need, have, outGuess });
+        showInsufficientCreditsModal(need, have);
+        return false;
+    }
+    return true;
+}
+
+function chargeAgentUsage(agentName, systemPrompt, userText, assistantText, meta = {}, agentData) {
+    try {
+        const inTokens = estimateTokenCount((systemPrompt || '')) + estimateTokenCount((userText || ''));
+        const outTokens = estimateTokenCount((assistantText || ''));
+        const totalTokens = inTokens + outTokens;
+        const pricePerK = getAgentTokenPrice(agentName, agentData);
+        const cost = (pricePerK * (totalTokens / 1000));
+        const amount = Number(cost.toFixed(3)); // 3-decimal precision
+
+        let spend = { success: false, error: 'walletManager not available' };
+
+        console.log('[I3 Charge] Preparing to charge agent usage', {
+            agent: agentName,
+            inTokens,
+            outTokens,
+            totalTokens,
+            pricePerK,
+            amount,
+            agentId: meta.agentId || null,
+            walletConnected: !!(window.walletManager && window.walletManager.isConnected),
+            currentCredits: window.walletManager && typeof window.walletManager.getUserInfo === 'function' ? window.walletManager.getUserInfo().credits : 'unknown'
+        });
+        console.log('[I3 Charge] Agent price per 1k tokens', { agent: agentName, pricePerK, totalTokens, amount });
+
+        if (window.walletManager && typeof window.walletManager.spendCredits === 'function') {
+            spend = window.walletManager.spendCredits(amount, `personal_agent:${agentName}`);
+        }
+
+        // Record to Payment History if successful
+        if (spend && spend.success && window.apiManager && typeof window.apiManager.recordTransaction === 'function') {
+            try {
+                window.apiManager.recordTransaction({
+                    type: 'api_call',
+                    modelName: agentName,
+                    quantity: 1,
+                    creditsSpent: -amount,
+                    timestamp: Date.now(),
+                    status: 'completed',
+                    source: 'personal_agent',
+                    meta: {
+                        inTokens,
+                        outTokens,
+                        totalTokens,
+                        agentId: meta.agentId || null
+                    }
+                }).catch(err => {
+                    console.warn('[PaymentHistory] Failed to record api_call transaction:', err);
+                });
+            } catch (e) {
+                console.warn('[PaymentHistory] Error while recording api_call transaction:', e);
+            }
+        }
+
+        // Log result; if balance now <= 0, show top-up modal (skip in test mode)
+        if (spend && spend.success === false && spend.error) {
+            console.warn('I3 deduction failed:', spend.error);
+        } else {
+            console.log('[I3 Charge] Spend result:', spend);
+            try {
+                const cur = getAvailableCredits();
+                // Immediately sync new balance to Firestore
+                try { firebasePersistCredits(cur); } catch (_) {}
+                if (cur <= 0) {
+                    showInsufficientCreditsModal(Math.max(0.001, amount), cur);
+                }
+            } catch (_) {}
+        }
+        return { inTokens, outTokens, totalTokens, pricePerK, amount, spend };
+    } catch (e) {
+        console.warn('chargeAgentUsage error:', e);
+        return { inTokens: 0, outTokens: 0, totalTokens: 0, pricePerK: 0, amount: 0, spend: { success: false, error: e.message } };
+    }
+}
+
 // Listen for wallet connection IMMEDIATELY (before DOMContentLoaded)
 // This ensures we catch the event even if wallet auto-connects early
 window.addEventListener('walletConnected', async () => {
@@ -735,14 +955,14 @@ function renderModelDetails(model, files = []) {
         
             <div style="margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end;">
                 <div>
-                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Token Price</label>
+                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block;">Token Price (1K)</label>
                     <input type="number" id="inlineTokenPrice" value="${model.tokenPrice !== null && model.tokenPrice !== undefined ? model.tokenPrice : ''}" 
                            placeholder="Price per interaction"
                            style="width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;"
                            onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#e5e7eb'">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Fork Price
+                    <label style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Forked Usage Price (1K)
                         <span style="position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-size: 12px; cursor: help;" onmouseenter="this.querySelector('.tooltip-text').style.opacity='1'; this.querySelector('.tooltip-text').style.visibility='visible';" onmouseleave="this.querySelector('.tooltip-text').style.opacity='0'; this.querySelector('.tooltip-text').style.visibility='hidden';">i
                             <span class="tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; padding: 8px 12px; background: #1f2937; color: white; font-size: 12px; font-weight: normal; border-radius: 6px; white-space: normal; width: 280px; text-align: left; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; pointer-events: none; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">When other people fork your agent, a forked revenue will be routed back to you per their agent usage to value your original creation to the ecosystem.
                                 <span style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1f2937;"></span>
@@ -2500,6 +2720,7 @@ function selectAgentFromSidebar(agentId, type) {
     }
     if (nameEl) nameEl.textContent = agent.name;
     if (purposeEl) purposeEl.textContent = agent.purpose || 'No description available';
+    updateUserChatEditButton(agent);
     
     // Enable chat input
     const input = document.getElementById('userChatInput');
@@ -3089,6 +3310,7 @@ function handleAgentSelection() {
         selectedAgentForChat = null;
         if (input) input.disabled = true;
         if (sendBtn) sendBtn.disabled = true;
+        updateUserChatEditButton(null);
         if (infoDiv) infoDiv.style.display = 'none';
         if (messagesDiv) {
             messagesDiv.innerHTML = '<div style="text-align: center; color: #9ca3af; margin-top: 40px;"><p>Select an agent from the dropdown above to start chatting</p></div>';
@@ -3118,12 +3340,38 @@ function handleAgentSelection() {
     if (infoDiv) infoDiv.style.display = 'block';
     if (nameDiv) nameDiv.textContent = model.name;
     if (purposeDiv) purposeDiv.textContent = model.purpose || 'No description available';
+    updateUserChatEditButton(model);
     
     // Load chat history for this agent (use id for unique storage)
     loadUserChatHistory(model.id);
     
     // Focus input
     if (input) input.focus();
+}
+
+function updateUserChatEditButton(agent) {
+    const editBtn = document.getElementById('userChatEditBtn');
+    if (!editBtn) return;
+    if (!agent) {
+        editBtn.style.display = 'none';
+        return;
+    }
+    const currentWallet = getWalletAddress();
+    const isOwnByList = models.some(m => m.id === agent.id);
+    const isOwnByAddress = !!(currentWallet && agent.ownerAddress && agent.ownerAddress.toLowerCase() === currentWallet.toLowerCase());
+    const isOwnAgent = isOwnByList || isOwnByAddress;
+    editBtn.style.display = isOwnAgent ? 'flex' : 'none';
+}
+
+function openEditForSelectedAgent() {
+    if (!selectedAgentForChat) return;
+    const currentWallet = getWalletAddress();
+    const isOwnByList = models.some(m => m.id === selectedAgentForChat.id);
+    const isOwnByAddress = !!(currentWallet && selectedAgentForChat.ownerAddress && selectedAgentForChat.ownerAddress.toLowerCase() === currentWallet.toLowerCase());
+    const isOwnAgent = isOwnByList || isOwnByAddress;
+    if (!isOwnAgent) return;
+    switchTab('model-creator');
+    setTimeout(() => selectModel(selectedAgentForChat.id), 100);
 }
 
 // Auto-resize chat input textarea
@@ -3155,6 +3403,17 @@ async function handleUserChatSend() {
     const message = input?.value.trim();
     
     if (!message) return;
+    
+    // Build system prompt from agent data (needed for credit check)
+    const systemPrompt = selectedAgentForChat.purpose 
+        ? `You are ${selectedAgentForChat.name}. ${selectedAgentForChat.purpose}\n\nUse Case: ${selectedAgentForChat.useCase || 'General assistance'}`
+        : `You are ${selectedAgentForChat.name}, a helpful AI assistant.`;
+    
+    // Preflight credit check (block if insufficient)
+    if (!ensureCreditsOrBlock(selectedAgentForChat.name, systemPrompt, message, undefined, selectedAgentForChat)) {
+        console.log('💳 Chat blocked due to insufficient credits');
+        return;
+    }
     
     // Clear input and reset height
     if (input) {
@@ -3191,11 +3450,6 @@ async function handleUserChatSend() {
             throw new Error('API Manager not available. Please ensure api-manager.js is loaded.');
         }
         
-        // Build system prompt from agent data
-        const systemPrompt = selectedAgentForChat.purpose 
-            ? `You are ${selectedAgentForChat.name}. ${selectedAgentForChat.purpose}\n\nUse Case: ${selectedAgentForChat.useCase || 'General assistance'}`
-            : `You are ${selectedAgentForChat.name}, a helpful AI assistant.`;
-        
         // Call the backend API (backend will handle RAG automatically)
         let fullResponse = '';
         
@@ -3227,6 +3481,16 @@ async function handleUserChatSend() {
                     if (loadingEl) {
                         loadingEl.innerHTML = renderMarkdownSafe(fullResponse, false);
                     }
+                    
+                    // 💰 Charge credits after successful response
+                    chargeAgentUsage(
+                        selectedAgentForChat.name,
+                        systemPrompt,
+                        message,
+                        fullResponse,
+                        { agentId: agentModelId },
+                        selectedAgentForChat
+                    );
                     
                     // Add to history
                     userChatHistory.push({
@@ -3343,7 +3607,7 @@ function loadUserChatHistory(agentId) {
                                     style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"
                                     onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(139, 92, 246, 0.4)';"
                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(139, 92, 246, 0.3)';">
-                                Explain a difficult<br>topic
+                                Give me an introduction<br>of the problem
                             </button>
                             <button onclick="sendPredefinedPrompt('Generate 5 Q&A pairs to test my understanding')" 
                                     style="padding: 12px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #8b5cf6, #7c3aed); cursor: pointer; font-size: 13px; color: #fff; transition: all 0.15s; text-align: center; min-width: 140px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);"

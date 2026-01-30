@@ -1423,8 +1423,8 @@
 		          <button class="model-card-btn" onclick="showPublicAgentDetailsFromModelverse('${escapedId}')">Details</button>
 		        </td>
 		        <td class="creator-cell" data-label="Creator" style="font-size: 12px; color: #6b7280; text-align: center;">${creatorDisplay}</td>
-		        <td class="queries-cell" data-label="Queries" style="font-weight: 600; color: #8b5cf6; text-align: center; cursor: pointer;" onclick="showUsageChart('${escapedId}')" title="Click to view usage history (Direct: ${agent.accessCount || 0}, From Forks: ${agent.forkedUsage || 0})">
-		          <span style="border-bottom: 1px dashed #8b5cf6;">${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</span>
+		        <td class="queries-cell" data-label="Queries" style="font-weight: 600; color: #8b5cf6; text-align: center;" title="Direct: ${agent.accessCount || 0}, From Forks: ${agent.forkedUsage || 0}">
+		          <span>${(agent.accessCount || 0) + (agent.forkedUsage || 0)}</span>
 		        </td>
 		        <td class="action-cell" data-label="Actions" style="text-align: center;">
 		          <div class="invest" style="justify-content: center; gap: 8px;">
@@ -1500,7 +1500,7 @@
 		              <div style="font-size:18px;font-weight:600;color:#111827;">${agent.tokenPrice ?? 'N/A'}</div>
 		            </div>
 		            <div style="padding:12px;background:#f9fafb;border-radius:8px;">
-		              <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Forked Usage Price</div>
+		              <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Forked Price</div>
 		              <div style="font-size:18px;font-weight:600;color:#111827;">${agent.forkedUsagePrice ?? 1}</div>
 		            </div>
 		            <div style="padding:12px;background:#f9fafb;border-radius:8px;">
@@ -4115,4 +4115,3 @@
     </style>
 </body>
 </html> 
-
