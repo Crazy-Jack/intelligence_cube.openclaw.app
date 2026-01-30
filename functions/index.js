@@ -519,7 +519,9 @@ exports.triggerTerraformApply = functions.https.onRequest(async (req, res) => {
   }
 
   const unixTs = Math.floor(Date.now() / 1000);
-  const deploymentId = sanitizeId(`${decoded.uid}-${unixTs}`);
+  const nameInput = req.body?.name || req.body?.deploymentName || '';
+  const namePart = nameInput ? sanitizeId(nameInput) : '';
+  const deploymentId = sanitizeId([namePart, decoded.uid, unixTs].filter(Boolean).join('-'));
 
   try {
     const authClient = await google.auth.getClient({

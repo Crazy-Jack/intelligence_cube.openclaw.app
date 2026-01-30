@@ -377,6 +377,19 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(express.static(__dirname));
 }
 
+// Serve clawdbot page and script from repo root
+app.get('/clawdbot.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'clawdbot.html'));
+});
+
+app.get('/clawdbot', (req, res) => {
+  res.sendFile(path.join(__dirname, 'clawdbot.html'));
+});
+
+app.get('/clawdbot.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'clawdbot.js'));
+});
+
 // API routes
 app.get('/api/health', (req, res) => {
   res.json({ 
