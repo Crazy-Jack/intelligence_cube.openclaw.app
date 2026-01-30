@@ -1445,13 +1445,40 @@ async function loadModelFiles(modelId) {
 function renderFileList(files) {
     const fileList = document.getElementById('file-list');
     if (!fileList) return;
-    
+
+    const currentModel = models.find(m => m.id === currentModelId);
+    const isForkedModel = !!(currentModel && currentModel.forkedFrom);
+    const forkedName = currentModel && currentModel.forkedFromName ? escapeHtml(currentModel.forkedFromName) : 'Previous Co-Creation';
+    const forkedOwner = currentModel && currentModel.forkedFromOwner ? currentModel.forkedFromOwner : '';
+    const forkedOwnerLabel = forkedOwner ? `by ${forkedOwner.slice(0, 6)}...${forkedOwner.slice(-4)}` : '';
+    const forkPlaceholder = isForkedModel ? `
+        <div class="pa-file-item" style="opacity: 0.7;">
+            <div class="pa-file-item-info">
+                <div class="pa-file-item-icon" style="background: #f3f4f6; color: #6b7280;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+                <div class="pa-file-item-details">
+                    <p class="pa-file-item-name">Inherited knowledge base</p>
+                    <div class="pa-file-item-meta">
+                        <span>${forkedName}${forkedOwnerLabel ? ` (${forkedOwnerLabel})` : ''}</span>
+                        <span class="pa-file-item-status uploaded">READ-ONLY</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    ` : '';
+
     if (files.length === 0) {
-        fileList.innerHTML = '<div class="pa-empty-state"><p>No files uploaded yet</p></div>';
+        fileList.innerHTML = forkPlaceholder || '<div class="pa-empty-state"><p>No files uploaded yet</p></div>';
         return;
     }
     
-    fileList.innerHTML = files.map(file => `
+    fileList.innerHTML = `${forkPlaceholder}${files.map(file => {
+        const fileName = escapeHtml(file.filename || 'Unknown');
+        return `
         <div class="pa-file-item">
             <div class="pa-file-item-info">
                 <div class="pa-file-item-icon">
@@ -1462,13 +1489,11 @@ function renderFileList(files) {
                 </div>
                 <div class="pa-file-item-details">
                     <p class="pa-file-item-name">
-                        <a href="#" onclick="downloadFile('${file.fileId || file.id}', '${escapeHtml(file.filename || 'Unknown')}'); return false;" 
+                        <a href="#" onclick="downloadFile('${file.fileId || file.id}', '${fileName}'); return false;" 
                            style="color: #6366f1; text-decoration: none; cursor: pointer;" 
                            onmouseover="this.style.textDecoration='underline'" 
                            onmouseout="this.style.textDecoration='none'"
-                           title="Click to view/download">
-                            ${escapeHtml(file.filename || 'Unknown')}
-                        </a>
+                           title="Click to view/download">${fileName}</a>
                     </p>
                     <div class="pa-file-item-meta">
                         ${file.createdAt && formatDate(file.createdAt) ? `<span>Uploaded: ${formatDate(file.createdAt)}</span>` : ''}
@@ -1477,12 +1502,11 @@ function renderFileList(files) {
                 </div>
             </div>
             <div class="pa-file-item-actions">
-                <button class="pa-btn-danger" onclick="deleteFile('${file.fileId || file.id}', '${escapeHtml(file.filename)}')">
-                    Delete
-                </button>
+                <button class="pa-btn-danger" onclick="deleteFile('${file.fileId || file.id}', '${fileName}')">Delete</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('')}`;
 }
 
 // Update Try button state based on file processing status
