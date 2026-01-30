@@ -7,6 +7,9 @@
       "**/node_modules/**"
     ]
   },
+  "functions": {
+    "source": "functions"
+  },
   "emulators": {
     "hosting": {
       "port": 8080,

@@ -4,12 +4,20 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const ethers = require('ethers');
+const { google } = require('googleapis');
 
 // 初始化 Firebase Admin SDK
 admin.initializeApp();
 
 const db = admin.firestore();
 const auth = admin.auth();
+
+const sanitizeId = (value) => {
+  const lowered = String(value || '').toLowerCase();
+  const replaced = lowered.replace(/[^a-z0-9-]/g, '-');
+  const trimmed = replaced.replace(/^-+|-+$/g, '');
+  return trimmed || 'deploy';
+};
 
 // ============================================================
 // 🔒 问题1：后端验证消费 credit（P0）
@@ -470,3 +478,84 @@ exports.getWalletInfo = functions.https.onCall(
     }
   }
 );
+
+// ============================================================
+// Trigger Terraform apply via Cloud Build (HTTP)
+// ============================================================
+exports.triggerTerraformApply = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).send('Method Not Allowed');
+  }
+
+  const authHeader = req.get('authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return res.status(401).send('Missing Authorization header');
+  }
+
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(match[1]);
+  } catch (error) {
+    return res.status(401).send('Invalid auth token');
+  }
+
+  const token = process.env.TRIGGER_TOKEN;
+  if (token && req.get('x-trigger-token') !== token) {
+    return res.status(403).send('Forbidden');
+  }
+
+  const projectId =
+    process.env.CLOUD_BUILD_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.GCP_PROJECT;
+  const triggerId = process.env.CLOUD_BUILD_TRIGGER_ID;
+  const region = process.env.CLOUD_BUILD_REGION || 'global';
+
+  if (!projectId || !triggerId) {
+    return res.status(400).json({
+      error: 'Missing CLOUD_BUILD_PROJECT or CLOUD_BUILD_TRIGGER_ID'
+    });
+  }
+
+  const unixTs = Math.floor(Date.now() / 1000);
+  const deploymentId = sanitizeId(`${decoded.uid}-${unixTs}`);
+
+  try {
+    const authClient = await google.auth.getClient({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform']
+    });
+    const cloudbuild = google.cloudbuild({ version: 'v1', auth: authClient });
+
+    let response;
+    if (region && region !== 'global') {
+      const name = `projects/${projectId}/locations/${region}/triggers/${triggerId}`;
+      response = await cloudbuild.projects.locations.triggers.run({
+        name,
+        requestBody: {
+          substitutions: {
+            _DEPLOYMENT_ID: deploymentId
+          }
+        }
+      });
+    } else {
+      response = await cloudbuild.projects.triggers.run({
+        projectId,
+        triggerId,
+        requestBody: {
+          substitutions: {
+            _DEPLOYMENT_ID: deploymentId
+          }
+        }
+      });
+    }
+
+    return res.status(200).json({
+      deploymentId,
+      build: response.data
+    });
+  } catch (error) {
+    const message = error?.message || 'Cloud Build trigger failed';
+    return res.status(500).json({ error: message });
+  }
+});

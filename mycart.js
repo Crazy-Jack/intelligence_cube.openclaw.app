@@ -11,6 +11,30 @@ document.addEventListener('DOMContentLoaded', function() {
     updateCartSummary();
 });
 
+// Ensure spendCreditsUnified is available (fallback loader)
+async function ensureSpendCreditsUnified() {
+    if (typeof window.spendCreditsUnified === 'function') {
+        return true;
+    }
+
+    return new Promise(resolve => {
+        const existing = document.querySelector('script[data-spend-credits="true"]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(typeof window.spendCreditsUnified === 'function'));
+            existing.addEventListener('error', () => resolve(false));
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'unified-spend-credits.js';
+        script.async = true;
+        script.dataset.spendCredits = 'true';
+        script.onload = () => resolve(typeof window.spendCreditsUnified === 'function');
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+    });
+}
+
 // 检查用户是否已连接钱包
 function checkWalletConnection() {
     if (!window.walletManager) {
@@ -608,15 +632,24 @@ async function placeOrder() {
         return;
     }
     
-    // 4. ✅ 使用后端验证的消费函数（P0）
-    const spendResult = await window.spendCreditsUnified(
-        grandTotal,
-        'model_purchase',
-        {
-            modelCount: cartItems.length,
-            modelIds: cartItems.map(item => item.modelName)
-        }
-    );
+    // 4. ✅ 使用统一消费函数（若未加载则回退）
+    let spendResult = null;
+    const hasUnified = await ensureSpendCreditsUnified();
+    if (hasUnified && typeof window.spendCreditsUnified === 'function') {
+        spendResult = await window.spendCreditsUnified(
+            grandTotal,
+            'model_purchase',
+            {
+                modelCount: cartItems.length,
+                modelIds: cartItems.map(item => item.modelName)
+            }
+        );
+    } else {
+        spendResult = await window.walletManager.safeSpendCreditsWithSignature(
+            grandTotal,
+            'model_purchase'
+        );
+    }
 
     if (!spendResult.success) {
         alert(`❌ Payment Processing Failed!\n\n${spendResult.error}\n\nTransaction cancelled.`);
